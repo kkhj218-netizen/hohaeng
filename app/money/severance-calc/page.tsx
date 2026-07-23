@@ -8,14 +8,38 @@ export default function SeveranceCalcPage() {
   const [bonus, setBonus] = useState<number>(0); // 연간 상여금 (만원)
   const [workingMonths, setWorkingMonths] = useState<number>(36); // 근속 월수
 
-  // 퇴직금 간이 계산 로직: (1일 평균임금 x 30일 x 재직일수 / 365)
-  // 간이: [월급 + (연간상여/12)] * (근속월수 / 12)
+  // 1. 세전 퇴직금 계산
   const totalMonthlyBase = monthlyPay + (bonus / 12);
-  const estimatedSeverance = Math.round(totalMonthlyBase * (workingMonths / 12));
+  const grossSeverance = Math.round(totalMonthlyBase * (workingMonths / 12));
 
-  // 근속 연수 계산
+  // 2. 근속 연수 계산
+  const serviceYears = Math.max(1, Math.ceil(workingMonths / 12)); // 올림 처리 기준
   const years = Math.floor(workingMonths / 12);
   const remMonths = workingMonths % 12;
+
+  // 3. 퇴직소득세 간이 추정 로직 (근속연수공제 반영)
+  // 근속연수공제액 산정
+  let serviceDeduction = 0;
+  if (serviceYears <= 5) {
+    serviceDeduction = serviceYears * 100;
+  } else if (serviceYears <= 10) {
+    serviceDeduction = 500 + (serviceYears - 5) * 200;
+  } else if (serviceYears <= 20) {
+    serviceDeduction = 1500 + (serviceYears - 10) * 250;
+  } else {
+    serviceDeduction = 4000 + (serviceYears - 20) * 300;
+  }
+
+  // 과세표준 환산 (12배 환산법 반영간이)
+  const taxableAmount = Math.max(0, grossSeverance - serviceDeduction);
+  
+  // 간이 평균 세율 적용 (퇴직소득은 실효세율이 보통 3~8% 수준으로 낮음)
+  let estimatedTaxRate = 0.03;
+  if (taxableAmount > 10000) estimatedTaxRate = 0.08;
+  if (taxableAmount > 30000) estimatedTaxRate = 0.12;
+
+  const estimatedTax = Math.round(taxableAmount * estimatedTaxRate);
+  const netSeverance = Math.max(0, grossSeverance - estimatedTax); // 실수령액
 
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
@@ -28,8 +52,8 @@ export default function SeveranceCalcPage() {
         {/* 타이틀 */}
         <div className="mb-6">
           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Money OS</span>
-          <h1 className="text-2xl font-extrabold text-slate-900 mt-2">퇴직금 간편 계산기</h1>
-          <p className="text-sm text-slate-500 mt-1">월급과 재직 기간만 넣으면 예상 퇴직금을 3초 만에 계산합니다.</p>
+          <h1 className="text-2xl font-extrabold text-slate-900 mt-2">퇴직금 & 실수령액 계산기</h1>
+          <p className="text-sm text-slate-500 mt-1">예상 퇴직금부터 세금 공제 후 실수령액까지 3초 만에 계산해보세요.</p>
         </div>
 
         {/* 입력 폼 */}
@@ -70,22 +94,22 @@ export default function SeveranceCalcPage() {
 
         {/* 결과 카드 */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-6 rounded-2xl shadow-md mb-8">
-          <div className="text-sm opacity-90 font-medium">예상 퇴직금 (세전)</div>
+          <div className="text-sm opacity-90 font-medium">예상 실수령액 (세후)</div>
           <div className="text-3xl font-black mt-1 mb-4 text-yellow-300">
-            약 {estimatedSeverance.toLocaleString()} 만원
+            약 {netSeverance.toLocaleString()} 만원
           </div>
-          <div className="border-t border-white/20 pt-3 text-xs space-y-1 opacity-90">
+          <div className="border-t border-white/20 pt-3 text-xs space-y-1.5 opacity-90">
             <div className="flex justify-between">
-              <span>기본 기준 월급:</span>
-              <span className="font-bold">{monthlyPay.toLocaleString()} 만원</span>
+              <span>세전 퇴직금:</span>
+              <span className="font-bold">{grossSeverance.toLocaleString()} 만원</span>
             </div>
-            <div className="flex justify-between">
-              <span>월 평균 상여 반영액:</span>
-              <span>{Math.round(bonus / 12).toLocaleString()} 만원</span>
+            <div className="flex justify-between text-yellow-200">
+              <span>예상 퇴직소득세(지방세 포함):</span>
+              <span>- {estimatedTax.toLocaleString()} 만원</span>
             </div>
-            <div className="flex justify-between">
-              <span>근속 연수 산정:</span>
-              <span>{(workingMonths / 12).toFixed(1)}년</span>
+            <div className="flex justify-between opacity-75">
+              <span>근속연수 공제 산정:</span>
+              <span>{serviceYears}년 인정 (-{serviceDeduction.toLocaleString()}만원 공제)</span>
             </div>
           </div>
         </div>
@@ -94,48 +118,38 @@ export default function SeveranceCalcPage() {
         <article className="bg-white p-6 rounded-2xl border border-slate-100 text-slate-700 space-y-6">
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-2">
-              💡 퇴직금 지급 기준 및 대상 조건
+              💡 퇴직소득세는 어떻게 계산되나요?
             </h2>
             <p className="text-sm leading-relaxed text-slate-600">
-              퇴직금은 근로자가 **1년 이상 계속 근로**하고, **주 15시간 이상** 근무한 경우 지급 대상이 됩니다. 정규직뿐만 아니라 계약직, 파트타임, 아르바이트 노동자도 조건만 충족하면 법적으로 반드시 지급받아야 합니다.
+              퇴직금은 근로자가 수년에 걸쳐 형성한 소득이므로 일반 근로소득세와 달리 **'근속연수공제'** 및 **'12배 환산 과세'** 혜택을 제공합니다. 오래 일할수록 세금 공제 폭이 커져 실제 부담하는 세율(실효세율)은 보통 3~8% 수준으로 매우 낮습니다.
             </p>
           </section>
 
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-2">
-              📐 퇴직금 정산 계산 공식
+              💰 IRP(개인형 퇴직연금) 계좌 수령 시 30% 절세!
             </h2>
-            <div className="bg-slate-50 p-4 rounded-xl text-xs text-slate-700 font-mono border border-slate-100 my-2">
-              퇴직금 = 1일 평균임금 × 30일 × (재직일수 ÷ 365)
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              * 평균임금에는 퇴직 전 3개월간 지급받은 임금총액과 1년간 지급받은 상여금의 3/12, 연차수당이 포함됩니다.
+            <p className="text-sm leading-relaxed text-slate-600">
+              퇴직금을 일시금으로 받지 않고 **IRP 계좌**로 이체한 뒤 연금으로 수령(만 55세 이후)하면 **퇴직소득세의 30~40%를 감면**받을 수 있습니다. 10년 이상 장기 연금 수령 시 최대 40%까지 세금이 절감됩니다.
             </p>
           </section>
 
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-3">
-              ❓ 퇴직금 자주 묻는 질문 (FAQ)
+              ❓ 자주 묻는 질문 (FAQ)
             </h2>
             <div className="space-y-4 text-sm">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <h3 className="font-bold text-slate-800">Q. 퇴직금은 퇴사 후 언제 지급받나요?</h3>
+                <h3 className="font-bold text-slate-800">Q. 퇴직금 세금도 연말정산에 포함되나요?</h3>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  근로기준법 제36조에 따라 퇴사일로부터 **14일 이내**에 지급되어야 합니다. 당사자 간 합의가 없는 상태에서 14일을 넘기면 지연이자가 발생할 수 있습니다.
+                  아닙니다. 퇴직소득은 **'분리과세'** 대상이므로 다른 근로소득이나 종합소득과 합산되지 않고 별도로 세금이 정산되어 끝납니다.
                 </p>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <h3 className="font-bold text-slate-800">Q. 수습기간도 퇴직금 근속 기간에 포함되나요?</h3>
+                <h3 className="font-bold text-slate-800">Q. 실수령액 차이가 발생하는 이유는 무엇인가요?</h3>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  네, 수습기간 및 인턴 기간도 동일한 사업장에서 계속 근무했다면 퇴직금 산정을 위한 **전체 근속 기간에 합산**됩니다.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <h3 className="font-bold text-slate-800">Q. 퇴직 소득세는 얼마나 나오나요?</h3>
-                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  퇴직금은 근속 연수에 따라 공제 혜택(근속연수공제)이 매우 크게 적용되므로 일반 종합소득세에 비해 세금 부담이 낮습니다.
+                  미사용 연차수당, 최근 3개월간의 야간·휴일 수당 반영 여부 및 개인별 정교한 퇴직소득세 산출 세액 차이로 인해 몇 만 원 정도의 오차가 발생할 수 있습니다.
                 </p>
               </div>
             </div>

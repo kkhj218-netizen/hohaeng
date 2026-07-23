@@ -7,18 +7,27 @@ export default function SeveranceCalcPage() {
   const [monthlyPay, setMonthlyPay] = useState<number>(300); // 만원 단위
   const [bonus, setBonus] = useState<number>(0); // 연간 상여금 (만원)
   const [workingMonths, setWorkingMonths] = useState<number>(36); // 근속 월수
+  const [copied, setCopied] = useState<boolean>(false);
+
+  // 공유 버튼 클릭 함수 (클립보드 복사)
+  const handleShare = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000); // 2초 뒤 문구 원복
+    }
+  };
 
   // 1. 세전 퇴직금 계산
   const totalMonthlyBase = monthlyPay + (bonus / 12);
   const grossSeverance = Math.round(totalMonthlyBase * (workingMonths / 12));
 
   // 2. 근속 연수 계산
-  const serviceYears = Math.max(1, Math.ceil(workingMonths / 12)); // 올림 처리 기준
+  const serviceYears = Math.max(1, Math.ceil(workingMonths / 12));
   const years = Math.floor(workingMonths / 12);
   const remMonths = workingMonths % 12;
 
-  // 3. 퇴직소득세 간이 추정 로직 (근속연수공제 반영)
-  // 근속연수공제액 산정
+  // 3. 퇴직소득세 간이 추정 로직
   let serviceDeduction = 0;
   if (serviceYears <= 5) {
     serviceDeduction = serviceYears * 100;
@@ -30,16 +39,14 @@ export default function SeveranceCalcPage() {
     serviceDeduction = 4000 + (serviceYears - 20) * 300;
   }
 
-  // 과세표준 환산 (12배 환산법 반영간이)
   const taxableAmount = Math.max(0, grossSeverance - serviceDeduction);
   
-  // 간이 평균 세율 적용 (퇴직소득은 실효세율이 보통 3~8% 수준으로 낮음)
   let estimatedTaxRate = 0.03;
   if (taxableAmount > 10000) estimatedTaxRate = 0.08;
   if (taxableAmount > 30000) estimatedTaxRate = 0.12;
 
   const estimatedTax = Math.round(taxableAmount * estimatedTaxRate);
-  const netSeverance = Math.max(0, grossSeverance - estimatedTax); // 실수령액
+  const netSeverance = Math.max(0, grossSeverance - estimatedTax);
 
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
@@ -49,11 +56,21 @@ export default function SeveranceCalcPage() {
           ← 메인으로 돌아가기
         </Link>
 
-        {/* 타이틀 */}
-        <div className="mb-6">
-          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Money OS</span>
-          <h1 className="text-2xl font-extrabold text-slate-900 mt-2">퇴직금 & 실수령액 계산기</h1>
-          <p className="text-sm text-slate-500 mt-1">예상 퇴직금부터 세금 공제 후 실수령액까지 3초 만에 계산해보세요.</p>
+        {/* 타이틀 및 공유 버튼 영역 */}
+        <div className="mb-6 flex justify-between items-start">
+          <div>
+            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">Money OS</span>
+            <h1 className="text-2xl font-extrabold text-slate-900 mt-2">퇴직금 & 실수령액 계산기</h1>
+            <p className="text-sm text-slate-500 mt-1">예상 퇴직금부터 세금 공제 후 실수령액까지 3초 만에 계산해보세요.</p>
+          </div>
+
+          {/* 🔗 공유 버튼 */}
+          <button
+            onClick={handleShare}
+            className="flex-shrink-0 ml-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 px-3 rounded-xl border border-slate-200 shadow-sm transition-all active:scale-95"
+          >
+            {copied ? '✅ 복사됨!' : '🔗 공유'}
+          </button>
         </div>
 
         {/* 입력 폼 */}

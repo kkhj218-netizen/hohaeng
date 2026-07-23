@@ -89,15 +89,32 @@ export default function IsaCalcPage() {
           </div>
         </div>
 
-        {/* SEO 콘텐츠 */}
+        {/* ------------------ 복구된 복합 SEO 콘텐츠 영역 ------------------ */}
         <article className="bg-white p-6 rounded-2xl border border-slate-100 text-slate-700 space-y-6">
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-2">
               💡 ISA(개인종합자산관리계좌)란 무엇인가요?
             </h2>
             <p className="text-sm leading-relaxed text-slate-600">
-              ISA는 예금, 펀드, ETF, 국내 주식 등 다양한 금융상품을 하나의 계좌에서 운용하면서 발생한 수익에 대해 비과세 및 저율 분리과세 혜택을 제공하는 만능 절세 계좌입니다.
+              ISA는 예금, 펀드, ETF, 국내 주식 등 다양한 금융상품을 하나의 계좌에서 운용하면서 발생한 수익에 대해 **비과세 및 저율 분리과세 혜택**을 제공하는 만능 절세 계좌입니다. 재테크를 시작하는 직장인과 투자자에게 선택이 아닌 필수 금융 상품입니다.
             </p>
+          </section>
+
+          <section>
+            <h2 className="font-extrabold text-lg text-slate-900 mb-2">
+              🔥 ISA 계좌의 3가지 핵심 절세 혜택
+            </h2>
+            <ul className="list-disc list-inside text-sm text-slate-600 space-y-2 leading-relaxed">
+              <li>
+                <strong className="text-slate-800">최대 400만원 비과세:</strong> 일반형은 200만원, 서민형은 최대 400만원까지 발생한 순수익에 대해 세금이 전혀 부과되지 않습니다.
+              </li>
+              <li>
+                <strong className="text-slate-800">9.9% 분리과세:</strong> 비과세 한도를 초과한 수익에 대해서도 일반 배당소득세(15.4%)가 아닌 9.9% 저율 과세가 적용됩니다.
+              </li>
+              <li>
+                <strong className="text-slate-800">손익통산 혜택:</strong> 이익이 난 상품과 손실이 난 상품을 합산하여 '최종 순수익'에 대해서만 세금을 계산하므로 세금 부담이 획기적으로 줄어듭니다.
+              </li>
+            </ul>
           </section>
 
           <section>
@@ -108,7 +125,21 @@ export default function IsaCalcPage() {
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <h3 className="font-bold text-slate-800">Q. 의무 가입 기간 3년을 채우지 못하고 해지하면 어떻게 되나요?</h3>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  3년 이내에 중도 해지할 경우 그동안 받은 비과세 혜택이 소멸되고 일반 배당소득세(15.4%)가 추징됩니다.
+                  3년 이내에 중도 해지할 경우 그동안 받은 비과세 및 절세 혜택이 소멸되고 일반 배당소득세(15.4%)가 추징됩니다. 단, 원금 범위 내에서는 중도 인출하더라도 혜택이 유지됩니다.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h3 className="font-bold text-slate-800">Q. 일반형과 서민형의 차이는 무엇인가요?</h3>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  직전 연도 총급여 5,000만 원 이하(종합소득 3,800만 원 이하)인 경우 서민형으로 가입 가능하며, 비과세 한도가 일반형(200만 원)의 2배인 400만 원까지 확대됩니다.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h3 className="font-bold text-slate-800">Q. ISA 만기 후 연금저축으로 이전하면 좋은가요?</h3>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  ISA 만기 자금을 연금저축이나 IRP로 전환할 경우, 전환 금액의 10%(최대 300만 원)까지 추가 세액공제 혜택을 받을 수 있어 절세 효과를 극대화할 수 있습니다.
                 </p>
               </div>
             </div>

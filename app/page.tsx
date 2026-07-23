@@ -33,7 +33,7 @@ export default function Home() {
         </div>
         
         {/* 결정하신 메인 슬로건 */}
-        <h1 className="text-2.5xl sm:text-4xl font-black text-white tracking-tight leading-tight sm:leading-snug">
+        <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight sm:leading-snug">
           돈과 시간을 아껴주는<br className="hidden sm:inline" /> <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">스마트한 수치 가이드, 호행처럼</span>
         </h1>
         

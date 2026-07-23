@@ -32,4 +32,12 @@ export const TOOLS: Tool[] = [
     category: 'Money OS (금융/세금)',
     hoverColor: 'hover:bg-indigo-50 hover:border-indigo-300',
   },
+  {
+    id: 'loan-calc',
+    title: '대출 원리금 상환 계산기',
+    description: '원리금균등, 원금균등, 만기일시 방식별 월 상환액과 이자를 비교하세요.',
+    href: '/money/loan-calc',
+    category: 'Money OS (금융/세금)',
+    hoverColor: 'hover:bg-purple-50 hover:border-purple-300',
+  },
 ];

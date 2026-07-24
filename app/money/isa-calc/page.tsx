@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import ShareButton from '@/app/components/ShareButton';
+import RelatedArticles from '@/app/components/RelatedArticles';
 
 export default function IsaCalcPage() {
   const [amount, setAmount] = useState<number>(1000);
@@ -89,8 +90,8 @@ export default function IsaCalcPage() {
           </div>
         </div>
 
-        {/* ------------------ 복구된 복합 SEO 콘텐츠 영역 ------------------ */}
-        <article className="bg-white p-6 rounded-2xl border border-slate-100 text-slate-700 space-y-6">
+        {/* SEO 콘텐츠 영역 */}
+        <article className="bg-white p-6 rounded-2xl border border-slate-100 text-slate-700 space-y-6 mb-8">
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-2">
               💡 ISA(개인종합자산관리계좌)란 무엇인가요?
@@ -145,6 +146,9 @@ export default function IsaCalcPage() {
             </div>
           </section>
         </article>
+
+        {/* 💡 관련 아티클 추천 영역 연동 */}
+        <RelatedArticles category="isa" />
       </div>
     </main>
   );

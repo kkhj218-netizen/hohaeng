@@ -15,6 +15,24 @@ export default function IsaCalcPage() {
   const isaTax = totalProfit > 200 ? Math.round((totalProfit - 200) * 0.099) : 0;
   const savedTax = generalTax - isaTax;
 
+  // 관련 정보글 더미 데이터 (클라이언트 컴포넌트 오류 방지용)
+  const relatedArticlesData = [
+    {
+      slug: 'isa-guide',
+      title: 'ISA 계좌 절세 혜택 완벽 가이드',
+      description: '서민형 vs 일반형 차이점과 비과세 한도 200% 활용하는 꿀팁',
+      date: '2026-03-01',
+      category: '각종 정보',
+    },
+    {
+      slug: '2026-03-dividend',
+      title: '2026년 3월 ISA 배당금 입금 일지',
+      description: 'ISA 계좌로 수령한 배당금 내역과 재투자 현황 공개',
+      date: '2026-03-31',
+      category: '호행의 일지',
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto">
@@ -147,8 +165,8 @@ export default function IsaCalcPage() {
           </section>
         </article>
 
-        {/* 💡 관련 아티클 추천 영역 연동 */}
-        <RelatedArticles category="isa" />
+        {/* 💡 관련 아티클 추천 영역 (수정된 props 넘겨주기) */}
+        <RelatedArticles articles={relatedArticlesData} />
       </div>
     </main>
   );

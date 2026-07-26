@@ -41,23 +41,3 @@ export function getAllArticles(): Article[] {
 
   return articles.sort((a, b) => (a.date < b.date ? 1 : -1));
 }
-
-export function getFilteredArticles(
-  category?: string,
-  subcategory?: string,
-  year?: string
-) {
-  let articles = getAllArticles();
-
-  if (category && category !== 'all') {
-    articles = articles.filter((a) => a.category === category);
-  }
-  if (subcategory && subcategory !== 'all') {
-    articles = articles.filter((a) => a.subcategory === subcategory);
-  }
-  if (year && year !== 'all') {
-    articles = articles.filter((a) => a.year === year);
-  }
-
-  return articles;
-}

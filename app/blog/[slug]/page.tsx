@@ -1,4 +1,4 @@
-import { getArticleBySlug } from '@/app/lib/mdx';
+import { getAllArticles } from '@/app/lib/mdx';
 import { MDXRemote } from 'next-mdx-remote/rsc';
 import { notFound } from 'next/navigation';
 
@@ -8,7 +8,8 @@ export default async function BlogDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const article = getArticleBySlug(slug);
+  const articles = getAllArticles();
+  const article = articles.find((a) => a.slug === slug);
 
   if (!article) notFound();
 

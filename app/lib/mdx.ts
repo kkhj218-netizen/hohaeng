@@ -10,14 +10,16 @@ export interface Article {
   description: string;
   date: string;
   category: string;
+  subcategory?: string;
+  year?: string;
   content: string;
 }
 
 export function getAllArticles(): Article[] {
   if (!fs.existsSync(contentDirectory)) return [];
-  const fileNames = fs.readdirSync(contentDirectory);
 
-  return fileNames
+  const fileNames = fs.readdirSync(contentDirectory);
+  const articles = fileNames
     .filter((file) => file.endsWith('.mdx'))
     .map((fileName) => {
       const slug = fileName.replace(/\.mdx$/, '');
@@ -31,31 +33,31 @@ export function getAllArticles(): Article[] {
         description: data.description || '',
         date: data.date || '',
         category: data.category || '',
+        subcategory: data.subcategory || '',
+        year: data.year || '',
         content,
       };
     });
+
+  return articles.sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-export function getArticlesByCategory(category: string): Article[] {
-  const allArticles = getAllArticles();
-  return allArticles.filter((article) => article.category === category);
-}
+export function getFilteredArticles(
+  category?: string,
+  subcategory?: string,
+  year?: string
+) {
+  let articles = getAllArticles();
 
-export function getArticleBySlug(slug: string): Article | null {
-  try {
-    const fullPath = path.join(contentDirectory, `${slug}.mdx`);
-    const fileContents = fs.readFileSync(fullPath, 'utf8');
-    const { data, content } = matter(fileContents);
-
-    return {
-      slug,
-      title: data.title || '',
-      description: data.description || '',
-      date: data.date || '',
-      category: data.category || '',
-      content,
-    };
-  } catch {
-    return null;
+  if (category && category !== 'all') {
+    articles = articles.filter((a) => a.category === category);
   }
+  if (subcategory && subcategory !== 'all') {
+    articles = articles.filter((a) => a.subcategory === subcategory);
+  }
+  if (year && year !== 'all') {
+    articles = articles.filter((a) => a.year === year);
+  }
+
+  return articles;
 }

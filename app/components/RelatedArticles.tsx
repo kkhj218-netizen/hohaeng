@@ -13,7 +13,6 @@ interface RelatedArticlesProps {
 }
 
 export default function RelatedArticles({ articles = [] }: RelatedArticlesProps) {
-  // 전달받은 아티클이 없으면 화면에 아무것도 그리지 않음
   if (!articles || articles.length === 0) return null;
 
   return (

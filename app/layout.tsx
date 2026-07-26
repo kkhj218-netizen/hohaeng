@@ -1,20 +1,21 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
+import Header from '@/app/components/Header';
+import './globals.css';
+
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+});
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+});
 
 export const metadata: Metadata = {
-  title: {
-    default: "호행처럼 - 매일 쓰는 3초 간편 계산기",
-    template: "%s | 호행처럼", // 각 페이지 제목 뒤에 자동으로 '| 호행처럼'을 붙여줍니다!
-  },
-  description: "ISA, 퇴직금, 연봉 실수령액 등 실생활 필수 계산기를 3초 만에 이용해보세요.",
-  openGraph: {
-    title: "호행처럼 - 매일 쓰는 3초 간편 계산기",
-    description: "ISA, 퇴직금, 연봉 실수령액 등 실생활 필수 계산기를 3초 만에 이용해보세요.",
-    url: "https://hohaeng.vercel.app",
-    siteName: "호행처럼",
-    locale: "ko_KR",
-    type: "website",
-  },
+  title: '호행처럼 - 스마트한 금융 & 라이프 가이드',
+  description: '돈과 시간을 아껴주는 스마트한 수치 가이드',
 };
 
 export default function RootLayout({
@@ -24,8 +25,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>
-        {children}
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-slate-950 text-slate-100 flex flex-col`}
+      >
+        {/* 상단 네비게이션 헤더 */}
+        <Header />
+
+        {/* 본문 페이지 영역 */}
+        <div className="flex-1">{children}</div>
       </body>
     </html>
   );

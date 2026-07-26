@@ -3,41 +3,33 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { TOOLS, CATEGORIES } from './tools';
+import FooterProfile from '@/app/components/FooterProfile';
 
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
-  const filteredTools = activeCategory === 'all'
-    ? TOOLS
-    : TOOLS.filter((tool) => tool.category === activeCategory);
+  const filteredTools =
+    activeCategory === 'all'
+      ? TOOLS
+      : TOOLS.filter((tool) => tool.category === activeCategory);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-blue-500 selection:text-white">
-      {/* 상단 럭셔리 네비게이션 헤더 */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800/80 px-4 sm:px-8 py-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
-            <span className="text-xl font-black tracking-tight text-white font-sans">호행처럼</span>
-          </div>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-400">
-            HOHAENG OS v1.0
-          </span>
-        </div>
-      </header>
-
       {/* 메인 히어로 섹션 */}
       <section className="max-w-5xl mx-auto px-4 sm:px-8 pt-12 pb-8 text-center sm:text-left">
         <div className="inline-block px-3 py-1 mb-4 rounded-full bg-blue-950/60 border border-blue-800/50 text-blue-400 text-xs font-semibold tracking-wide">
           ✨ 스마트 라이프 & 금융 가이드
         </div>
-        
-        {/* 결정하신 메인 슬로건 */}
+
+        {/* 메인 슬로건 */}
         <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight sm:leading-snug">
-          돈과 시간을 아껴주는<br className="hidden sm:inline" /> <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">스마트한 수치 가이드, 호행처럼</span>
+          돈과 시간을 아껴주는<br className="hidden sm:inline" />{' '}
+          <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+            스마트한 수치 가이드, 호행처럼
+          </span>
         </h1>
-        
-        {/* 결정하신 서브 슬로건 */}
+
+        {/* 서브 슬로건 */}
         <p className="mt-3 text-xs sm:text-sm text-slate-400 max-w-xl font-normal leading-relaxed">
           연봉 실수령액, 퇴직금, 대출 이자부터 일상의 수치까지 3초 만에 명확하게 확인하세요.
         </p>
@@ -61,7 +53,7 @@ export default function Home() {
       </section>
 
       {/* 도구 그리드 카드 섹션 */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-8 pb-20">
+      <section className="max-w-5xl mx-auto px-4 sm:px-8 pb-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filteredTools.map((tool) => (
             <Link
@@ -96,9 +88,14 @@ export default function Home() {
 
         {filteredTools.length === 0 && (
           <div className="text-center py-16 bg-slate-900/30 rounded-2xl border border-slate-800/50">
-            <p className="text-slate-400 text-sm">해당 카테고리의 새로운 도구가 곧 출시될 예정입니다! 🚀</p>
+            <p className="text-slate-400 text-sm">
+              해당 카테고리의 새로운 도구가 곧 출시될 예정입니다! 🚀
+            </p>
           </div>
         )}
+
+        {/* 🙋‍♂️ 하단 제작자 소개 & 최근 일지 컴포넌트 */}
+        <FooterProfile />
       </section>
 
       {/* 풋터 */}

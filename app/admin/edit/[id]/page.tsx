@@ -12,15 +12,23 @@ export default function AdminEditPage() {
   const params = useParams<{ id: string }>();
   const postId = params.id;
 
+  // 기본 글 정보
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('log');
   const [subcategory, setSubcategory] = useState('');
   const [description, setDescription] = useState('');
 
+  // SEO 정보
+  const [seoTitle, setSeoTitle] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [ogImage, setOgImage] = useState('');
+
+  // 상태
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Tiptap 에디터
   const editor = useEditor({
     immediatelyRender: false,
 
@@ -43,6 +51,7 @@ export default function AdminEditPage() {
     },
   });
 
+  // 기존 글 불러오기
   useEffect(() => {
     if (!editor || !postId) return;
 
@@ -57,11 +66,11 @@ export default function AdminEditPage() {
         return;
       }
 
-      // 기존 글 불러오기
+      // 기존 글 + SEO 정보 불러오기
       const { data, error } = await supabase
         .from('posts')
         .select(
-          'id, title, slug, content, category, subcategory, description'
+          'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image'
         )
         .eq('id', postId)
         .single();
@@ -76,11 +85,18 @@ export default function AdminEditPage() {
         return;
       }
 
+      // 기본 정보
       setTitle(data.title || '');
       setCategory(data.category || 'log');
       setSubcategory(data.subcategory || '');
       setDescription(data.description || '');
 
+      // SEO 정보
+      setSeoTitle(data.seo_title || '');
+      setMetaDescription(data.meta_description || '');
+      setOgImage(data.og_image || '');
+
+      // 본문
       editor.commands.setContent(
         data.content || '<p></p>'
       );
@@ -91,6 +107,7 @@ export default function AdminEditPage() {
     initialize();
   }, [editor, postId, router]);
 
+  // 이미지 업로드
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -137,9 +154,13 @@ export default function AdminEditPage() {
       );
     } finally {
       setUploading(false);
+
+      // 같은 파일 다시 선택 가능
+      e.target.value = '';
     }
   };
 
+  // 글 수정 저장
   const handleUpdate = async () => {
     if (!title.trim()) {
       alert('제목을 입력해주세요.');
@@ -156,13 +177,31 @@ export default function AdminEditPage() {
       const { error } = await supabase
         .from('posts')
         .update({
+          // 기본 글
           title: title.trim(),
+
           content: htmlContent,
+
           category: category || 'log',
+
           subcategory:
             subcategory.trim() || null,
+
           description:
             description.trim() || null,
+
+          // SEO
+          seo_title:
+            seoTitle.trim() ||
+            title.trim(),
+
+          meta_description:
+            metaDescription.trim() ||
+            description.trim() ||
+            null,
+
+          og_image:
+            ogImage.trim() || null,
         })
         .eq('id', postId);
 
@@ -170,7 +209,9 @@ export default function AdminEditPage() {
         throw error;
       }
 
-      alert('글이 성공적으로 수정되었습니다! ✅');
+      alert(
+        '글이 성공적으로 수정되었습니다! ✅'
+      );
 
       router.push('/admin/manage');
       router.refresh();
@@ -184,6 +225,7 @@ export default function AdminEditPage() {
     }
   };
 
+  // 로딩 화면
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -208,6 +250,10 @@ export default function AdminEditPage() {
           <h1 className="text-2xl font-black text-white">
             ✏️ 블로그 글 수정
           </h1>
+
+          <p className="text-sm text-slate-400 mt-1">
+            글 내용 · SEO 설정 수정
+          </p>
         </div>
 
         <div className="flex gap-2">
@@ -239,6 +285,7 @@ export default function AdminEditPage() {
       {/* 기본 정보 */}
       <div className="space-y-4 mb-6">
 
+        {/* 글 제목 */}
         <div>
           <label className="block text-xs font-bold text-slate-400 mb-1">
             글 제목
@@ -254,6 +301,7 @@ export default function AdminEditPage() {
           />
         </div>
 
+        {/* 카테고리 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           <div>
@@ -286,6 +334,7 @@ export default function AdminEditPage() {
             </select>
           </div>
 
+          {/* 세부 주제 */}
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-1">
               세부 주제
@@ -306,6 +355,7 @@ export default function AdminEditPage() {
 
         </div>
 
+        {/* 한 줄 요약 */}
         <div>
           <label className="block text-xs font-bold text-slate-400 mb-1">
             한 줄 요약
@@ -319,15 +369,152 @@ export default function AdminEditPage() {
                 e.target.value
               )
             }
+            placeholder="목록 카드에 표시될 짧은 설명"
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
           />
         </div>
 
       </div>
 
+      {/* SEO 설정 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
+
+        <div className="mb-5">
+          <h2 className="text-lg font-black text-white">
+            🔍 SEO 설정
+          </h2>
+
+          <p className="text-xs text-slate-400 mt-1">
+            검색엔진과 SNS 공유에 사용할 정보를 수정합니다.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+
+          {/* SEO 제목 */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+
+              <label className="text-xs font-bold text-slate-400">
+                SEO 제목
+              </label>
+
+              <span className="text-xs text-slate-500">
+                {seoTitle.length}/60
+              </span>
+
+            </div>
+
+            <input
+              type="text"
+              value={seoTitle}
+              onChange={(e) =>
+                setSeoTitle(
+                  e.target.value
+                )
+              }
+              placeholder={
+                title ||
+                '검색엔진용 제목'
+              }
+              maxLength={60}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+            />
+
+            <p className="text-xs text-slate-500 mt-1">
+              비워두면 글 제목이 자동으로 사용됩니다.
+            </p>
+          </div>
+
+          {/* 메타 설명 */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+
+              <label className="text-xs font-bold text-slate-400">
+                메타 설명
+              </label>
+
+              <span className="text-xs text-slate-500">
+                {metaDescription.length}/160
+              </span>
+
+            </div>
+
+            <textarea
+              value={metaDescription}
+              onChange={(e) =>
+                setMetaDescription(
+                  e.target.value
+                )
+              }
+              placeholder={
+                description ||
+                '검색 결과에 표시할 설명'
+              }
+              maxLength={160}
+              rows={3}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 resize-none"
+            />
+
+            <p className="text-xs text-slate-500 mt-1">
+              비워두면 한 줄 요약이 자동으로 사용됩니다.
+            </p>
+          </div>
+
+          {/* 대표 이미지 */}
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1">
+              대표 이미지 URL
+            </label>
+
+            <input
+              type="url"
+              value={ogImage}
+              onChange={(e) =>
+                setOgImage(
+                  e.target.value
+                )
+              }
+              placeholder="https://..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+            />
+
+            <p className="text-xs text-slate-500 mt-1">
+              카카오톡 · SNS · 메신저 공유 시 사용할 대표 이미지입니다.
+            </p>
+
+            {/* 대표 이미지 미리보기 */}
+            {ogImage && (
+              <div className="mt-3">
+
+                <p className="text-xs text-slate-400 mb-2">
+                  대표 이미지 미리보기
+                </p>
+
+                <img
+                  src={ogImage}
+                  alt="대표 이미지 미리보기"
+                  className="max-w-sm w-full rounded-xl border border-slate-800"
+                />
+
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* 본문 제목 */}
+      <div className="mb-2">
+        <h2 className="font-black text-white">
+          📝 본문
+        </h2>
+      </div>
+
       {/* 에디터 툴바 */}
       <div className="bg-slate-800/80 p-3 rounded-t-xl border border-b-0 border-slate-700 flex flex-wrap gap-2 items-center">
 
+        {/* Bold */}
         <button
           type="button"
           onClick={() =>
@@ -343,9 +530,10 @@ export default function AdminEditPage() {
               : 'bg-slate-700 text-slate-300'
           }`}
         >
-          Bold
+          Bold (굵게)
         </button>
 
+        {/* Italic */}
         <button
           type="button"
           onClick={() =>
@@ -361,9 +549,10 @@ export default function AdminEditPage() {
               : 'bg-slate-700 text-slate-300'
           }`}
         >
-          Italic
+          Italic (기울임)
         </button>
 
+        {/* H2 */}
         <button
           type="button"
           onClick={() =>
@@ -375,11 +564,19 @@ export default function AdminEditPage() {
               })
               .run()
           }
-          className="px-3 py-1 rounded text-xs font-bold bg-slate-700 text-slate-300"
+          className={`px-3 py-1 rounded text-xs font-bold ${
+            editor?.isActive(
+              'heading',
+              { level: 2 }
+            )
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300'
+          }`}
         >
-          H2
+          H2 (큰 제목)
         </button>
 
+        {/* H3 */}
         <button
           type="button"
           onClick={() =>
@@ -391,11 +588,19 @@ export default function AdminEditPage() {
               })
               .run()
           }
-          className="px-3 py-1 rounded text-xs font-bold bg-slate-700 text-slate-300"
+          className={`px-3 py-1 rounded text-xs font-bold ${
+            editor?.isActive(
+              'heading',
+              { level: 3 }
+            )
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300'
+          }`}
         >
-          H3
+          H3 (소제목)
         </button>
 
+        {/* 사진 첨부 */}
         <label className="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded ml-auto">
 
           📷 사진 첨부
@@ -420,6 +625,7 @@ export default function AdminEditPage() {
 
       </div>
 
+      {/* 본문 */}
       <EditorContent editor={editor} />
 
     </main>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/app/lib/supabase';
+import ViewCounter from './ViewCounter';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,9 @@ type Post = {
   seo_title?: string | null;
   meta_description?: string | null;
   og_image?: string | null;
+
+  // 조회수
+  view_count?: number | null;
 };
 
 function getPostTimestamp(post: Post) {
@@ -237,8 +241,18 @@ export default async function BlogDetailPage({
               {post.title}
             </h1>
 
-            <div className="text-sm text-slate-400 mt-4">
-              {formatDate(post)}
+            {/* 날짜 + 조회수 */}
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400 mt-4">
+              {formatDate(post) && (
+                <span>
+                  {formatDate(post)}
+                </span>
+              )}
+
+              <ViewCounter
+                slug={post.slug}
+                initialCount={post.view_count || 0}
+              />
             </div>
 
             {post.description && (

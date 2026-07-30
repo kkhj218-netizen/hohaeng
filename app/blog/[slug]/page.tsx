@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+
 import { supabase } from '@/app/lib/supabase';
 import ViewCounter from './ViewCounter';
 
@@ -11,8 +12,10 @@ type Post = {
   title: string;
   slug: string;
   content?: string | null;
+
   category?: string | null;
   subcategory?: string | null;
+
   description?: string | null;
   created_at?: string | null;
 
@@ -25,40 +28,66 @@ type Post = {
   view_count?: number | null;
 };
 
-function getPostTimestamp(post: Post) {
-  if (post.created_at) {
-    const time = new Date(post.created_at).getTime();
+type Category = {
+  slug: string;
+  name: string;
+  emoji: string | null;
+  is_active: boolean;
+};
 
-    if (!Number.isNaN(time)) return time;
+function getPostTimestamp(
+  post: Post
+) {
+  if (post.created_at) {
+    const time =
+      new Date(
+        post.created_at
+      ).getTime();
+
+    if (
+      !Number.isNaN(time)
+    ) {
+      return time;
+    }
   }
 
-  const timestamp = Number(
-    post.slug.split('-').pop()
-  );
+  const timestamp =
+    Number(
+      post.slug
+        .split('-')
+        .pop()
+    );
 
-  return Number.isNaN(timestamp)
+  return Number.isNaN(
+    timestamp
+  )
     ? 0
     : timestamp;
 }
 
-function formatDate(post: Post) {
-  const timestamp = getPostTimestamp(post);
+function formatDate(
+  post: Post
+) {
+  const timestamp =
+    getPostTimestamp(
+      post
+    );
 
-  if (!timestamp) return '';
+  if (!timestamp) {
+    return '';
+  }
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(timestamp));
+  return new Intl.DateTimeFormat(
+    'ko-KR',
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }
+  ).format(
+    new Date(timestamp)
+  );
 }
-
-const categoryNames: Record<string, string> = {
-  log: '📝 호행의 일지',
-  guide: '💡 각종 정보',
-  mindset: '🧠 마인드셋',
-  analysis: '📊 종목 및 시황분석',
-};
 
 /* =========================================================
    🔍 글별 SEO 메타데이터
@@ -67,21 +96,34 @@ const categoryNames: Record<string, string> = {
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { slug } =
+    await params;
 
-  const { data: post, error } = await supabase
+  const {
+    data: post,
+    error,
+  } = await supabase
     .from('posts')
     .select(
       'title, slug, description, seo_title, meta_description, og_image, created_at'
     )
-    .eq('slug', slug)
+    .eq(
+      'slug',
+      slug
+    )
     .maybeSingle();
 
-  if (error || !post) {
+  if (
+    error ||
+    !post
+  ) {
     return {
-      title: '글을 찾을 수 없습니다 | 호행처럼',
+      title:
+        '글을 찾을 수 없습니다 | 호행처럼',
 
       robots: {
         index: false,
@@ -90,52 +132,62 @@ export async function generateMetadata({
     };
   }
 
-  // SEO 제목
   const seoTitle =
     post.seo_title?.trim() ||
     post.title;
 
-  // SEO 설명
   const seoDescription =
     post.meta_description?.trim() ||
     post.description?.trim() ||
     `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
 
-  // 해당 글의 고유 주소
-  const canonicalUrl = `/blog/${slug}`;
+  const canonicalUrl =
+    `/blog/${slug}`;
 
-  // 대표 이미지
   const ogImage =
-    post.og_image?.trim() || null;
+    post.og_image?.trim() ||
+    null;
 
   return {
-    title: seoTitle,
+    title:
+      seoTitle,
 
-    description: seoDescription,
+    description:
+      seoDescription,
 
-    // 검색엔진에 이 주소가 원본 글이라는 것을 알려줌
     alternates: {
-      canonical: canonicalUrl,
+      canonical:
+        canonicalUrl,
     },
 
-    // 구글 등 검색엔진
     robots: {
       index: true,
       follow: true,
     },
 
-    // 카카오톡 / 페이스북 / SNS 공유
     openGraph: {
-      title: seoTitle,
-      description: seoDescription,
-      url: canonicalUrl,
-      siteName: '호행처럼',
-      locale: 'ko_KR',
-      type: 'article',
+      title:
+        seoTitle,
+
+      description:
+        seoDescription,
+
+      url:
+        canonicalUrl,
+
+      siteName:
+        '호행처럼',
+
+      locale:
+        'ko_KR',
+
+      type:
+        'article',
 
       ...(post.created_at
         ? {
-            publishedTime: post.created_at,
+            publishedTime:
+              post.created_at,
           }
         : {}),
 
@@ -143,27 +195,34 @@ export async function generateMetadata({
         ? {
             images: [
               {
-                url: ogImage,
-                alt: post.title,
+                url:
+                  ogImage,
+
+                alt:
+                  post.title,
               },
             ],
           }
         : {}),
     },
 
-    // X / Twitter 공유
     twitter: {
-      card: ogImage
-        ? 'summary_large_image'
-        : 'summary',
+      card:
+        ogImage
+          ? 'summary_large_image'
+          : 'summary',
 
-      title: seoTitle,
+      title:
+        seoTitle,
 
-      description: seoDescription,
+      description:
+        seoDescription,
 
       ...(ogImage
         ? {
-            images: [ogImage],
+            images: [
+              ogImage,
+            ],
           }
         : {}),
     },
@@ -177,14 +236,27 @@ export async function generateMetadata({
 export default async function BlogDetailPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }) {
-  const { slug } = await params;
+  const { slug } =
+    await params;
 
-  const { data, error } = await supabase
+  // =========================================================
+  // 글 불러오기
+  // =========================================================
+
+  const {
+    data,
+    error,
+  } = await supabase
     .from('posts')
     .select('*')
-    .eq('slug', slug)
+    .eq(
+      'slug',
+      slug
+    )
     .maybeSingle();
 
   if (error) {
@@ -200,105 +272,440 @@ export default async function BlogDetailPage({
     notFound();
   }
 
-  const post = data as Post;
+  const post =
+    data as Post;
+
+  // =========================================================
+  // DB에서 실제 카테고리 정보 불러오기
+  // =========================================================
+
+  let category:
+    | Category
+    | null = null;
+
+  if (
+    post.category
+  ) {
+    const {
+      data:
+        categoryData,
+      error:
+        categoryError,
+    } =
+      await supabase
+        .from(
+          'categories'
+        )
+        .select(
+          'slug, name, emoji, is_active'
+        )
+        .eq(
+          'slug',
+          post.category
+        )
+        .maybeSingle();
+
+    if (
+      categoryError
+    ) {
+      console.error(
+        '카테고리 불러오기 오류:',
+        categoryError
+      );
+    }
+
+    category =
+      categoryData as
+        | Category
+        | null;
+  }
+
+  const categoryLabel =
+    category
+      ? `${
+          category.emoji ||
+          '📁'
+        } ${category.name}`
+      : post.category ||
+        'BLOG';
+
+  const categorySlug =
+    post.category ||
+    'log';
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-[#f6f7f9]">
 
-      <article className="max-w-3xl mx-auto px-6 py-10">
+      {/* =====================================================
+          전체 글 영역
+      ===================================================== */}
 
-        <Link
-          href={`/blog?category=${post.category || 'log'}`}
-          className="inline-flex items-center text-sm font-semibold text-blue-600 hover:text-blue-500 mb-6"
-        >
-          ← 목록으로 돌아가기
-        </Link>
+      <article className="max-w-[860px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* 목록 이동 */}
+        <div className="mb-5">
 
-          {/* 글 헤더 */}
-          <header className="px-6 sm:px-10 pt-8 pb-6 border-b border-slate-200">
+          <Link
+            href={`/blog?category=${categorySlug}`}
+            className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+          >
+            ← 목록으로 돌아가기
+          </Link>
 
-            <div className="flex flex-wrap items-center gap-2 mb-4">
+        </div>
 
-              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
-                {categoryNames[
-                  post.category || ''
-                ] ||
-                  post.category ||
-                  'BLOG'}
-              </span>
+        {/* ===================================================
+            메인 글 카드
+        =================================================== */}
+
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">
+
+          {/* =================================================
+              글 헤더
+          ================================================= */}
+
+          <header className="px-6 sm:px-12 pt-9 sm:pt-12 pb-8">
+
+            {/* 카테고리 */}
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+
+              <Link
+                href={`/blog?category=${categorySlug}`}
+                className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors"
+              >
+                {categoryLabel}
+              </Link>
 
               {post.subcategory && (
-                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                  {post.subcategory}
+                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                  {
+                    post.subcategory
+                  }
                 </span>
               )}
 
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight">
+            {/* 제목 */}
+            <h1 className="text-[30px] sm:text-[42px] font-black text-slate-950 leading-[1.25] tracking-[-0.03em] break-words">
               {post.title}
             </h1>
 
+            {/* 설명 */}
+            {post.description && (
+              <p className="text-base sm:text-lg text-slate-500 leading-7 sm:leading-8 mt-5">
+                {
+                  post.description
+                }
+              </p>
+            )}
+
             {/* 날짜 + 조회수 */}
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400 mt-4">
-              {formatDate(post) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-400 mt-6">
+
+              {formatDate(
+                post
+              ) && (
                 <span>
-                  {formatDate(post)}
+                  📅{' '}
+                  {formatDate(
+                    post
+                  )}
                 </span>
               )}
 
               <ViewCounter
-                slug={post.slug}
-                initialCount={post.view_count || 0}
+                slug={
+                  post.slug
+                }
+                initialCount={
+                  post.view_count ||
+                  0
+                }
               />
-            </div>
 
-            {post.description && (
-              <p className="text-slate-600 mt-5 leading-relaxed">
-                {post.description}
-              </p>
-            )}
+            </div>
 
           </header>
 
-          {/* Tiptap에서 저장된 HTML 본문 */}
+          {/* =================================================
+              대표 이미지
+          ================================================= */}
+
+          {post.og_image && (
+            <div className="px-6 sm:px-12 pb-4">
+
+              <img
+                src={
+                  post.og_image
+                }
+                alt={
+                  post.title
+                }
+                className="w-full max-h-[520px] object-cover rounded-2xl border border-slate-100"
+              />
+
+            </div>
+          )}
+
+          {/* 헤더-본문 구분 */}
+          <div className="mx-6 sm:mx-12 border-t border-slate-100" />
+
+          {/* =================================================
+              Tiptap 본문
+          ================================================= */}
+
           <div
             className="
-              px-6 sm:px-10 py-8
+              px-6
+              sm:px-12
+              pt-9
+              pb-14
+
+              text-[16px]
+              sm:text-[17px]
+
               text-slate-800
-              leading-8
+              leading-[1.9]
+
               break-words
-              [&_p]:mb-5
-              [&_h2]:text-2xl
+
+              [&>*:first-child]:mt-0
+              [&>*:last-child]:mb-0
+
+
+              /* ===============================
+                 일반 문단
+              =============================== */
+
+              [&_p]:my-4
+
+              [&_p:empty]:min-h-[1.6em]
+
+
+              /* ===============================
+                 큰 제목 H2
+              =============================== */
+
+              [&_h2]:text-[28px]
+              [&_h2]:sm:text-[32px]
               [&_h2]:font-black
-              [&_h2]:text-slate-900
-              [&_h2]:mt-10
-              [&_h2]:mb-4
-              [&_h3]:text-xl
-              [&_h3]:font-bold
+              [&_h2]:tracking-[-0.025em]
+              [&_h2]:leading-[1.35]
+              [&_h2]:text-slate-950
+              [&_h2]:mt-14
+              [&_h2]:mb-6
+
+
+              /* ===============================
+                 소제목 H3
+              =============================== */
+
+              [&_h3]:text-[23px]
+              [&_h3]:sm:text-[26px]
+              [&_h3]:font-extrabold
+              [&_h3]:tracking-[-0.02em]
+              [&_h3]:leading-[1.4]
               [&_h3]:text-slate-900
-              [&_h3]:mt-8
-              [&_h3]:mb-3
+              [&_h3]:mt-11
+              [&_h3]:mb-5
+
+
+              /* ===============================
+                 작은 제목 H4
+              =============================== */
+
+              [&_h4]:text-[19px]
+              [&_h4]:sm:text-[21px]
+              [&_h4]:font-extrabold
+              [&_h4]:text-slate-900
+              [&_h4]:mt-9
+              [&_h4]:mb-4
+
+
+              /* ===============================
+                 굵게 / 기울임 / 밑줄
+              =============================== */
+
               [&_strong]:font-black
-              [&_img]:rounded-2xl
-              [&_img]:my-6
+
+              [&_em]:italic
+
+              [&_u]:underline
+              [&_u]:underline-offset-4
+
+
+              /* ===============================
+                 이미지
+              =============================== */
+
+              [&_img]:block
               [&_img]:max-w-full
+              [&_img]:h-auto
+              [&_img]:mx-auto
+              [&_img]:my-8
+              [&_img]:rounded-2xl
+
+
+              /* ===============================
+                 글머리표
+              =============================== */
+
               [&_ul]:list-disc
-              [&_ul]:pl-6
+              [&_ul]:pl-7
+              [&_ul]:my-6
+
+              [&_ul_ul]:my-2
+
+
+              /* ===============================
+                 번호 목록
+              =============================== */
+
               [&_ol]:list-decimal
-              [&_ol]:pl-6
-              [&_li]:mb-2
+              [&_ol]:pl-7
+              [&_ol]:my-6
+
+              [&_ol_ol]:my-2
+
+
+              /* ===============================
+                 목록 아이템
+              =============================== */
+
+              [&_li]:my-2
+              [&_li]:pl-1
+
+              [&_li_p]:my-0
+
+
+              /* ===============================
+                 인용문
+              =============================== */
+
+              [&_blockquote]:my-8
+              [&_blockquote]:rounded-r-2xl
               [&_blockquote]:border-l-4
               [&_blockquote]:border-blue-500
-              [&_blockquote]:pl-4
+              [&_blockquote]:bg-blue-50/70
+              [&_blockquote]:px-6
+              [&_blockquote]:py-5
               [&_blockquote]:text-slate-600
+              [&_blockquote]:leading-8
+
+              [&_blockquote_p]:my-0
+
+
+              /* ===============================
+                 링크
+              =============================== */
+
+              [&_a]:font-semibold
+              [&_a]:text-blue-600
+              [&_a]:underline
+              [&_a]:decoration-blue-300
+              [&_a]:underline-offset-4
+
+              hover:[&_a]:text-blue-500
+
+
+              /* ===============================
+                 구분선
+              =============================== */
+
+              [&_hr]:my-12
+              [&_hr]:border-0
+              [&_hr]:border-t
+              [&_hr]:border-slate-200
+
+
+              /* ===============================
+                 형광펜
+              =============================== */
+
+              [&_mark]:rounded
+              [&_mark]:px-1
+              [&_mark]:py-0.5
+
+
+              /* ===============================
+                 인라인 코드
+              =============================== */
+
+              [&_code]:rounded-md
+              [&_code]:bg-slate-100
+              [&_code]:px-1.5
+              [&_code]:py-0.5
+              [&_code]:text-[0.9em]
+              [&_code]:font-mono
+              [&_code]:text-pink-600
+
+
+              /* ===============================
+                 코드 블록
+              =============================== */
+
+              [&_pre]:my-8
+              [&_pre]:overflow-x-auto
+              [&_pre]:rounded-2xl
+              [&_pre]:bg-slate-950
+              [&_pre]:p-5
+              [&_pre]:text-sm
+              [&_pre]:leading-7
+              [&_pre]:text-slate-100
+
+              [&_pre_code]:bg-transparent
+              [&_pre_code]:p-0
+              [&_pre_code]:text-inherit
+
+
+              /* ===============================
+                 취소선
+              =============================== */
+
+              [&_s]:text-slate-500
             "
             dangerouslySetInnerHTML={{
-              __html: post.content || '',
+              __html:
+                post.content ||
+                '',
             }}
           />
+
+          {/* =================================================
+              글 하단
+          ================================================= */}
+
+          <footer className="px-6 sm:px-12 pb-10">
+
+            <div className="border-t border-slate-100 pt-7">
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+                <div>
+
+                  <p className="text-xs text-slate-400">
+                    HOHAENG OS
+                  </p>
+
+                  <p className="text-sm font-bold text-slate-700 mt-1">
+                    호행처럼의 기록과 정보
+                  </p>
+
+                </div>
+
+                <Link
+                  href={`/blog?category=${categorySlug}`}
+                  className="inline-flex items-center justify-center px-5 py-3 bg-slate-900 hover:bg-blue-600 text-white rounded-xl text-sm font-bold transition-colors"
+                >
+                  ← 다른 글 더 보기
+                </Link>
+
+              </div>
+
+            </div>
+
+          </footer>
 
         </div>
 

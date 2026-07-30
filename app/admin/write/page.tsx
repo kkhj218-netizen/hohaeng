@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
 } from 'react';
@@ -36,6 +38,21 @@ type Category = {
   emoji: string | null;
   sort_order: number;
   is_active: boolean;
+};
+
+const DEFAULT_EDITOR_CONTENT =
+  '<p>여기에 블로그 글을 자유롭게 작성하세요...</p>';
+
+type AutoSaveStatus =
+  | 'idle'
+  | 'waiting'
+  | 'saving'
+  | 'saved'
+  | 'error';
+
+type SaveOptions = {
+  auto?: boolean;
+  version?: number;
 };
 
 export default function AdminWritePage() {
@@ -106,6 +123,22 @@ export default function AdminWritePage() {
     setPublishing,
   ] = useState(false);
 
+  // 자동저장 상태
+  const [
+    autoSaveStatus,
+    setAutoSaveStatus,
+  ] = useState<AutoSaveStatus>('idle');
+
+  const [
+    lastAutoSavedAt,
+    setLastAutoSavedAt,
+  ] = useState<Date | null>(null);
+
+  const [
+    changeVersion,
+    setChangeVersion,
+  ] = useState(0);
+
   // 한 번 초안으로 저장한 뒤에는
   // 같은 글을 계속 UPDATE 하기 위한 ID / slug
   const [
@@ -117,6 +150,67 @@ export default function AdminWritePage() {
     currentSlug,
     setCurrentSlug,
   ] = useState<string | null>(null);
+
+  // 자동저장 중복 실행과 최초 INSERT 충돌 방지용 ref
+  const currentPostIdRef =
+    useRef<string | null>(null);
+
+  const currentSlugRef =
+    useRef<string | null>(null);
+
+  const saveInFlightRef =
+    useRef(false);
+
+  const publishingRef =
+    useRef(false);
+
+  const autoSaveTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const lastSavedSnapshotRef =
+    useRef<string | null>(null);
+
+  const latestChangeVersionRef =
+    useRef(0);
+
+  const lastSavedVersionRef =
+    useRef(0);
+
+  const clearAutoSaveTimer =
+    useCallback(() => {
+      if (
+        autoSaveTimerRef.current
+      ) {
+        clearTimeout(
+          autoSaveTimerRef.current
+        );
+
+        autoSaveTimerRef.current =
+          null;
+      }
+    }, []);
+
+  const markChanged =
+    useCallback(() => {
+      setChangeVersion(
+        (previous) => {
+          const next =
+            previous + 1;
+
+          latestChangeVersionRef.current =
+            next;
+
+          return next;
+        }
+      );
+
+      setAutoSaveStatus(
+        (previous) =>
+          previous === 'saving'
+            ? previous
+            : 'waiting'
+      );
+    }, []);
 
   // =========================================================
   // 카테고리 불러오기
@@ -221,13 +315,17 @@ export default function AdminWritePage() {
     ],
 
     content:
-      '<p>여기에 블로그 글을 자유롭게 작성하세요...</p>',
+      DEFAULT_EDITOR_CONTENT,
 
     editorProps: {
       attributes: {
         class:
           'prose prose-slate max-w-none focus:outline-none min-h-[520px] px-6 py-8 bg-white text-slate-900 rounded-b-2xl border border-t-0 border-slate-800 leading-relaxed',
       },
+    },
+
+    onUpdate: () => {
+      markChanged();
     },
   });
 
@@ -434,6 +532,8 @@ export default function AdminWritePage() {
           data.publicUrl
         );
 
+        markChanged();
+
       } catch (
         error: any
       ) {
@@ -451,307 +551,637 @@ export default function AdminWritePage() {
     };
 
   // =========================================================
-  // 초안 저장 / 공개 발행
+  // 초안 저장 / 공개 발행 / 자동저장
   // =========================================================
 
   const handleSave =
-    async (
-      targetStatus:
-        'draft' |
-        'published'
-    ) => {
-      // 공개 발행은 제목 필수
-      if (
-        targetStatus ===
-          'published' &&
-        !title.trim()
-      ) {
-        alert(
-          '공개 발행하려면 제목을 입력해주세요.'
-        );
+    useCallback(
+      async (
+        targetStatus:
+          'draft' |
+          'published',
+        options: SaveOptions = {}
+      ) => {
+        const isAutoSave =
+          options.auto === true;
 
-        return;
-      }
+        const versionAtSave =
+          options.version ??
+          latestChangeVersionRef.current;
 
-      if (!category) {
-        alert(
-          '카테고리를 선택해주세요.'
-        );
+        // 수동 저장/발행을 누르면 예약된 자동저장 타이머를 먼저 정리
+        if (!isAutoSave) {
+          clearAutoSaveTimer();
+        }
 
-        return;
-      }
-
-      if (!editor) {
-        return;
-      }
-
-      try {
+        // 공개 발행 중에는 자동저장이 절대 실행되지 않도록 잠금
         if (
           targetStatus ===
-          'draft'
+          'published'
         ) {
-          setDraftSaving(
-            true
+          publishingRef.current =
+            true;
+        }
+
+        // 다른 저장 요청이 진행 중이면 중복 요청 방지
+        if (
+          saveInFlightRef.current
+        ) {
+          if (
+            targetStatus ===
+            'published'
+          ) {
+            publishingRef.current =
+              false;
+          }
+
+          return;
+        }
+
+        // 공개 발행은 제목 필수
+        if (
+          targetStatus ===
+            'published' &&
+          !title.trim()
+        ) {
+          publishingRef.current =
+            false;
+
+          alert(
+            '공개 발행하려면 제목을 입력해주세요.'
           );
-        } else {
-          setPublishing(
-            true
-          );
+
+          return;
+        }
+
+        if (!category) {
+          publishingRef.current =
+            false;
+
+          if (!isAutoSave) {
+            alert(
+              '카테고리를 선택해주세요.'
+            );
+          }
+
+          return;
+        }
+
+        if (!editor) {
+          publishingRef.current =
+            false;
+
+          return;
         }
 
         const htmlContent =
           editor.getHTML();
 
-        const now =
-          new Date().toISOString();
+        // 빈 작성 화면은 자동으로 초안을 만들지 않음
+        const hasMeaningfulContent =
+          Boolean(
+            title.trim() ||
+            subcategory.trim() ||
+            description.trim() ||
+            seoTitle.trim() ||
+            metaDescription.trim() ||
+            ogImage.trim()
+          ) ||
+          (
+            htmlContent !==
+              DEFAULT_EDITOR_CONTENT &&
+            htmlContent !== '<p></p>'
+          );
+
+        if (
+          isAutoSave &&
+          !hasMeaningfulContent
+        ) {
+          setAutoSaveStatus('idle');
+
+          return;
+        }
 
         // 초안은 제목이 없어도 저장 가능
         const savedTitle =
           title.trim() ||
           '제목 없는 초안';
 
-        const postPayload = {
-          title:
-            savedTitle,
+        const snapshot =
+          JSON.stringify({
+            title:
+              savedTitle,
+            content:
+              htmlContent,
+            category,
+            subcategory:
+              subcategory.trim() ||
+              null,
+            description:
+              description.trim() ||
+              null,
+            seo_title:
+              seoTitle.trim() ||
+              savedTitle,
+            meta_description:
+              metaDescription.trim() ||
+              description.trim() ||
+              null,
+            og_image:
+              ogImage.trim() ||
+              null,
+            status:
+              targetStatus,
+          });
 
-          content:
-            htmlContent,
-
-          category,
-
-          subcategory:
-            subcategory.trim() ||
-            null,
-
-          description:
-            description.trim() ||
-            null,
-
-          seo_title:
-            seoTitle.trim() ||
-            savedTitle,
-
-          meta_description:
-            metaDescription.trim() ||
-            description.trim() ||
-            null,
-
-          og_image:
-            ogImage.trim() ||
-            null,
-
-          status:
-            targetStatus,
-
-          published_at:
-            targetStatus ===
-            'published'
-              ? now
-              : null,
-
-          updated_at:
-            now,
-        };
-
-        let savedPostId =
-          currentPostId;
-
-        let savedSlug =
-          currentSlug;
-
-        // 이미 한 번 초안 저장한 글이면 새 글을 만들지 않고 UPDATE
-        if (currentPostId) {
-          const {
-            data:
-              updatedPost,
-            error:
-              updateError,
-          } =
-            await supabase
-              .from('posts')
-              .update(
-                postPayload
-              )
-              .eq(
-                'id',
-                currentPostId
-              )
-              .select(
-                'id, slug'
-              )
-              .single();
-
-          if (
-            updateError
-          ) {
-            throw updateError;
-          }
-
-          savedPostId =
-            updatedPost.id;
-
-          savedSlug =
-            updatedPost.slug;
-        } else {
-          // 최초 저장이면 INSERT
-          const generatedSlug =
-            `post-${category}-${Date.now()}`;
-
-          const {
-            data:
-              insertedPost,
-            error:
-              insertError,
-          } =
-            await supabase
-              .from('posts')
-              .insert([
-                {
-                  ...postPayload,
-
-                  slug:
-                    generatedSlug,
-                },
-              ])
-              .select(
-                'id, slug'
-              )
-              .single();
-
-          if (
-            insertError
-          ) {
-            throw insertError;
-          }
-
-          savedPostId =
-            insertedPost.id;
-
-          savedSlug =
-            insertedPost.slug;
-
-          setCurrentPostId(
-            insertedPost.id
-          );
-
-          setCurrentSlug(
-            insertedPost.slug
-          );
-        }
-
-        // =====================================================
-        // 초안 저장
-        // =====================================================
-
+        // 같은 내용은 자동저장 요청을 다시 보내지 않음
         if (
-          targetStatus ===
-          'draft'
+          isAutoSave &&
+          currentPostIdRef.current &&
+          lastSavedSnapshotRef.current ===
+            snapshot
         ) {
-          alert(
-            '초안으로 저장되었습니다! 💾\n계속 작성한 뒤 다시 초안 저장하거나 공개 발행할 수 있습니다.'
-          );
+          lastSavedVersionRef.current =
+            Math.max(
+              lastSavedVersionRef.current,
+              versionAtSave
+            );
+
+          setAutoSaveStatus('saved');
 
           return;
         }
 
-        // =====================================================
-        // 공개 발행
-        // =====================================================
+        saveInFlightRef.current =
+          true;
 
-        alert(
-          '성공적으로 글이 공개 발행되었습니다! 🚀'
-        );
+        try {
+          if (
+            targetStatus ===
+            'draft'
+          ) {
+            if (isAutoSave) {
+              setAutoSaveStatus(
+                'saving'
+              );
+            } else {
+              setDraftSaving(
+                true
+              );
+            }
+          } else {
+            setPublishing(
+              true
+            );
+          }
 
-        const publishedSlug =
-          savedSlug;
+          const now =
+            new Date().toISOString();
 
-        // 작성 화면 초기화
-        setTitle('');
+          const postPayload = {
+            title:
+              savedTitle,
 
-        if (
-          categories.length >
-          0
+            content:
+              htmlContent,
+
+            category,
+
+            subcategory:
+              subcategory.trim() ||
+              null,
+
+            description:
+              description.trim() ||
+              null,
+
+            seo_title:
+              seoTitle.trim() ||
+              savedTitle,
+
+            meta_description:
+              metaDescription.trim() ||
+              description.trim() ||
+              null,
+
+            og_image:
+              ogImage.trim() ||
+              null,
+
+            status:
+              targetStatus,
+
+            published_at:
+              targetStatus ===
+              'published'
+                ? now
+                : null,
+
+            updated_at:
+              now,
+          };
+
+          let savedPostId =
+            currentPostIdRef.current;
+
+          let savedSlug =
+            currentSlugRef.current;
+
+          // 이미 한 번 저장한 글이면 새 글을 만들지 않고 UPDATE
+          if (
+            currentPostIdRef.current
+          ) {
+            const {
+              data:
+                updatedPost,
+              error:
+                updateError,
+            } =
+              await supabase
+                .from('posts')
+                .update(
+                  postPayload
+                )
+                .eq(
+                  'id',
+                  currentPostIdRef.current
+                )
+                .select(
+                  'id, slug'
+                )
+                .single();
+
+            if (
+              updateError
+            ) {
+              throw updateError;
+            }
+
+            savedPostId =
+              updatedPost.id;
+
+            savedSlug =
+              updatedPost.slug;
+          } else {
+            // 최초 저장이면 INSERT
+            const generatedSlug =
+              `post-${category}-${Date.now()}`;
+
+            const {
+              data:
+                insertedPost,
+              error:
+                insertError,
+            } =
+              await supabase
+                .from('posts')
+                .insert([
+                  {
+                    ...postPayload,
+
+                    slug:
+                      generatedSlug,
+                  },
+                ])
+                .select(
+                  'id, slug'
+                )
+                .single();
+
+            if (
+              insertError
+            ) {
+              throw insertError;
+            }
+
+            savedPostId =
+              insertedPost.id;
+
+            savedSlug =
+              insertedPost.slug;
+
+            // state보다 ref를 먼저 갱신하여
+            // 자동저장/수동저장이 겹쳐도 중복 INSERT 방지
+            currentPostIdRef.current =
+              insertedPost.id;
+
+            currentSlugRef.current =
+              insertedPost.slug;
+
+            setCurrentPostId(
+              insertedPost.id
+            );
+
+            setCurrentSlug(
+              insertedPost.slug
+            );
+          }
+
+          // =====================================================
+          // 초안 저장
+          // =====================================================
+
+          if (
+            targetStatus ===
+            'draft'
+          ) {
+            lastSavedSnapshotRef.current =
+              snapshot;
+
+            lastSavedVersionRef.current =
+              Math.max(
+                lastSavedVersionRef.current,
+                versionAtSave
+              );
+
+            setLastAutoSavedAt(
+              new Date()
+            );
+
+            if (isAutoSave) {
+              // 저장 중 새 입력이 생겼다면 다시 자동저장 대기 상태
+              if (
+                latestChangeVersionRef.current >
+                versionAtSave
+              ) {
+                setAutoSaveStatus(
+                  'waiting'
+                );
+              } else {
+                setAutoSaveStatus(
+                  'saved'
+                );
+              }
+            } else {
+              setAutoSaveStatus(
+                'saved'
+              );
+
+              alert(
+                '초안으로 저장되었습니다! 💾\n계속 작성한 뒤 다시 초안 저장하거나 공개 발행할 수 있습니다.'
+              );
+            }
+
+            return;
+          }
+
+          // =====================================================
+          // 공개 발행
+          // =====================================================
+
+          alert(
+            '성공적으로 글이 공개 발행되었습니다! 🚀'
+          );
+
+          const publishedSlug =
+            savedSlug;
+
+          // 작성 화면 초기화
+          setTitle('');
+
+          if (
+            categories.length >
+            0
+          ) {
+            setCategory(
+              categories[0]
+                .slug
+            );
+          } else {
+            setCategory(
+              'log'
+            );
+          }
+
+          setSubcategory(
+            ''
+          );
+
+          setDescription(
+            ''
+          );
+
+          setSeoTitle(
+            ''
+          );
+
+          setMetaDescription(
+            ''
+          );
+
+          setOgImage(
+            ''
+          );
+
+          currentPostIdRef.current =
+            null;
+
+          currentSlugRef.current =
+            null;
+
+          setCurrentPostId(
+            null
+          );
+
+          setCurrentSlug(
+            null
+          );
+
+          lastSavedSnapshotRef.current =
+            null;
+
+          lastSavedVersionRef.current =
+            0;
+
+          latestChangeVersionRef.current =
+            0;
+
+          setChangeVersion(0);
+
+          setAutoSaveStatus(
+            'idle'
+          );
+
+          setLastAutoSavedAt(
+            null
+          );
+
+          editor.commands.setContent(
+            DEFAULT_EDITOR_CONTENT,
+            { emitUpdate: false }
+          );
+
+          if (
+            publishedSlug
+          ) {
+            router.push(
+              `/blog/${publishedSlug}`
+            );
+          } else {
+            router.push(
+              '/blog'
+            );
+          }
+
+          router.refresh();
+
+          // 타입상 사용되는 값임을 명확히 함
+          void savedPostId;
+
+        } catch (
+          error: any
         ) {
-          setCategory(
-            categories[0]
-              .slug
+          if (isAutoSave) {
+            console.error(
+              '자동저장 실패:',
+              error
+            );
+
+            setAutoSaveStatus(
+              'error'
+            );
+          } else {
+            alert(
+              targetStatus ===
+              'draft'
+                ? '초안 저장 실패: ' +
+                    error.message
+                : '글 발행 실패: ' +
+                    error.message
+            );
+          }
+        } finally {
+          saveInFlightRef.current =
+            false;
+
+          setDraftSaving(
+            false
           );
-        } else {
-          setCategory(
-            'log'
+
+          setPublishing(
+            false
           );
+
+          if (
+            targetStatus ===
+            'published'
+          ) {
+            publishingRef.current =
+              false;
+          }
         }
+      },
+      [
+        category,
+        categories,
+        clearAutoSaveTimer,
+        description,
+        editor,
+        metaDescription,
+        ogImage,
+        router,
+        seoTitle,
+        subcategory,
+        title,
+      ]
+    );
 
-        setSubcategory(
-          ''
+  // =========================================================
+  // 5초 디바운스 자동저장
+  // =========================================================
+
+  useEffect(() => {
+    clearAutoSaveTimer();
+
+    if (
+      changeVersion === 0 ||
+      !editor ||
+      !category ||
+      categoriesLoading ||
+      uploading ||
+      ogUploading ||
+      publishing ||
+      publishingRef.current
+    ) {
+      return;
+    }
+
+    setAutoSaveStatus(
+      (previous) =>
+        previous === 'saving'
+          ? previous
+          : 'waiting'
+    );
+
+    const versionToSave =
+      changeVersion;
+
+    autoSaveTimerRef.current =
+      setTimeout(() => {
+        autoSaveTimerRef.current =
+          null;
+
+        void handleSave(
+          'draft',
+          {
+            auto: true,
+            version:
+              versionToSave,
+          }
         );
+      }, 5000);
 
-        setDescription(
-          ''
-        );
-
-        setSeoTitle(
-          ''
-        );
-
-        setMetaDescription(
-          ''
-        );
-
-        setOgImage(
-          ''
-        );
-
-        setCurrentPostId(
-          null
-        );
-
-        setCurrentSlug(
-          null
-        );
-
-        editor.commands.setContent(
-          '<p>여기에 블로그 글을 자유롭게 작성하세요...</p>'
-        );
-
-        if (
-          publishedSlug
-        ) {
-          router.push(
-            `/blog/${publishedSlug}`
-          );
-        } else {
-          router.push(
-            '/blog'
-          );
-        }
-
-        router.refresh();
-
-        // 타입상 사용되는 값임을 명확히 함
-        void savedPostId;
-
-      } catch (
-        error: any
-      ) {
-        alert(
-          targetStatus ===
-          'draft'
-            ? '초안 저장 실패: ' +
-                error.message
-            : '글 발행 실패: ' +
-                error.message
-        );
-      } finally {
-        setDraftSaving(
-          false
-        );
-
-        setPublishing(
-          false
-        );
-      }
+    return () => {
+      clearAutoSaveTimer();
     };
+  }, [
+    category,
+    categoriesLoading,
+    changeVersion,
+    clearAutoSaveTimer,
+    editor,
+    handleSave,
+    ogUploading,
+    publishing,
+    uploading,
+  ]);
+
+  // 컴포넌트 종료 시 남아 있는 타이머 정리
+  useEffect(() => {
+    return () => {
+      clearAutoSaveTimer();
+    };
+  }, [clearAutoSaveTimer]);
+
+  // 자동저장 전에 브라우저를 닫거나 새로고침하면 경고
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event: BeforeUnloadEvent) => {
+        const hasUnsavedChanges =
+          latestChangeVersionRef.current >
+          lastSavedVersionRef.current;
+
+        if (
+          hasUnsavedChanges &&
+          !publishingRef.current
+        ) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, []);
 
   return (
     <main className="max-w-5xl mx-auto p-6 min-h-screen bg-slate-950 text-slate-100">
@@ -787,6 +1217,7 @@ export default function AdminWritePage() {
             disabled={
               draftSaving ||
               publishing ||
+              autoSaveStatus === 'saving' ||
               categoriesLoading ||
               uploading ||
               ogUploading
@@ -810,6 +1241,7 @@ export default function AdminWritePage() {
             disabled={
               draftSaving ||
               publishing ||
+              autoSaveStatus === 'saving' ||
               categoriesLoading ||
               uploading ||
               ogUploading
@@ -823,6 +1255,44 @@ export default function AdminWritePage() {
 
         </div>
 
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-xs">
+        <span className="font-bold text-slate-300">
+          ⚡ 자동저장 켜짐 · 입력을 멈추면 5초 후 초안 저장
+        </span>
+
+        <span
+          className={
+            autoSaveStatus === 'error'
+              ? 'font-bold text-red-400'
+              : autoSaveStatus === 'saving'
+                ? 'font-bold text-amber-300'
+                : autoSaveStatus === 'saved'
+                  ? 'font-bold text-emerald-300'
+                  : 'font-bold text-slate-400'
+          }
+        >
+          {autoSaveStatus === 'saving'
+            ? '저장 중...'
+            : autoSaveStatus === 'waiting'
+              ? '변경사항 감지 · 자동저장 대기 중'
+              : autoSaveStatus === 'error'
+                ? '⚠ 자동저장 실패 · 수동 저장을 눌러주세요'
+                : autoSaveStatus === 'saved'
+                  ? `✓ 자동저장됨${
+                      lastAutoSavedAt
+                        ? ` · ${lastAutoSavedAt.toLocaleTimeString(
+                            'ko-KR',
+                            {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }
+                          )}`
+                        : ''
+                    }`
+                  : '아직 저장할 변경사항이 없습니다.'}
+        </span>
       </div>
 
       {currentPostId && (
@@ -847,11 +1317,13 @@ export default function AdminWritePage() {
             type="text"
             placeholder="제목을 입력하세요"
             value={title}
-            onChange={(e) =>
+            onChange={(e) => {
               setTitle(
                 e.target.value
-              )
-            }
+              );
+
+              markChanged();
+            }}
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 font-bold text-lg"
           />
 
@@ -885,11 +1357,13 @@ export default function AdminWritePage() {
               value={
                 category
               }
-              onChange={(e) =>
+              onChange={(e) => {
                 setCategory(
                   e.target.value
-                )
-              }
+                );
+
+                markChanged();
+              }}
               disabled={
                 categoriesLoading
               }
@@ -946,11 +1420,13 @@ export default function AdminWritePage() {
               value={
                 subcategory
               }
-              onChange={(e) =>
+              onChange={(e) => {
                 setSubcategory(
                   e.target.value
-                )
-              }
+                );
+
+                markChanged();
+              }}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white"
             />
 
@@ -970,11 +1446,13 @@ export default function AdminWritePage() {
             value={
               description
             }
-            onChange={(e) =>
+            onChange={(e) => {
               setDescription(
                 e.target.value
-              )
-            }
+              );
+
+              markChanged();
+            }}
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white"
           />
 
@@ -1020,11 +1498,13 @@ export default function AdminWritePage() {
               value={
                 seoTitle
               }
-              onChange={(e) =>
+              onChange={(e) => {
                 setSeoTitle(
                   e.target.value
-                )
-              }
+                );
+
+                markChanged();
+              }}
               placeholder={
                 title ||
                 '검색엔진용 제목'
@@ -1058,11 +1538,13 @@ export default function AdminWritePage() {
               value={
                 metaDescription
               }
-              onChange={(e) =>
+              onChange={(e) => {
                 setMetaDescription(
                   e.target.value
-                )
-              }
+                );
+
+                markChanged();
+              }}
               placeholder={
                 description ||
                 '검색 결과에 표시할 설명'
@@ -1090,11 +1572,13 @@ export default function AdminWritePage() {
                 value={
                   ogImage
                 }
-                onChange={(e) =>
+                onChange={(e) => {
                   setOgImage(
                     e.target.value
-                  )
-                }
+                  );
+
+                  markChanged();
+                }}
                 placeholder="이미지를 업로드하거나 URL을 입력하세요"
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white"
               />
@@ -1132,11 +1616,13 @@ export default function AdminWritePage() {
 
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
                       setOgImage(
                         ''
-                      )
-                    }
+                      );
+
+                      markChanged();
+                    }}
                     className="text-xs font-bold text-red-400"
                   >
                     ✕ 제거

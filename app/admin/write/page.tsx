@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -36,6 +40,7 @@ export default function AdminWritePage() {
 
   // 상태
   const [uploading, setUploading] = useState(false);
+  const [ogUploading, setOgUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   // 활성 카테고리 불러오기
@@ -66,16 +71,13 @@ export default function AdminWritePage() {
 
       setCategories(activeCategories);
 
-      // 현재 선택된 카테고리가 없으면 첫 번째 카테고리 자동 선택
       if (
         activeCategories.length > 0 &&
         !activeCategories.some(
           (item) => item.slug === category
         )
       ) {
-        setCategory(
-          activeCategories[0].slug
-        );
+        setCategory(activeCategories[0].slug);
       }
 
       setCategoriesLoading(false);
@@ -84,13 +86,12 @@ export default function AdminWritePage() {
     loadCategories();
   }, []);
 
-  // Tiptap WYSIWYG 에디터
+  // Tiptap 에디터
   const editor = useEditor({
     immediatelyRender: false,
 
     extensions: [
       StarterKit,
-
       Image.configure({
         inline: true,
         allowBase64: true,
@@ -108,9 +109,12 @@ export default function AdminWritePage() {
     },
   });
 
-  // 이미지 업로드
+  // =========================================================
+  // 본문 이미지 업로드
+  // =========================================================
+
   const handleImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
 
@@ -120,8 +124,7 @@ export default function AdminWritePage() {
       setUploading(true);
 
       const fileExt =
-        file.name.split('.').pop() ||
-        'jpg';
+        file.name.split('.').pop() || 'jpg';
 
       const fileName =
         `${Date.now()}.${fileExt}`;
@@ -159,13 +162,90 @@ export default function AdminWritePage() {
       );
     } finally {
       setUploading(false);
-
-      // 같은 사진 다시 선택 가능
       e.target.value = '';
     }
   };
 
+  // =========================================================
+  // 대표 이미지 업로드
+  // =========================================================
+
+  const handleOgImageUpload = async (
+    e: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    // 이미지 파일 확인
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+
+    // 5MB 제한
+    if (file.size > 5 * 1024 * 1024) {
+      alert(
+        '대표 이미지는 5MB 이하로 올려주세요.'
+      );
+
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      setOgUploading(true);
+
+      const fileExt =
+        file.name
+          .split('.')
+          .pop()
+          ?.toLowerCase() || 'jpg';
+
+      const fileName =
+        `og-${Date.now()}.${fileExt}`;
+
+      const filePath =
+        `posts/og/${fileName}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from('hohaeng')
+          .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } =
+        supabase.storage
+          .from('hohaeng')
+          .getPublicUrl(filePath);
+
+      if (!data.publicUrl) {
+        throw new Error(
+          '대표 이미지 URL을 생성하지 못했습니다.'
+        );
+      }
+
+      // 업로드 완료 → SEO 대표 이미지 URL 자동 입력
+      setOgImage(data.publicUrl);
+    } catch (error: any) {
+      alert(
+        '대표 이미지 업로드 실패: ' +
+          error.message
+      );
+    } finally {
+      setOgUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  // =========================================================
   // 글 발행
+  // =========================================================
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       alert('제목을 입력해주세요.');
@@ -173,9 +253,7 @@ export default function AdminWritePage() {
     }
 
     if (!category) {
-      alert(
-        '카테고리를 선택해주세요.'
-      );
+      alert('카테고리를 선택해주세요.');
       return;
     }
 
@@ -187,7 +265,6 @@ export default function AdminWritePage() {
       const htmlContent =
         editor.getHTML();
 
-      // slug 자동 생성
       const generatedSlug =
         `post-${category}-${Date.now()}`;
 
@@ -242,7 +319,6 @@ export default function AdminWritePage() {
       // 폼 초기화
       setTitle('');
 
-      // 첫 번째 활성 카테고리로 초기화
       if (categories.length > 0) {
         setCategory(
           categories[0].slug
@@ -299,7 +375,9 @@ export default function AdminWritePage() {
           onClick={handleSubmit}
           disabled={
             publishing ||
-            categoriesLoading
+            categoriesLoading ||
+            uploading ||
+            ogUploading
           }
           className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all cursor-pointer"
         >
@@ -368,6 +446,7 @@ export default function AdminWritePage() {
               }
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
             >
+
               {categoriesLoading ? (
                 <option>
                   카테고리 불러오는 중...
@@ -382,9 +461,7 @@ export default function AdminWritePage() {
                   (item) => (
                     <option
                       key={item.id}
-                      value={
-                        item.slug
-                      }
+                      value={item.slug}
                     >
                       {item.emoji ||
                         '📁'}{' '}
@@ -393,6 +470,7 @@ export default function AdminWritePage() {
                   )
                 )
               )}
+
             </select>
 
             <p className="text-xs text-slate-500 mt-1">
@@ -442,7 +520,9 @@ export default function AdminWritePage() {
 
       </div>
 
-      {/* SEO 설정 */}
+      {/* =====================================================
+          SEO 설정
+      ===================================================== */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
 
         <div className="mb-5">
@@ -452,7 +532,7 @@ export default function AdminWritePage() {
           </h2>
 
           <p className="text-xs text-slate-400 mt-1">
-            비워두면 글 제목과 한 줄 요약이 자동으로 사용됩니다.
+            검색엔진 및 SNS 공유 정보를 설정합니다.
           </p>
 
         </div>
@@ -492,8 +572,7 @@ export default function AdminWritePage() {
             />
 
             <p className="text-xs text-slate-500 mt-1">
-              검색엔진에서 보여줄 제목입니다.
-              비워두면 글 제목을 사용합니다.
+              비워두면 글 제목이 자동으로 사용됩니다.
             </p>
 
           </div>
@@ -532,45 +611,96 @@ export default function AdminWritePage() {
             />
 
             <p className="text-xs text-slate-500 mt-1">
-              비워두면 한 줄 요약을 자동으로 사용합니다.
+              비워두면 한 줄 요약이 자동으로 사용됩니다.
             </p>
 
           </div>
 
-          {/* 대표 이미지 URL */}
+          {/* =================================================
+              대표 이미지
+          ================================================= */}
           <div>
 
-            <label className="block text-xs font-bold text-slate-400 mb-1">
-              대표 이미지 URL
+            <label className="block text-xs font-bold text-slate-400 mb-2">
+              대표 이미지
             </label>
 
-            <input
-              type="url"
-              value={ogImage}
-              onChange={(e) =>
-                setOgImage(
-                  e.target.value
-                )
-              }
-              placeholder="https://..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
-            />
+            <div className="flex flex-col sm:flex-row gap-2">
 
-            <p className="text-xs text-slate-500 mt-1">
-              카카오톡 · SNS · 메신저 공유 시 사용할 대표 이미지입니다.
+              {/* URL 직접 입력도 가능 */}
+              <input
+                type="url"
+                value={ogImage}
+                onChange={(e) =>
+                  setOgImage(
+                    e.target.value
+                  )
+                }
+                placeholder="이미지를 업로드하거나 https:// 주소를 입력하세요"
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+              />
+
+              {/* 자동 업로드 버튼 */}
+              <label
+                className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold text-sm cursor-pointer transition-colors ${
+                  ogUploading
+                    ? 'bg-slate-700 text-slate-400'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+              >
+                {ogUploading
+                  ? '업로드 중...'
+                  : '📷 대표 이미지 업로드'}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={
+                    handleOgImageUpload
+                  }
+                  disabled={
+                    ogUploading
+                  }
+                  className="hidden"
+                />
+              </label>
+
+            </div>
+
+            <p className="text-xs text-slate-500 mt-2">
+              카카오톡 · SNS · 메신저 공유 시 표시될 대표 이미지입니다.
             </p>
 
-            {ogImage && (
-              <div className="mt-3">
+            <p className="text-xs text-slate-600 mt-1">
+              권장: 가로형 이미지 / 최대 5MB
+            </p>
 
-                <p className="text-xs text-slate-400 mb-2">
-                  대표 이미지 미리보기
-                </p>
+            {/* 대표 이미지 미리보기 */}
+            {ogImage && (
+              <div className="mt-4 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+
+                <div className="flex items-center justify-between gap-2 mb-3">
+
+                  <p className="text-xs font-bold text-slate-400">
+                    대표 이미지 미리보기
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOgImage('')
+                    }
+                    className="text-xs font-bold text-red-400 hover:text-red-300"
+                  >
+                    ✕ 이미지 제거
+                  </button>
+
+                </div>
 
                 <img
                   src={ogImage}
                   alt="대표 이미지 미리보기"
-                  className="max-w-sm w-full rounded-xl border border-slate-800"
+                  className="w-full max-h-[350px] object-contain rounded-xl"
                 />
 
               </div>
@@ -582,19 +712,16 @@ export default function AdminWritePage() {
 
       </div>
 
-      {/* 본문 안내 */}
+      {/* 본문 */}
       <div className="mb-2">
-
         <h2 className="font-black text-white">
           📝 본문
         </h2>
-
       </div>
 
       {/* 에디터 툴바 */}
       <div className="bg-slate-800/80 p-3 rounded-t-xl border border-b-0 border-slate-700 flex flex-wrap gap-2 items-center">
 
-        {/* 굵게 */}
         <button
           type="button"
           onClick={() =>
@@ -615,7 +742,6 @@ export default function AdminWritePage() {
           Bold (굵게)
         </button>
 
-        {/* 기울임 */}
         <button
           type="button"
           onClick={() =>
@@ -636,7 +762,6 @@ export default function AdminWritePage() {
           Italic (기울임)
         </button>
 
-        {/* H2 */}
         <button
           type="button"
           onClick={() =>
@@ -662,7 +787,6 @@ export default function AdminWritePage() {
           H2 (큰 제목)
         </button>
 
-        {/* H3 */}
         <button
           type="button"
           onClick={() =>
@@ -688,7 +812,7 @@ export default function AdminWritePage() {
           H3 (소제목)
         </button>
 
-        {/* 이미지 첨부 */}
+        {/* 본문 이미지 첨부 */}
         <label className="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded transition-colors ml-auto flex items-center gap-1">
 
           <span>
@@ -701,7 +825,9 @@ export default function AdminWritePage() {
             onChange={
               handleImageUpload
             }
-            disabled={uploading}
+            disabled={
+              uploading
+            }
             className="hidden"
           />
 
@@ -715,7 +841,6 @@ export default function AdminWritePage() {
 
       </div>
 
-      {/* 본문 에디터 */}
       <EditorContent
         editor={editor}
       />

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/app/lib/supabase';
@@ -13,6 +14,11 @@ type Post = {
   subcategory?: string | null;
   description?: string | null;
   created_at?: string | null;
+
+  // SEO
+  seo_title?: string | null;
+  meta_description?: string | null;
+  og_image?: string | null;
 };
 
 function getPostTimestamp(post: Post) {
@@ -49,6 +55,120 @@ const categoryNames: Record<string, string> = {
   mindset: '🧠 마인드셋',
   analysis: '📊 종목 및 시황분석',
 };
+
+/* =========================================================
+   🔍 글별 SEO 메타데이터
+========================================================= */
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  const { data: post, error } = await supabase
+    .from('posts')
+    .select(
+      'title, slug, description, seo_title, meta_description, og_image, created_at'
+    )
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (error || !post) {
+    return {
+      title: '글을 찾을 수 없습니다 | 호행처럼',
+
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
+  // SEO 제목
+  const seoTitle =
+    post.seo_title?.trim() ||
+    post.title;
+
+  // SEO 설명
+  const seoDescription =
+    post.meta_description?.trim() ||
+    post.description?.trim() ||
+    `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
+
+  // 해당 글의 고유 주소
+  const canonicalUrl = `/blog/${slug}`;
+
+  // 대표 이미지
+  const ogImage =
+    post.og_image?.trim() || null;
+
+  return {
+    title: seoTitle,
+
+    description: seoDescription,
+
+    // 검색엔진에 이 주소가 원본 글이라는 것을 알려줌
+    alternates: {
+      canonical: canonicalUrl,
+    },
+
+    // 구글 등 검색엔진
+    robots: {
+      index: true,
+      follow: true,
+    },
+
+    // 카카오톡 / 페이스북 / SNS 공유
+    openGraph: {
+      title: seoTitle,
+      description: seoDescription,
+      url: canonicalUrl,
+      siteName: '호행처럼',
+      locale: 'ko_KR',
+      type: 'article',
+
+      ...(post.created_at
+        ? {
+            publishedTime: post.created_at,
+          }
+        : {}),
+
+      ...(ogImage
+        ? {
+            images: [
+              {
+                url: ogImage,
+                alt: post.title,
+              },
+            ],
+          }
+        : {}),
+    },
+
+    // X / Twitter 공유
+    twitter: {
+      card: ogImage
+        ? 'summary_large_image'
+        : 'summary',
+
+      title: seoTitle,
+
+      description: seoDescription,
+
+      ...(ogImage
+        ? {
+            images: [ogImage],
+          }
+        : {}),
+    },
+  };
+}
+
+/* =========================================================
+   📝 실제 블로그 글 화면
+========================================================= */
 
 export default async function BlogDetailPage({
   params,

@@ -75,13 +75,13 @@ export default function AdminWritePage() {
     if (!editor) return;
     const htmlContent = editor.getHTML();
 
-    // slug 유니크 고유 키 안전 자동 생성
+    // slug 유니크 고유 키 안전 자동 생성 (post-카테고리-타임스탬프)
     const generatedSlug = `post-${category}-${Date.now()}`;
 
     const { error } = await supabase.from('posts').insert([
       {
         title: title.trim(),
-        slug: generatedSlug,
+        slug: generatedSlug, // slug 값 필수 전달
         content: htmlContent,
         category: category || 'log',
         subcategory: subcategory.trim() || null,

@@ -125,6 +125,23 @@ export default function AdminEditPage() {
     setSaving,
   ] = useState(false);
 
+  // 현재 글 공개 상태
+  const [
+    postStatus,
+    setPostStatus,
+  ] = useState<
+    'draft' |
+    'published'
+  >('published');
+
+  // 최초 공개 시각 보존
+  const [
+    publishedAt,
+    setPublishedAt,
+  ] = useState<
+    string | null
+  >(null);
+
   const [
     uploading,
     setUploading,
@@ -217,7 +234,7 @@ export default function AdminEditPage() {
             supabase
               .from('posts')
               .select(
-                'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image'
+                'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image, status, published_at'
               )
               .eq(
                 'id',
@@ -385,6 +402,19 @@ export default function AdminEditPage() {
         setOgImage(
           postData.og_image ||
             ''
+        );
+
+        // 공개 상태
+        setPostStatus(
+          postData.status ===
+            'draft'
+            ? 'draft'
+            : 'published'
+        );
+
+        setPublishedAt(
+          postData.published_at ||
+            null
         );
 
         // 기존 HTML 본문 불러오기
@@ -654,16 +684,23 @@ export default function AdminEditPage() {
     };
 
   // =========================================================
-  // 글 수정 저장
+  // 초안 저장 / 공개 발행 / 공개글 수정
   // =========================================================
 
-  const handleUpdate =
-    async () => {
+  const handleSave =
+    async (
+      targetStatus:
+        'draft' |
+        'published'
+    ) => {
+      // 공개 발행은 제목 필수
       if (
+        targetStatus ===
+          'published' &&
         !title.trim()
       ) {
         alert(
-          '제목을 입력해주세요.'
+          '공개 발행하려면 제목을 입력해주세요.'
         );
 
         return;
@@ -689,6 +726,18 @@ export default function AdminEditPage() {
         const htmlContent =
           editor.getHTML();
 
+        // 초안은 제목이 없어도 저장 가능
+        const savedTitle =
+          title.trim() ||
+          '제목 없는 초안';
+
+        const nextPublishedAt =
+          targetStatus ===
+          'published'
+            ? publishedAt ||
+              new Date().toISOString()
+            : null;
+
         const {
           error,
         } =
@@ -697,7 +746,7 @@ export default function AdminEditPage() {
             .update({
               // 기본 글
               title:
-                title.trim(),
+                savedTitle,
 
               content:
                 htmlContent,
@@ -715,7 +764,7 @@ export default function AdminEditPage() {
               // SEO
               seo_title:
                 seoTitle.trim() ||
-                title.trim(),
+                savedTitle,
 
               meta_description:
                 metaDescription.trim() ||
@@ -725,6 +774,17 @@ export default function AdminEditPage() {
               og_image:
                 ogImage.trim() ||
                 null,
+
+              // 공개 상태
+              status:
+                targetStatus,
+
+              published_at:
+                nextPublishedAt,
+
+              // 마지막 수정 시간
+              updated_at:
+                new Date().toISOString(),
             })
             .eq(
               'id',
@@ -735,8 +795,39 @@ export default function AdminEditPage() {
           throw error;
         }
 
+        setPostStatus(
+          targetStatus
+        );
+
+        setPublishedAt(
+          nextPublishedAt
+        );
+
+        if (
+          !title.trim()
+        ) {
+          setTitle(
+            savedTitle
+          );
+        }
+
+        // 초안은 현재 화면에서 계속 작성
+        if (
+          targetStatus ===
+          'draft'
+        ) {
+          alert(
+            '초안으로 저장되었습니다! 💾'
+          );
+
+          return;
+        }
+
         alert(
-          '글이 성공적으로 수정되었습니다! ✅'
+          postStatus ===
+            'draft'
+            ? '글이 공개 발행되었습니다! 🌐'
+            : '글이 성공적으로 수정되었습니다! ✅'
         );
 
         router.push(
@@ -749,7 +840,7 @@ export default function AdminEditPage() {
         error: any
       ) {
         alert(
-          '글 수정 실패: ' +
+          '글 저장 실패: ' +
             error.message
         );
       } finally {
@@ -791,12 +882,34 @@ export default function AdminEditPage() {
           </p>
 
           <h1 className="text-2xl font-black text-white">
-            ✏️ 블로그 글 수정
+            {postStatus ===
+            'draft'
+              ? '✍️ 초안 이어쓰기'
+              : '✏️ 블로그 글 수정'}
           </h1>
 
           <p className="text-sm text-slate-400 mt-1">
-            글 내용 · 디자인 · 이미지 · SEO 설정을 수정합니다.
+            {postStatus ===
+            'draft'
+              ? '저장해둔 초안을 이어서 작성하고 준비가 되면 공개 발행하세요.'
+              : '글 내용 · 디자인 · 이미지 · SEO 설정을 수정합니다.'}
           </p>
+
+          <div className="mt-3">
+            <span
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
+                postStatus ===
+                'draft'
+                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                  : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+              }`}
+            >
+              {postStatus ===
+              'draft'
+                ? '📝 현재 상태: 초안'
+                : '🌐 현재 상태: 공개'}
+            </span>
+          </div>
 
         </div>
 
@@ -814,23 +927,70 @@ export default function AdminEditPage() {
             ← 취소
           </button>
 
-          <button
-            type="button"
-            onClick={
-              handleUpdate
-            }
-            disabled={
-              saving ||
-              categoriesLoading ||
-              uploading ||
-              ogUploading
-            }
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
-          >
-            {saving
-              ? '저장 중...'
-              : '✅ 수정 저장'}
-          </button>
+          {postStatus ===
+          'draft' ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSave(
+                    'draft'
+                  )
+                }
+                disabled={
+                  saving ||
+                  categoriesLoading ||
+                  uploading ||
+                  ogUploading
+                }
+                className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-bold rounded-xl"
+              >
+                {saving
+                  ? '저장 중...'
+                  : '💾 초안 저장'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleSave(
+                    'published'
+                  )
+                }
+                disabled={
+                  saving ||
+                  categoriesLoading ||
+                  uploading ||
+                  ogUploading
+                }
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
+              >
+                {saving
+                  ? '처리 중...'
+                  : '🌐 공개 발행'}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                handleSave(
+                  'published'
+                )
+              }
+              disabled={
+                saving ||
+                categoriesLoading ||
+                uploading ||
+                ogUploading
+              }
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
+            >
+              {saving
+                ? '저장 중...'
+                : '✅ 수정 저장'}
+            </button>
+          )}
 
         </div>
 

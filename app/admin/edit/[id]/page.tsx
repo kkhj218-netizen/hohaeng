@@ -7,9 +7,20 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { supabase } from '@/app/lib/supabase';
 
+type Category = {
+  id: number;
+  slug: string;
+  name: string;
+  emoji: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
 export default function AdminEditPage() {
   const router = useRouter();
+
   const params = useParams<{ id: string }>();
+
   const postId = params.id;
 
   // 기본 글 정보
@@ -17,6 +28,10 @@ export default function AdminEditPage() {
   const [category, setCategory] = useState('log');
   const [subcategory, setSubcategory] = useState('');
   const [description, setDescription] = useState('');
+
+  // DB 카테고리
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
   // SEO 정보
   const [seoTitle, setSeoTitle] = useState('');
@@ -51,7 +66,7 @@ export default function AdminEditPage() {
     },
   });
 
-  // 기존 글 불러오기
+  // 기존 글 + 카테고리 불러오기
   useEffect(() => {
     if (!editor || !postId) return;
 
@@ -66,39 +81,137 @@ export default function AdminEditPage() {
         return;
       }
 
-      // 기존 글 + SEO 정보 불러오기
-      const { data, error } = await supabase
-        .from('posts')
-        .select(
-          'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image'
-        )
-        .eq('id', postId)
-        .single();
+      // 글과 카테고리를 동시에 불러오기
+      const [
+        postResult,
+        categoryResult,
+      ] = await Promise.all([
+        supabase
+          .from('posts')
+          .select(
+            'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image'
+          )
+          .eq('id', postId)
+          .single(),
 
-      if (error || !data) {
+        supabase
+          .from('categories')
+          .select(
+            'id, slug, name, emoji, sort_order, is_active'
+          )
+          .order('sort_order', {
+            ascending: true,
+          }),
+      ]);
+
+      const {
+        data: postData,
+        error: postError,
+      } = postResult;
+
+      const {
+        data: categoryData,
+        error: categoryError,
+      } = categoryResult;
+
+      // 글 불러오기 실패
+      if (postError || !postData) {
         alert(
           '글을 불러오지 못했습니다: ' +
-            (error?.message || '글이 없습니다.')
+            (postError?.message ||
+              '글이 없습니다.')
         );
 
         router.replace('/admin/manage');
+
         return;
       }
 
+      // 카테고리 불러오기 실패
+      if (categoryError) {
+        console.error(
+          '카테고리 불러오기 오류:',
+          categoryError
+        );
+
+        alert(
+          '카테고리 목록을 불러오지 못했습니다.'
+        );
+
+        setCategoriesLoading(false);
+        setLoading(false);
+
+        return;
+      }
+
+      const loadedCategories =
+        (categoryData || []) as Category[];
+
+      const currentCategory =
+        postData.category || 'log';
+
+      // 예전에 사용했던 카테고리가
+      // categories 테이블에서 삭제된 경우에도 표시
+      const categoryExists =
+        loadedCategories.some(
+          (item) =>
+            item.slug === currentCategory
+        );
+
+      if (
+        currentCategory &&
+        !categoryExists
+      ) {
+        loadedCategories.push({
+          id: -1,
+          slug: currentCategory,
+          name: `기존 카테고리 (${currentCategory})`,
+          emoji: '⚠️',
+          sort_order: 9999,
+          is_active: false,
+        });
+      }
+
+      setCategories(
+        loadedCategories
+      );
+
+      setCategoriesLoading(false);
+
       // 기본 정보
-      setTitle(data.title || '');
-      setCategory(data.category || 'log');
-      setSubcategory(data.subcategory || '');
-      setDescription(data.description || '');
+      setTitle(
+        postData.title || ''
+      );
+
+      setCategory(
+        currentCategory
+      );
+
+      setSubcategory(
+        postData.subcategory || ''
+      );
+
+      setDescription(
+        postData.description || ''
+      );
 
       // SEO 정보
-      setSeoTitle(data.seo_title || '');
-      setMetaDescription(data.meta_description || '');
-      setOgImage(data.og_image || '');
+      setSeoTitle(
+        postData.seo_title || ''
+      );
+
+      setMetaDescription(
+        postData.meta_description ||
+          ''
+      );
+
+      setOgImage(
+        postData.og_image || ''
+      );
 
       // 본문
       editor.commands.setContent(
-        data.content || '<p></p>'
+        postData.content || '<p></p>'
       );
 
       setLoading(false);
@@ -111,32 +224,46 @@ export default function AdminEditPage() {
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
+    const file =
+      e.target.files?.[0];
 
-    if (!file || !editor) return;
+    if (!file || !editor) {
+      return;
+    }
 
     try {
       setUploading(true);
 
       const fileExt =
-        file.name.split('.').pop() || 'jpg';
+        file.name
+          .split('.')
+          .pop() || 'jpg';
 
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileName =
+        `${Date.now()}.${fileExt}`;
 
-      const filePath = `posts/${fileName}`;
+      const filePath =
+        `posts/${fileName}`;
 
-      const { error: uploadError } =
-        await supabase.storage
-          .from('hohaeng')
-          .upload(filePath, file);
+      const {
+        error: uploadError,
+      } = await supabase.storage
+        .from('hohaeng')
+        .upload(
+          filePath,
+          file
+        );
 
       if (uploadError) {
         throw uploadError;
       }
 
-      const { data } = supabase.storage
-        .from('hohaeng')
-        .getPublicUrl(filePath);
+      const { data } =
+        supabase.storage
+          .from('hohaeng')
+          .getPublicUrl(
+            filePath
+          );
 
       if (data.publicUrl) {
         editor
@@ -163,47 +290,70 @@ export default function AdminEditPage() {
   // 글 수정 저장
   const handleUpdate = async () => {
     if (!title.trim()) {
-      alert('제목을 입력해주세요.');
+      alert(
+        '제목을 입력해주세요.'
+      );
+
       return;
     }
 
-    if (!editor) return;
+    if (!category) {
+      alert(
+        '카테고리를 선택해주세요.'
+      );
+
+      return;
+    }
+
+    if (!editor) {
+      return;
+    }
 
     try {
       setSaving(true);
 
-      const htmlContent = editor.getHTML();
+      const htmlContent =
+        editor.getHTML();
 
-      const { error } = await supabase
-        .from('posts')
-        .update({
-          // 기본 글
-          title: title.trim(),
+      const { error } =
+        await supabase
+          .from('posts')
+          .update({
+            // 기본 글
+            title:
+              title.trim(),
 
-          content: htmlContent,
+            content:
+              htmlContent,
 
-          category: category || 'log',
+            category,
 
-          subcategory:
-            subcategory.trim() || null,
+            subcategory:
+              subcategory.trim() ||
+              null,
 
-          description:
-            description.trim() || null,
+            description:
+              description.trim() ||
+              null,
 
-          // SEO
-          seo_title:
-            seoTitle.trim() ||
-            title.trim(),
+            // SEO
+            seo_title:
+              seoTitle.trim() ||
+              title.trim(),
 
-          meta_description:
-            metaDescription.trim() ||
-            description.trim() ||
-            null,
+            meta_description:
+              metaDescription.trim() ||
+              description.trim() ||
+              null,
 
-          og_image:
-            ogImage.trim() || null,
-        })
-        .eq('id', postId);
+            og_image:
+              ogImage.trim() ||
+              null,
+          })
+          .eq(
+            'id',
+            postId
+          );
 
       if (error) {
         throw error;
@@ -213,7 +363,10 @@ export default function AdminEditPage() {
         '글이 성공적으로 수정되었습니다! ✅'
       );
 
-      router.push('/admin/manage');
+      router.push(
+        '/admin/manage'
+      );
+
       router.refresh();
     } catch (error: any) {
       alert(
@@ -252,7 +405,7 @@ export default function AdminEditPage() {
           </h1>
 
           <p className="text-sm text-slate-400 mt-1">
-            글 내용 · SEO 설정 수정
+            글 내용 · 카테고리 · SEO 설정 수정
           </p>
         </div>
 
@@ -261,7 +414,9 @@ export default function AdminEditPage() {
           <button
             type="button"
             onClick={() =>
-              router.push('/admin/manage')
+              router.push(
+                '/admin/manage'
+              )
             }
             className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl"
           >
@@ -270,8 +425,13 @@ export default function AdminEditPage() {
 
           <button
             type="button"
-            onClick={handleUpdate}
-            disabled={saving}
+            onClick={
+              handleUpdate
+            }
+            disabled={
+              saving ||
+              categoriesLoading
+            }
             className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
           >
             {saving
@@ -280,6 +440,7 @@ export default function AdminEditPage() {
           </button>
 
         </div>
+
       </div>
 
       {/* 기본 정보 */}
@@ -287,6 +448,7 @@ export default function AdminEditPage() {
 
         {/* 글 제목 */}
         <div>
+
           <label className="block text-xs font-bold text-slate-400 mb-1">
             글 제목
           </label>
@@ -295,54 +457,107 @@ export default function AdminEditPage() {
             type="text"
             value={title}
             onChange={(e) =>
-              setTitle(e.target.value)
+              setTitle(
+                e.target.value
+              )
             }
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 font-bold text-lg"
           />
+
         </div>
 
         {/* 카테고리 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           <div>
-            <label className="block text-xs font-bold text-slate-400 mb-1">
-              카테고리
-            </label>
+
+            <div className="flex items-center justify-between mb-1">
+
+              <label className="text-xs font-bold text-slate-400">
+                카테고리
+              </label>
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    '/admin/categories'
+                  )
+                }
+                className="text-xs font-bold text-blue-400 hover:text-blue-300"
+              >
+                ⚙️ 카테고리 관리
+              </button>
+
+            </div>
 
             <select
               value={category}
               onChange={(e) =>
-                setCategory(e.target.value)
+                setCategory(
+                  e.target.value
+                )
               }
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
+              disabled={
+                categoriesLoading
+              }
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
             >
-              <option value="log">
-                📝 호행의 일지
-              </option>
 
-              <option value="guide">
-                💡 각종 정보
-              </option>
+              {categoriesLoading ? (
+                <option>
+                  카테고리 불러오는 중...
+                </option>
+              ) : categories.length ===
+                0 ? (
+                <option value="">
+                  카테고리가 없습니다
+                </option>
+              ) : (
+                categories.map(
+                  (item) => (
+                    <option
+                      key={item.id}
+                      value={
+                        item.slug
+                      }
+                      disabled={
+                        !item.is_active &&
+                        item.slug !==
+                          category
+                      }
+                    >
+                      {item.emoji ||
+                        '📁'}{' '}
+                      {item.name}
+                      {!item.is_active
+                        ? ' (비활성)'
+                        : ''}
+                    </option>
+                  )
+                )
+              )}
 
-              <option value="mindset">
-                🧠 마인드셋
-              </option>
-
-              <option value="analysis">
-                📊 종목 및 시황분석
-              </option>
             </select>
+
+            <p className="text-xs text-slate-500 mt-1">
+              카테고리는 관리자 설정과 자동으로 연결됩니다.
+            </p>
+
           </div>
 
           {/* 세부 주제 */}
           <div>
+
             <label className="block text-xs font-bold text-slate-400 mb-1">
               세부 주제
             </label>
 
             <input
               type="text"
-              value={subcategory}
+              value={
+                subcategory
+              }
               onChange={(e) =>
                 setSubcategory(
                   e.target.value
@@ -351,19 +566,23 @@ export default function AdminEditPage() {
               placeholder="예: invest, routine, dividend"
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
             />
+
           </div>
 
         </div>
 
         {/* 한 줄 요약 */}
         <div>
+
           <label className="block text-xs font-bold text-slate-400 mb-1">
             한 줄 요약
           </label>
 
           <input
             type="text"
-            value={description}
+            value={
+              description
+            }
             onChange={(e) =>
               setDescription(
                 e.target.value
@@ -372,6 +591,7 @@ export default function AdminEditPage() {
             placeholder="목록 카드에 표시될 짧은 설명"
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
           />
+
         </div>
 
       </div>
@@ -380,6 +600,7 @@ export default function AdminEditPage() {
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
 
         <div className="mb-5">
+
           <h2 className="text-lg font-black text-white">
             🔍 SEO 설정
           </h2>
@@ -387,12 +608,14 @@ export default function AdminEditPage() {
           <p className="text-xs text-slate-400 mt-1">
             검색엔진과 SNS 공유에 사용할 정보를 수정합니다.
           </p>
+
         </div>
 
         <div className="space-y-5">
 
           {/* SEO 제목 */}
           <div>
+
             <div className="flex justify-between items-center mb-1">
 
               <label className="text-xs font-bold text-slate-400">
@@ -407,7 +630,9 @@ export default function AdminEditPage() {
 
             <input
               type="text"
-              value={seoTitle}
+              value={
+                seoTitle
+              }
               onChange={(e) =>
                 setSeoTitle(
                   e.target.value
@@ -424,10 +649,12 @@ export default function AdminEditPage() {
             <p className="text-xs text-slate-500 mt-1">
               비워두면 글 제목이 자동으로 사용됩니다.
             </p>
+
           </div>
 
           {/* 메타 설명 */}
           <div>
+
             <div className="flex justify-between items-center mb-1">
 
               <label className="text-xs font-bold text-slate-400">
@@ -441,7 +668,9 @@ export default function AdminEditPage() {
             </div>
 
             <textarea
-              value={metaDescription}
+              value={
+                metaDescription
+              }
               onChange={(e) =>
                 setMetaDescription(
                   e.target.value
@@ -459,17 +688,21 @@ export default function AdminEditPage() {
             <p className="text-xs text-slate-500 mt-1">
               비워두면 한 줄 요약이 자동으로 사용됩니다.
             </p>
+
           </div>
 
           {/* 대표 이미지 */}
           <div>
+
             <label className="block text-xs font-bold text-slate-400 mb-1">
               대표 이미지 URL
             </label>
 
             <input
               type="url"
-              value={ogImage}
+              value={
+                ogImage
+              }
               onChange={(e) =>
                 setOgImage(
                   e.target.value
@@ -483,7 +716,6 @@ export default function AdminEditPage() {
               카카오톡 · SNS · 메신저 공유 시 사용할 대표 이미지입니다.
             </p>
 
-            {/* 대표 이미지 미리보기 */}
             {ogImage && (
               <div className="mt-3">
 
@@ -492,23 +724,29 @@ export default function AdminEditPage() {
                 </p>
 
                 <img
-                  src={ogImage}
+                  src={
+                    ogImage
+                  }
                   alt="대표 이미지 미리보기"
                   className="max-w-sm w-full rounded-xl border border-slate-800"
                 />
 
               </div>
             )}
+
           </div>
 
         </div>
+
       </div>
 
-      {/* 본문 제목 */}
+      {/* 본문 */}
       <div className="mb-2">
+
         <h2 className="font-black text-white">
           📝 본문
         </h2>
+
       </div>
 
       {/* 에디터 툴바 */}
@@ -525,7 +763,9 @@ export default function AdminEditPage() {
               .run()
           }
           className={`px-3 py-1 rounded text-xs font-bold ${
-            editor?.isActive('bold')
+            editor?.isActive(
+              'bold'
+            )
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-300'
           }`}
@@ -544,7 +784,9 @@ export default function AdminEditPage() {
               .run()
           }
           className={`px-3 py-1 rounded text-xs font-bold ${
-            editor?.isActive('italic')
+            editor?.isActive(
+              'italic'
+            )
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-300'
           }`}
@@ -567,7 +809,9 @@ export default function AdminEditPage() {
           className={`px-3 py-1 rounded text-xs font-bold ${
             editor?.isActive(
               'heading',
-              { level: 2 }
+              {
+                level: 2,
+              }
             )
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-300'
@@ -591,7 +835,9 @@ export default function AdminEditPage() {
           className={`px-3 py-1 rounded text-xs font-bold ${
             editor?.isActive(
               'heading',
-              { level: 3 }
+              {
+                level: 3,
+              }
             )
               ? 'bg-blue-600 text-white'
               : 'bg-slate-700 text-slate-300'
@@ -611,7 +857,9 @@ export default function AdminEditPage() {
             onChange={
               handleImageUpload
             }
-            disabled={uploading}
+            disabled={
+              uploading
+            }
             className="hidden"
           />
 
@@ -625,8 +873,9 @@ export default function AdminEditPage() {
 
       </div>
 
-      {/* 본문 */}
-      <EditorContent editor={editor} />
+      <EditorContent
+        editor={editor}
+      />
 
     </main>
   );

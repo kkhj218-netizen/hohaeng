@@ -10,14 +10,14 @@ import { supabase } from '@/app/lib/supabase';
 export default function AdminWritePage() {
   const router = useRouter();
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('mindset');
+  const [category, setCategory] = useState('log');
   const [subcategory, setSubcategory] = useState('');
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
 
   // Tiptap WYSIWYG 에디터 설정
   const editor = useEditor({
-    immediatelyRender: false, // 터미널 경고 메시지 방지
+    immediatelyRender: false, // SSR 렌더링 에러 방지
     extensions: [
       StarterKit,
       Image.configure({
@@ -45,7 +45,6 @@ export default function AdminWritePage() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `posts/${fileName}`;
 
-      // 실제 생성한 Supabase Storage 'hohaeng' 버킷으로 지정
       const { error: uploadError } = await supabase.storage
         .from('hohaeng')
         .upload(filePath, file);
@@ -54,7 +53,6 @@ export default function AdminWritePage() {
         throw uploadError;
       }
 
-      // 공용 URL 가져오기
       const { data } = supabase.storage.from('hohaeng').getPublicUrl(filePath);
 
       if (data.publicUrl) {
@@ -67,7 +65,7 @@ export default function AdminWritePage() {
     }
   };
 
-  // 발행하기 핸들러
+  // 🚀 수정 완료된 발행하기 핸들러
   const handleSubmit = async () => {
     if (!title.trim()) {
       alert('제목을 입력해주세요.');
@@ -77,17 +75,17 @@ export default function AdminWritePage() {
     if (!editor) return;
     const htmlContent = editor.getHTML();
 
-    // 슬러그 생성 (영어/숫자 유니크 슬러그)
-    const slug = `${category}-${Date.now()}`;
+    // slug 유니크 고유 키 안전 자동 생성
+    const generatedSlug = `post-${category}-${Date.now()}`;
 
     const { error } = await supabase.from('posts').insert([
       {
-        title,
-        slug,
+        title: title.trim(),
+        slug: generatedSlug,
         content: htmlContent,
-        category,
-        subcategory,
-        description,
+        category: category || 'log',
+        subcategory: subcategory.trim() || null,
+        description: description.trim() || null,
       },
     ]);
 
@@ -95,11 +93,14 @@ export default function AdminWritePage() {
       alert('글 저장 실패: ' + error.message);
     } else {
       alert('성공적으로 글이 발행되었습니다! 🚀');
-      router.push('/admin/write');
+      
       // 폼 초기화
       setTitle('');
+      setSubcategory('');
       setDescription('');
       editor.commands.setContent('<p>여기에 블로그 글을 자유롭게 작성하세요...</p>');
+      
+      router.push('/blog');
     }
   };
 
@@ -138,9 +139,10 @@ export default function AdminWritePage() {
               onChange={(e) => setCategory(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
             >
-              <option value="mindset">🧠 마인드셋</option>
               <option value="log">📝 호행의 일지</option>
               <option value="guide">💡 각종 정보</option>
+              <option value="mindset">🧠 마인드셋</option>
+              <option value="analysis">📊 종목 및 시황분석</option>
             </select>
           </div>
           <div>

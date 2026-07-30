@@ -97,9 +97,26 @@ export default function AdminWritePage() {
   ] = useState(false);
 
   const [
+    draftSaving,
+    setDraftSaving,
+  ] = useState(false);
+
+  const [
     publishing,
     setPublishing,
   ] = useState(false);
+
+  // 한 번 초안으로 저장한 뒤에는
+  // 같은 글을 계속 UPDATE 하기 위한 ID / slug
+  const [
+    currentPostId,
+    setCurrentPostId,
+  ] = useState<string | null>(null);
+
+  const [
+    currentSlug,
+    setCurrentSlug,
+  ] = useState<string | null>(null);
 
   // =========================================================
   // 카테고리 불러오기
@@ -434,16 +451,23 @@ export default function AdminWritePage() {
     };
 
   // =========================================================
-  // 글 발행
+  // 초안 저장 / 공개 발행
   // =========================================================
 
-  const handleSubmit =
-    async () => {
+  const handleSave =
+    async (
+      targetStatus:
+        'draft' |
+        'published'
+    ) => {
+      // 공개 발행은 제목 필수
       if (
+        targetStatus ===
+          'published' &&
         !title.trim()
       ) {
         alert(
-          '제목을 입력해주세요.'
+          '공개 발행하려면 제목을 입력해주세요.'
         );
 
         return;
@@ -462,65 +486,186 @@ export default function AdminWritePage() {
       }
 
       try {
-        setPublishing(
-          true
-        );
+        if (
+          targetStatus ===
+          'draft'
+        ) {
+          setDraftSaving(
+            true
+          );
+        } else {
+          setPublishing(
+            true
+          );
+        }
 
         const htmlContent =
           editor.getHTML();
 
-        const generatedSlug =
-          `post-${category}-${Date.now()}`;
+        const now =
+          new Date().toISOString();
 
-        const {
-          error,
-        } =
-          await supabase
-            .from('posts')
-            .insert([
-              {
-                title:
-                  title.trim(),
+        // 초안은 제목이 없어도 저장 가능
+        const savedTitle =
+          title.trim() ||
+          '제목 없는 초안';
 
-                slug:
-                  generatedSlug,
+        const postPayload = {
+          title:
+            savedTitle,
 
-                content:
-                  htmlContent,
+          content:
+            htmlContent,
 
-                category,
+          category,
 
-                subcategory:
-                  subcategory.trim() ||
-                  null,
+          subcategory:
+            subcategory.trim() ||
+            null,
 
-                description:
-                  description.trim() ||
-                  null,
+          description:
+            description.trim() ||
+            null,
 
-                seo_title:
-                  seoTitle.trim() ||
-                  title.trim(),
+          seo_title:
+            seoTitle.trim() ||
+            savedTitle,
 
-                meta_description:
-                  metaDescription.trim() ||
-                  description.trim() ||
-                  null,
+          meta_description:
+            metaDescription.trim() ||
+            description.trim() ||
+            null,
 
-                og_image:
-                  ogImage.trim() ||
-                  null,
-              },
-            ]);
+          og_image:
+            ogImage.trim() ||
+            null,
 
-        if (error) {
-          throw error;
+          status:
+            targetStatus,
+
+          published_at:
+            targetStatus ===
+            'published'
+              ? now
+              : null,
+
+          updated_at:
+            now,
+        };
+
+        let savedPostId =
+          currentPostId;
+
+        let savedSlug =
+          currentSlug;
+
+        // 이미 한 번 초안 저장한 글이면 새 글을 만들지 않고 UPDATE
+        if (currentPostId) {
+          const {
+            data:
+              updatedPost,
+            error:
+              updateError,
+          } =
+            await supabase
+              .from('posts')
+              .update(
+                postPayload
+              )
+              .eq(
+                'id',
+                currentPostId
+              )
+              .select(
+                'id, slug'
+              )
+              .single();
+
+          if (
+            updateError
+          ) {
+            throw updateError;
+          }
+
+          savedPostId =
+            updatedPost.id;
+
+          savedSlug =
+            updatedPost.slug;
+        } else {
+          // 최초 저장이면 INSERT
+          const generatedSlug =
+            `post-${category}-${Date.now()}`;
+
+          const {
+            data:
+              insertedPost,
+            error:
+              insertError,
+          } =
+            await supabase
+              .from('posts')
+              .insert([
+                {
+                  ...postPayload,
+
+                  slug:
+                    generatedSlug,
+                },
+              ])
+              .select(
+                'id, slug'
+              )
+              .single();
+
+          if (
+            insertError
+          ) {
+            throw insertError;
+          }
+
+          savedPostId =
+            insertedPost.id;
+
+          savedSlug =
+            insertedPost.slug;
+
+          setCurrentPostId(
+            insertedPost.id
+          );
+
+          setCurrentSlug(
+            insertedPost.slug
+          );
         }
 
+        // =====================================================
+        // 초안 저장
+        // =====================================================
+
+        if (
+          targetStatus ===
+          'draft'
+        ) {
+          alert(
+            '초안으로 저장되었습니다! 💾\n계속 작성한 뒤 다시 초안 저장하거나 공개 발행할 수 있습니다.'
+          );
+
+          return;
+        }
+
+        // =====================================================
+        // 공개 발행
+        // =====================================================
+
         alert(
-          '성공적으로 글이 발행되었습니다! 🚀'
+          '성공적으로 글이 공개 발행되었습니다! 🚀'
         );
 
+        const publishedSlug =
+          savedSlug;
+
+        // 작성 화면 초기화
         setTitle('');
 
         if (
@@ -557,24 +702,51 @@ export default function AdminWritePage() {
           ''
         );
 
+        setCurrentPostId(
+          null
+        );
+
+        setCurrentSlug(
+          null
+        );
+
         editor.commands.setContent(
           '<p>여기에 블로그 글을 자유롭게 작성하세요...</p>'
         );
 
-        router.push(
-          '/blog'
-        );
+        if (
+          publishedSlug
+        ) {
+          router.push(
+            `/blog/${publishedSlug}`
+          );
+        } else {
+          router.push(
+            '/blog'
+          );
+        }
 
         router.refresh();
+
+        // 타입상 사용되는 값임을 명확히 함
+        void savedPostId;
 
       } catch (
         error: any
       ) {
         alert(
-          '글 저장 실패: ' +
-            error.message
+          targetStatus ===
+          'draft'
+            ? '초안 저장 실패: ' +
+                error.message
+            : '글 발행 실패: ' +
+                error.message
         );
       } finally {
+        setDraftSaving(
+          false
+        );
+
         setPublishing(
           false
         );
@@ -603,25 +775,61 @@ export default function AdminWritePage() {
 
         </div>
 
-        <button
-          type="button"
-          onClick={
-            handleSubmit
-          }
-          disabled={
-            publishing ||
-            categoriesLoading ||
-            uploading ||
-            ogUploading
-          }
-          className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
-        >
-          {publishing
-            ? '발행 중...'
-            : '🚀 즉시 발행하기'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSave(
+                'draft'
+              )
+            }
+            disabled={
+              draftSaving ||
+              publishing ||
+              categoriesLoading ||
+              uploading ||
+              ogUploading
+            }
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-bold rounded-xl border border-slate-700"
+          >
+            {draftSaving
+              ? '저장 중...'
+              : currentPostId
+                ? '💾 초안 다시 저장'
+                : '💾 초안 저장'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSave(
+                'published'
+              )
+            }
+            disabled={
+              draftSaving ||
+              publishing ||
+              categoriesLoading ||
+              uploading ||
+              ogUploading
+            }
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
+          >
+            {publishing
+              ? '발행 중...'
+              : '🚀 공개 발행'}
+          </button>
+
+        </div>
 
       </div>
+
+      {currentPostId && (
+        <div className="mb-6 px-4 py-3 rounded-xl border border-emerald-800 bg-emerald-950/40 text-sm text-emerald-300 font-bold">
+          ✓ 이 글은 현재 초안으로 저장되어 있습니다. 계속 작성한 뒤 다시 초안 저장하거나 공개 발행하세요.
+        </div>
+      )}
 
       {/* =====================================================
           기본 정보

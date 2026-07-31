@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
 } from 'react';
@@ -42,6 +44,53 @@ type Category = {
   is_active: boolean;
 };
 
+type AutoSaveStatus =
+  | 'idle'
+  | 'waiting'
+  | 'saving'
+  | 'saved'
+  | 'error';
+
+type EditData = {
+  title: string;
+  content: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  seoTitle: string;
+  metaDescription: string;
+  ogImage: string;
+};
+
+type PublishedEditBackup =
+  EditData & {
+    postId: string;
+    savedAt: string;
+  };
+
+const createEditSnapshot =
+  (data: EditData) =>
+    JSON.stringify(data);
+
+const createMetadataSnapshot =
+  (data: Omit<EditData, 'content'>) =>
+    JSON.stringify(data);
+
+const formatSaveTime =
+  (date: Date | null) => {
+    if (!date) {
+      return '';
+    }
+
+    return date.toLocaleTimeString(
+      'ko-KR',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    );
+  };
+
 export default function AdminEditPage() {
   const router = useRouter();
 
@@ -52,6 +101,11 @@ export default function AdminEditPage() {
 
   const postId =
     params.id;
+
+  const localDraftKey =
+    postId
+      ? `hohaeng:published-edit:${postId}`
+      : '';
 
   // =========================================================
   // 기본 글 정보
@@ -152,6 +206,103 @@ export default function AdminEditPage() {
     setOgUploading,
   ] = useState(false);
 
+
+  // =========================================================
+  // 자동저장 상태
+  // =========================================================
+
+  const [
+    autoSaveStatus,
+    setAutoSaveStatus,
+  ] = useState<AutoSaveStatus>('idle');
+
+  const [
+    lastAutoSavedAt,
+    setLastAutoSavedAt,
+  ] = useState<Date | null>(null);
+
+  const [
+    changeVersion,
+    setChangeVersion,
+  ] = useState(0);
+
+  const [
+    hasLocalBackup,
+    setHasLocalBackup,
+  ] = useState(false);
+
+  const [
+    restoredLocalBackup,
+    setRestoredLocalBackup,
+  ] = useState(false);
+
+  const initializedRef =
+    useRef(false);
+
+  const initializedPostIdRef =
+    useRef<string | null>(null);
+
+  const saveInFlightRef =
+    useRef(false);
+
+  const autoSaveTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const latestChangeVersionRef =
+    useRef(0);
+
+  const lastSavedVersionRef =
+    useRef(0);
+
+  const serverSnapshotRef =
+    useRef<string | null>(null);
+
+  const lastSavedSnapshotRef =
+    useRef<string | null>(null);
+
+  const lastObservedMetadataRef =
+    useRef<string | null>(null);
+
+  const clearAutoSaveTimer =
+    useCallback(() => {
+      if (
+        autoSaveTimerRef.current
+      ) {
+        clearTimeout(
+          autoSaveTimerRef.current
+        );
+
+        autoSaveTimerRef.current =
+          null;
+      }
+    }, []);
+
+  const markChanged =
+    useCallback(() => {
+      if (!initializedRef.current) {
+        return;
+      }
+
+      setChangeVersion(
+        (previous) => {
+          const next =
+            previous + 1;
+
+          latestChangeVersionRef.current =
+            next;
+
+          return next;
+        }
+      );
+
+      setAutoSaveStatus(
+        (previous) =>
+          previous === 'saving'
+            ? previous
+            : 'waiting'
+      );
+    }, []);
+
   // =========================================================
   // 강화된 Tiptap 에디터
   // =========================================================
@@ -193,6 +344,10 @@ export default function AdminEditPage() {
           'prose prose-slate max-w-none focus:outline-none min-h-[520px] px-6 py-8 bg-white text-slate-900 rounded-b-2xl border border-t-0 border-slate-800 leading-relaxed',
       },
     },
+
+    onUpdate: () => {
+      markChanged();
+    },
   });
 
   // =========================================================
@@ -206,6 +361,16 @@ export default function AdminEditPage() {
     ) {
       return;
     }
+
+    if (
+      initializedPostIdRef.current ===
+      postId
+    ) {
+      return;
+    }
+
+    initializedPostIdRef.current =
+      postId;
 
     const initialize =
       async () => {
@@ -368,48 +533,210 @@ export default function AdminEditPage() {
           false
         );
 
+        const loadedStatus =
+          postData.status ===
+            'draft'
+            ? 'draft'
+            : 'published';
+
+        const serverData: EditData = {
+          title:
+            postData.title ||
+            '',
+          content:
+            postData.content ||
+            '<p></p>',
+          category:
+            currentCategory,
+          subcategory:
+            postData.subcategory ||
+            '',
+          description:
+            postData.description ||
+            '',
+          seoTitle:
+            postData.seo_title ||
+            '',
+          metaDescription:
+            postData.meta_description ||
+            '',
+          ogImage:
+            postData.og_image ||
+            '',
+        };
+
+        const serverSnapshot =
+          createEditSnapshot(
+            serverData
+          );
+
+        serverSnapshotRef.current =
+          serverSnapshot;
+
+        lastSavedSnapshotRef.current =
+          serverSnapshot;
+
+        latestChangeVersionRef.current =
+          0;
+
+        lastSavedVersionRef.current =
+          0;
+
+        setChangeVersion(0);
+
+        setAutoSaveStatus('idle');
+
+        setLastAutoSavedAt(null);
+
+        setHasLocalBackup(false);
+
+        setRestoredLocalBackup(false);
+
+        let dataToShow =
+          serverData;
+
+        let restoredBackup:
+          PublishedEditBackup |
+          null = null;
+
+        // 이미 공개된 글은 DB에 자동저장하지 않고
+        // 이 브라우저의 localStorage에만 임시 수정본을 보관한다.
+        if (
+          loadedStatus ===
+            'published' &&
+          localDraftKey
+        ) {
+          try {
+            const rawBackup =
+              window.localStorage.getItem(
+                localDraftKey
+              );
+
+            if (rawBackup) {
+              const parsedBackup =
+                JSON.parse(
+                  rawBackup
+                ) as PublishedEditBackup;
+
+              if (
+                parsedBackup.postId ===
+                  postId &&
+                typeof parsedBackup.content ===
+                  'string'
+              ) {
+                const backupData: EditData = {
+                  title:
+                    typeof parsedBackup.title ===
+                    'string'
+                      ? parsedBackup.title
+                      : serverData.title,
+                  content:
+                    parsedBackup.content,
+                  category:
+                    typeof parsedBackup.category ===
+                    'string'
+                      ? parsedBackup.category
+                      : serverData.category,
+                  subcategory:
+                    typeof parsedBackup.subcategory ===
+                    'string'
+                      ? parsedBackup.subcategory
+                      : serverData.subcategory,
+                  description:
+                    typeof parsedBackup.description ===
+                    'string'
+                      ? parsedBackup.description
+                      : serverData.description,
+                  seoTitle:
+                    typeof parsedBackup.seoTitle ===
+                    'string'
+                      ? parsedBackup.seoTitle
+                      : serverData.seoTitle,
+                  metaDescription:
+                    typeof parsedBackup.metaDescription ===
+                    'string'
+                      ? parsedBackup.metaDescription
+                      : serverData.metaDescription,
+                  ogImage:
+                    typeof parsedBackup.ogImage ===
+                    'string'
+                      ? parsedBackup.ogImage
+                      : serverData.ogImage,
+                };
+
+                const backupSnapshot =
+                  createEditSnapshot(
+                    backupData
+                  );
+
+                if (
+                  backupSnapshot ===
+                  serverSnapshot
+                ) {
+                  window.localStorage.removeItem(
+                    localDraftKey
+                  );
+                } else {
+                  const shouldRestore =
+                    window.confirm(
+                      '이전에 자동 임시저장된 수정 내용이 있습니다. 복구할까요?\n\n확인: 이전 수정본 복구\n취소: 공개된 현재 글로 시작'
+                    );
+
+                  if (shouldRestore) {
+                    dataToShow =
+                      backupData;
+
+                    restoredBackup =
+                      parsedBackup;
+                  } else {
+                    window.localStorage.removeItem(
+                      localDraftKey
+                    );
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error(
+              '공개글 임시 수정본 확인 오류:',
+              error
+            );
+          }
+        }
+
         // 기본 정보
         setTitle(
-          postData.title ||
-            ''
+          dataToShow.title
         );
 
         setCategory(
-          currentCategory
+          dataToShow.category
         );
 
         setSubcategory(
-          postData.subcategory ||
-            ''
+          dataToShow.subcategory
         );
 
         setDescription(
-          postData.description ||
-            ''
+          dataToShow.description
         );
 
         // SEO
         setSeoTitle(
-          postData.seo_title ||
-            ''
+          dataToShow.seoTitle
         );
 
         setMetaDescription(
-          postData.meta_description ||
-            ''
+          dataToShow.metaDescription
         );
 
         setOgImage(
-          postData.og_image ||
-            ''
+          dataToShow.ogImage
         );
 
         // 공개 상태
         setPostStatus(
-          postData.status ===
-            'draft'
-            ? 'draft'
-            : 'published'
+          loadedStatus
         );
 
         setPublishedAt(
@@ -417,12 +744,73 @@ export default function AdminEditPage() {
             null
         );
 
-        // 기존 HTML 본문 불러오기
-        // 글자색/크기/정렬/형광펜 등도 그대로 로드됨
+        // 기존 HTML 본문 또는 복구한 임시 수정본 불러오기
         editor.commands.setContent(
-          postData.content ||
-            '<p></p>'
+          dataToShow.content,
+          { emitUpdate: false }
         );
+
+        lastObservedMetadataRef.current =
+          createMetadataSnapshot({
+            title:
+              dataToShow.title,
+            category:
+              dataToShow.category,
+            subcategory:
+              dataToShow.subcategory,
+            description:
+              dataToShow.description,
+            seoTitle:
+              dataToShow.seoTitle,
+            metaDescription:
+              dataToShow.metaDescription,
+            ogImage:
+              dataToShow.ogImage,
+          });
+
+        if (restoredBackup) {
+          const restoredSnapshot =
+            createEditSnapshot(
+              dataToShow
+            );
+
+          lastSavedSnapshotRef.current =
+            restoredSnapshot;
+
+          latestChangeVersionRef.current =
+            1;
+
+          lastSavedVersionRef.current =
+            1;
+
+          setChangeVersion(1);
+
+          setAutoSaveStatus(
+            'saved'
+          );
+
+          const restoredDate =
+            new Date(
+              restoredBackup.savedAt
+            );
+
+          setLastAutoSavedAt(
+            Number.isNaN(
+              restoredDate.getTime()
+            )
+              ? new Date()
+              : restoredDate
+          );
+
+          setHasLocalBackup(true);
+
+          setRestoredLocalBackup(
+            true
+          );
+        }
+
+        initializedRef.current =
+          true;
 
         setLoading(
           false
@@ -432,8 +820,63 @@ export default function AdminEditPage() {
     initialize();
   }, [
     editor,
+    localDraftKey,
     postId,
     router,
+  ]);
+
+  // =========================================================
+  // 제목 / 카테고리 / SEO 등 본문 외 변경 감지
+  // =========================================================
+
+  useEffect(() => {
+    if (
+      !initializedRef.current ||
+      loading
+    ) {
+      return;
+    }
+
+    const nextMetadataSnapshot =
+      createMetadataSnapshot({
+        title,
+        category,
+        subcategory,
+        description,
+        seoTitle,
+        metaDescription,
+        ogImage,
+      });
+
+    if (
+      lastObservedMetadataRef.current ===
+      null
+    ) {
+      lastObservedMetadataRef.current =
+        nextMetadataSnapshot;
+
+      return;
+    }
+
+    if (
+      lastObservedMetadataRef.current !==
+      nextMetadataSnapshot
+    ) {
+      lastObservedMetadataRef.current =
+        nextMetadataSnapshot;
+
+      markChanged();
+    }
+  }, [
+    category,
+    description,
+    loading,
+    markChanged,
+    metaDescription,
+    ogImage,
+    seoTitle,
+    subcategory,
+    title,
   ]);
 
   // =========================================================
@@ -684,171 +1127,733 @@ export default function AdminEditPage() {
     };
 
   // =========================================================
-  // 초안 저장 / 공개 발행 / 공개글 수정
+  // 현재 편집 내용 수집
   // =========================================================
 
-  const handleSave =
-    async (
-      targetStatus:
-        'draft' |
-        'published'
-    ) => {
-      // 공개 발행은 제목 필수
-      if (
-        targetStatus ===
-          'published' &&
-        !title.trim()
-      ) {
-        alert(
-          '공개 발행하려면 제목을 입력해주세요.'
-        );
-
-        return;
-      }
-
-      if (!category) {
-        alert(
-          '카테고리를 선택해주세요.'
-        );
-
-        return;
-      }
-
+  const getCurrentEditData =
+    useCallback(():
+      EditData |
+      null => {
       if (!editor) {
-        return;
+        return null;
       }
 
-      try {
-        setSaving(
-          true
-        );
+      return {
+        title,
+        content:
+          editor.getHTML(),
+        category,
+        subcategory,
+        description,
+        seoTitle,
+        metaDescription,
+        ogImage,
+      };
+    }, [
+      category,
+      description,
+      editor,
+      metaDescription,
+      ogImage,
+      seoTitle,
+      subcategory,
+      title,
+    ]);
 
-        const htmlContent =
-          editor.getHTML();
+  // =========================================================
+  // 초안 글: Supabase DB 자동저장
+  // =========================================================
 
-        // 초안은 제목이 없어도 저장 가능
-        const savedTitle =
-          title.trim() ||
-          '제목 없는 초안';
+  const autoSaveDraft =
+    useCallback(
+      async (
+        versionAtSave:
+          number
+      ) => {
+        if (
+          postStatus !==
+            'draft' ||
+          saveInFlightRef.current
+        ) {
+          return;
+        }
 
-        const nextPublishedAt =
-          targetStatus ===
-          'published'
-            ? publishedAt ||
-              new Date().toISOString()
-            : null;
+        const editData =
+          getCurrentEditData();
 
-        const {
-          error,
-        } =
-          await supabase
-            .from('posts')
-            .update({
-              // 기본 글
-              title:
-                savedTitle,
+        if (
+          !editData ||
+          !category ||
+          !postId
+        ) {
+          return;
+        }
 
-              content:
-                htmlContent,
+        const snapshot =
+          createEditSnapshot(
+            editData
+          );
 
-              category,
+        // 이미 DB에 저장된 내용과 같으면 요청하지 않는다.
+        if (
+          serverSnapshotRef.current ===
+          snapshot
+        ) {
+          lastSavedSnapshotRef.current =
+            snapshot;
 
-              subcategory:
-                subcategory.trim() ||
-                null,
-
-              description:
-                description.trim() ||
-                null,
-
-              // SEO
-              seo_title:
-                seoTitle.trim() ||
-                savedTitle,
-
-              meta_description:
-                metaDescription.trim() ||
-                description.trim() ||
-                null,
-
-              og_image:
-                ogImage.trim() ||
-                null,
-
-              // 공개 상태
-              status:
-                targetStatus,
-
-              published_at:
-                nextPublishedAt,
-
-              // 마지막 수정 시간
-              updated_at:
-                new Date().toISOString(),
-            })
-            .eq(
-              'id',
-              postId
+          lastSavedVersionRef.current =
+            Math.max(
+              lastSavedVersionRef.current,
+              versionAtSave
             );
 
-        if (error) {
-          throw error;
-        }
-
-        setPostStatus(
-          targetStatus
-        );
-
-        setPublishedAt(
-          nextPublishedAt
-        );
-
-        if (
-          !title.trim()
-        ) {
-          setTitle(
-            savedTitle
-          );
-        }
-
-        // 초안은 현재 화면에서 계속 작성
-        if (
-          targetStatus ===
-          'draft'
-        ) {
-          alert(
-            '초안으로 저장되었습니다! 💾'
+          setAutoSaveStatus(
+            'saved'
           );
 
           return;
         }
 
-        alert(
+        saveInFlightRef.current =
+          true;
+
+        setAutoSaveStatus(
+          'saving'
+        );
+
+        try {
+          const savedTitle =
+            title.trim() ||
+            '제목 없는 초안';
+
+          const now =
+            new Date().toISOString();
+
+          const { error } =
+            await supabase
+              .from('posts')
+              .update({
+                title:
+                  savedTitle,
+                content:
+                  editData.content,
+                category,
+                subcategory:
+                  subcategory.trim() ||
+                  null,
+                description:
+                  description.trim() ||
+                  null,
+                seo_title:
+                  seoTitle.trim() ||
+                  savedTitle,
+                meta_description:
+                  metaDescription.trim() ||
+                  description.trim() ||
+                  null,
+                og_image:
+                  ogImage.trim() ||
+                  null,
+                status:
+                  'draft',
+                published_at:
+                  null,
+                updated_at:
+                  now,
+              })
+              .eq(
+                'id',
+                postId
+              );
+
+          if (error) {
+            throw error;
+          }
+
+          serverSnapshotRef.current =
+            snapshot;
+
+          lastSavedSnapshotRef.current =
+            snapshot;
+
+          lastSavedVersionRef.current =
+            Math.max(
+              lastSavedVersionRef.current,
+              versionAtSave
+            );
+
+          setLastAutoSavedAt(
+            new Date()
+          );
+
+          if (
+            latestChangeVersionRef.current >
+            versionAtSave
+          ) {
+            setAutoSaveStatus(
+              'waiting'
+            );
+          } else {
+            setAutoSaveStatus(
+              'saved'
+            );
+          }
+        } catch (error) {
+          console.error(
+            '초안 자동저장 실패:',
+            error
+          );
+
+          setAutoSaveStatus(
+            'error'
+          );
+        } finally {
+          saveInFlightRef.current =
+            false;
+        }
+      },
+      [
+        category,
+        description,
+        getCurrentEditData,
+        metaDescription,
+        ogImage,
+        postId,
+        postStatus,
+        seoTitle,
+        subcategory,
+        title,
+      ]
+    );
+
+  // =========================================================
+  // 공개글: 브라우저 localStorage 임시 자동저장
+  // 실제 posts DB는 절대 수정하지 않는다.
+  // =========================================================
+
+  const savePublishedLocalBackup =
+    useCallback(
+      (
+        versionAtSave:
+          number
+      ) => {
+        if (
+          postStatus !==
+            'published' ||
+          !localDraftKey ||
+          !postId
+        ) {
+          return;
+        }
+
+        const editData =
+          getCurrentEditData();
+
+        if (!editData) {
+          return;
+        }
+
+        const snapshot =
+          createEditSnapshot(
+            editData
+          );
+
+        try {
+          setAutoSaveStatus(
+            'saving'
+          );
+
+          // 수정 내용을 모두 되돌려 현재 공개글과 같아졌다면
+          // 불필요한 로컬 임시 수정본을 삭제한다.
+          if (
+            serverSnapshotRef.current ===
+            snapshot
+          ) {
+            window.localStorage.removeItem(
+              localDraftKey
+            );
+
+            lastSavedSnapshotRef.current =
+              snapshot;
+
+            lastSavedVersionRef.current =
+              Math.max(
+                lastSavedVersionRef.current,
+                versionAtSave
+              );
+
+            setHasLocalBackup(
+              false
+            );
+
+            setLastAutoSavedAt(
+              new Date()
+            );
+
+            setAutoSaveStatus(
+              'saved'
+            );
+
+            return;
+          }
+
+          // 같은 수정본을 이미 임시저장했다면 다시 쓰지 않는다.
+          if (
+            lastSavedSnapshotRef.current ===
+            snapshot &&
+            hasLocalBackup
+          ) {
+            lastSavedVersionRef.current =
+              Math.max(
+                lastSavedVersionRef.current,
+                versionAtSave
+              );
+
+            setAutoSaveStatus(
+              'saved'
+            );
+
+            return;
+          }
+
+          const savedAt =
+            new Date();
+
+          const backup:
+            PublishedEditBackup = {
+            postId,
+            savedAt:
+              savedAt.toISOString(),
+            ...editData,
+          };
+
+          window.localStorage.setItem(
+            localDraftKey,
+            JSON.stringify(
+              backup
+            )
+          );
+
+          lastSavedSnapshotRef.current =
+            snapshot;
+
+          lastSavedVersionRef.current =
+            Math.max(
+              lastSavedVersionRef.current,
+              versionAtSave
+            );
+
+          setHasLocalBackup(
+            true
+          );
+
+          setLastAutoSavedAt(
+            savedAt
+          );
+
+          setAutoSaveStatus(
+            'saved'
+          );
+        } catch (error) {
+          console.error(
+            '공개글 임시 자동저장 실패:',
+            error
+          );
+
+          setAutoSaveStatus(
+            'error'
+          );
+        }
+      },
+      [
+        getCurrentEditData,
+        hasLocalBackup,
+        localDraftKey,
+        postId,
+        postStatus,
+      ]
+    );
+
+  // =========================================================
+  // 수동 초안 저장 / 공개 발행 / 공개글 수정 저장
+  // =========================================================
+
+  const handleSave =
+    useCallback(
+      async (
+        targetStatus:
+          'draft' |
+          'published'
+      ) => {
+        clearAutoSaveTimer();
+
+        // 공개 발행은 제목 필수
+        if (
+          targetStatus ===
+            'published' &&
+          !title.trim()
+        ) {
+          alert(
+            '공개 발행하려면 제목을 입력해주세요.'
+          );
+
+          return;
+        }
+
+        if (!category) {
+          alert(
+            '카테고리를 선택해주세요.'
+          );
+
+          return;
+        }
+
+        if (
+          !editor ||
+          !postId ||
+          saveInFlightRef.current
+        ) {
+          return;
+        }
+
+        const editData =
+          getCurrentEditData();
+
+        if (!editData) {
+          return;
+        }
+
+        const wasDraft =
           postStatus ===
+          'draft';
+
+        saveInFlightRef.current =
+          true;
+
+        try {
+          setSaving(
+            true
+          );
+
+          const savedTitle =
+            title.trim() ||
+            '제목 없는 초안';
+
+          const nextPublishedAt =
+            targetStatus ===
+            'published'
+              ? publishedAt ||
+                new Date().toISOString()
+              : null;
+
+          const { error } =
+            await supabase
+              .from('posts')
+              .update({
+                // 기본 글
+                title:
+                  savedTitle,
+                content:
+                  editData.content,
+                category,
+                subcategory:
+                  subcategory.trim() ||
+                  null,
+                description:
+                  description.trim() ||
+                  null,
+
+                // SEO
+                seo_title:
+                  seoTitle.trim() ||
+                  savedTitle,
+                meta_description:
+                  metaDescription.trim() ||
+                  description.trim() ||
+                  null,
+                og_image:
+                  ogImage.trim() ||
+                  null,
+
+                // 공개 상태
+                status:
+                  targetStatus,
+                published_at:
+                  nextPublishedAt,
+
+                // 마지막 수정 시간
+                updated_at:
+                  new Date().toISOString(),
+              })
+              .eq(
+                'id',
+                postId
+              );
+
+          if (error) {
+            throw error;
+          }
+
+          setPostStatus(
+            targetStatus
+          );
+
+          setPublishedAt(
+            nextPublishedAt
+          );
+
+          const savedEditData:
+            EditData = {
+            ...editData,
+            title:
+              title.trim()
+                ? title
+                : savedTitle,
+          };
+
+          const savedSnapshot =
+            createEditSnapshot(
+              savedEditData
+            );
+
+          serverSnapshotRef.current =
+            savedSnapshot;
+
+          lastSavedSnapshotRef.current =
+            savedSnapshot;
+
+          const currentVersion =
+            latestChangeVersionRef.current;
+
+          lastSavedVersionRef.current =
+            currentVersion;
+
+          setLastAutoSavedAt(
+            new Date()
+          );
+
+          setAutoSaveStatus(
+            'saved'
+          );
+
+          if (
+            !title.trim()
+          ) {
+            setTitle(
+              savedTitle
+            );
+
+            lastObservedMetadataRef.current =
+              createMetadataSnapshot({
+                title:
+                  savedTitle,
+                category,
+                subcategory,
+                description,
+                seoTitle,
+                metaDescription,
+                ogImage,
+              });
+          }
+
+          // 초안은 현재 화면에서 계속 작성
+          if (
+            targetStatus ===
             'draft'
-            ? '글이 공개 발행되었습니다! 🌐'
-            : '글이 성공적으로 수정되었습니다! ✅'
-        );
+          ) {
+            alert(
+              '초안으로 저장되었습니다! 💾'
+            );
 
-        router.push(
-          '/admin/manage'
-        );
+            return;
+          }
 
-        router.refresh();
+          // 공개글 수정본 임시저장 파일은
+          // 실제 DB 저장 성공 후에만 삭제한다.
+          if (localDraftKey) {
+            try {
+              window.localStorage.removeItem(
+                localDraftKey
+              );
+            } catch (error) {
+              console.error(
+                '임시 수정본 삭제 오류:',
+                error
+              );
+            }
+          }
 
-      } catch (
-        error: any
-      ) {
-        alert(
-          '글 저장 실패: ' +
-            error.message
-        );
-      } finally {
-        setSaving(
-          false
-        );
-      }
+          setHasLocalBackup(
+            false
+          );
+
+          setRestoredLocalBackup(
+            false
+          );
+
+          alert(
+            wasDraft
+              ? '글이 공개 발행되었습니다! 🌐'
+              : '글이 성공적으로 수정되었습니다! ✅'
+          );
+
+          router.push(
+            '/admin/manage'
+          );
+
+          router.refresh();
+        } catch (
+          error: any
+        ) {
+          // 공개글 DB 저장 실패 시에는 현재 수정본을
+          // 브라우저 임시저장으로 한 번 더 보호한다.
+          if (
+            postStatus ===
+            'published'
+          ) {
+            savePublishedLocalBackup(
+              latestChangeVersionRef.current
+            );
+          }
+
+          alert(
+            '글 저장 실패: ' +
+              error.message
+          );
+        } finally {
+          saveInFlightRef.current =
+            false;
+
+          setSaving(
+            false
+          );
+        }
+      },
+      [
+        category,
+        clearAutoSaveTimer,
+        description,
+        editor,
+        getCurrentEditData,
+        localDraftKey,
+        metaDescription,
+        ogImage,
+        postId,
+        postStatus,
+        publishedAt,
+        router,
+        savePublishedLocalBackup,
+        seoTitle,
+        subcategory,
+        title,
+      ]
+    );
+
+  // =========================================================
+  // 5초 디바운스 자동저장
+  // 초안 = Supabase / 공개글 = localStorage
+  // =========================================================
+
+  useEffect(() => {
+    clearAutoSaveTimer();
+
+    if (
+      !initializedRef.current ||
+      loading ||
+      changeVersion === 0 ||
+      lastSavedVersionRef.current >=
+        changeVersion ||
+      !editor ||
+      !category ||
+      categoriesLoading ||
+      uploading ||
+      ogUploading ||
+      saving
+    ) {
+      return;
+    }
+
+    setAutoSaveStatus(
+      (previous) =>
+        previous === 'saving'
+          ? previous
+          : 'waiting'
+    );
+
+    const versionToSave =
+      changeVersion;
+
+    autoSaveTimerRef.current =
+      setTimeout(() => {
+        autoSaveTimerRef.current =
+          null;
+
+        if (
+          postStatus ===
+          'draft'
+        ) {
+          void autoSaveDraft(
+            versionToSave
+          );
+        } else {
+          savePublishedLocalBackup(
+            versionToSave
+          );
+        }
+      }, 5000);
+
+    return () => {
+      clearAutoSaveTimer();
     };
+  }, [
+    autoSaveDraft,
+    categoriesLoading,
+    category,
+    changeVersion,
+    clearAutoSaveTimer,
+    editor,
+    loading,
+    ogUploading,
+    postStatus,
+    savePublishedLocalBackup,
+    saving,
+    uploading,
+  ]);
+
+  // 컴포넌트 종료 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      clearAutoSaveTimer();
+    };
+  }, [clearAutoSaveTimer]);
+
+  // 자동저장 전에 새로고침/브라우저 종료 시 경고
+  useEffect(() => {
+    const handleBeforeUnload =
+      (event: BeforeUnloadEvent) => {
+        const hasUnsavedChanges =
+          latestChangeVersionRef.current >
+          lastSavedVersionRef.current;
+
+        if (hasUnsavedChanges) {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      };
+
+    window.addEventListener(
+      'beforeunload',
+      handleBeforeUnload
+    );
+
+    return () => {
+      window.removeEventListener(
+        'beforeunload',
+        handleBeforeUnload
+      );
+    };
+  }, []);
 
   // =========================================================
   // 로딩
@@ -939,6 +1944,7 @@ export default function AdminEditPage() {
                 }
                 disabled={
                   saving ||
+                  autoSaveStatus === 'saving' ||
                   categoriesLoading ||
                   uploading ||
                   ogUploading
@@ -959,6 +1965,7 @@ export default function AdminEditPage() {
                 }
                 disabled={
                   saving ||
+                  autoSaveStatus === 'saving' ||
                   categoriesLoading ||
                   uploading ||
                   ogUploading
@@ -980,6 +1987,7 @@ export default function AdminEditPage() {
               }
               disabled={
                 saving ||
+                autoSaveStatus === 'saving' ||
                 categoriesLoading ||
                 uploading ||
                 ogUploading
@@ -994,6 +2002,105 @@ export default function AdminEditPage() {
 
         </div>
 
+      </div>
+
+      {/* =====================================================
+          자동저장 안내
+      ===================================================== */}
+
+      <div
+        className={`mb-6 rounded-2xl border px-4 py-4 ${
+          postStatus ===
+          'draft'
+            ? 'border-blue-800 bg-blue-950/30'
+            : 'border-violet-800 bg-violet-950/30'
+        }`}
+      >
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-black text-white">
+            {postStatus ===
+            'draft'
+              ? '💾 초안 자동저장'
+              : '🛡️ 공개글 보호 자동저장'}
+          </p>
+
+          <p className="text-xs text-slate-300">
+            {postStatus ===
+            'draft'
+              ? '수정 후 5초가 지나면 같은 초안에 자동 저장됩니다.'
+              : '수정 후 5초가 지나면 이 브라우저에만 임시 저장됩니다. 방문자에게 보이는 공개글은 바뀌지 않습니다.'}
+          </p>
+
+          <p
+            className={`text-xs font-bold mt-1 ${
+              autoSaveStatus ===
+              'error'
+                ? 'text-red-300'
+                : autoSaveStatus ===
+                    'saved'
+                  ? 'text-emerald-300'
+                  : 'text-amber-300'
+            }`}
+          >
+            {autoSaveStatus ===
+            'idle'
+              ? postStatus ===
+                'draft'
+                ? '자동저장 준비됨'
+                : '공개글 보호 모드 · 임시저장 준비됨'
+              : autoSaveStatus ===
+                  'waiting'
+                ? postStatus ===
+                  'draft'
+                  ? '변경사항 감지 · 5초 후 자동저장'
+                  : '변경사항 감지 · 5초 후 브라우저 임시저장'
+                : autoSaveStatus ===
+                    'saving'
+                  ? postStatus ===
+                    'draft'
+                    ? '저장 중...'
+                    : '수정본 임시저장 중...'
+                  : autoSaveStatus ===
+                      'saved'
+                    ? postStatus ===
+                      'draft'
+                      ? `✓ 자동저장됨${
+                          lastAutoSavedAt
+                            ? ` · ${formatSaveTime(
+                                lastAutoSavedAt
+                              )}`
+                            : ''
+                        }`
+                      : hasLocalBackup
+                        ? `✓ 수정본 임시저장됨${
+                            lastAutoSavedAt
+                              ? ` · ${formatSaveTime(
+                                  lastAutoSavedAt
+                                )}`
+                              : ''
+                          } · 공개글 미반영`
+                        : '✓ 현재 공개글과 동일 · 임시 수정본 없음'
+                    : postStatus ===
+                      'draft'
+                      ? '자동저장 실패 · 수동 초안 저장을 확인해주세요.'
+                      : '임시저장 실패 · 수정 저장 전 브라우저를 닫지 마세요.'}
+          </p>
+
+          {postStatus ===
+            'published' && (
+            <p className="text-xs text-violet-300 mt-1">
+              ✅ 실제 공개글 반영은 반드시 ‘수정 저장’ 버튼을 눌러야 합니다.
+            </p>
+          )}
+
+          {restoredLocalBackup &&
+            postStatus ===
+              'published' && (
+            <p className="text-xs font-bold text-cyan-300 mt-1">
+              ♻️ 이전에 임시저장된 수정본을 복구했습니다.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* =====================================================

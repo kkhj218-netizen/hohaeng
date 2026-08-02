@@ -20,6 +20,7 @@ type Post = {
   description: string | null;
   created_at: string | null;
   published_at: string | null;
+  scheduled_at: string | null;
   view_count: number | null;
   status: PostStatus | null;
 };
@@ -41,6 +42,7 @@ type SortType =
 type StatusFilter =
   | 'all'
   | 'draft'
+  | 'scheduled'
   | 'published';
 
 function getPostTimestamp(post: Post) {
@@ -91,12 +93,37 @@ function formatDate(post: Post) {
 }
 
 function isDraft(post: Post) {
-  return post.status === 'draft';
+  return post.status === 'draft' && !post.scheduled_at;
+}
+
+function isScheduled(post: Post) {
+  return post.status === 'draft' && Boolean(post.scheduled_at);
 }
 
 function isPublished(post: Post) {
   // 혹시 과거 데이터에 status가 비어 있어도 기존 글은 공개 글로 취급
   return post.status !== 'draft';
+}
+
+function formatScheduledDate(dateValue: string | null) {
+  if (!dateValue) {
+    return '-';
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
 }
 
 export default function AdminManagePage() {
@@ -176,7 +203,7 @@ export default function AdminManagePage() {
           supabase
             .from('posts')
             .select(
-              'id, title, slug, category, subcategory, description, created_at, published_at, view_count, status'
+              'id, title, slug, category, subcategory, description, created_at, published_at, scheduled_at, view_count, status'
             ),
 
           supabase
@@ -259,6 +286,13 @@ export default function AdminManagePage() {
       ).length;
     }, [posts]);
 
+  const scheduledCount =
+    useMemo(() => {
+      return posts.filter(
+        isScheduled
+      ).length;
+    }, [posts]);
+
   const publishedCount =
     useMemo(() => {
       return posts.filter(
@@ -289,6 +323,13 @@ export default function AdminManagePage() {
             }
 
             if (
+              statusFilter === 'scheduled' &&
+              !isScheduled(post)
+            ) {
+              return false;
+            }
+
+            if (
               statusFilter === 'published' &&
               !isPublished(post)
             ) {
@@ -314,6 +355,7 @@ export default function AdminManagePage() {
                 categoryName,
                 post.subcategory,
                 post.status,
+                post.scheduled_at,
               ]
                 .filter(Boolean)
                 .join(' ')
@@ -489,7 +531,7 @@ export default function AdminManagePage() {
             </h1>
 
             <p className="text-slate-400 text-sm mt-2">
-              초안과 공개 글을 구분해서 검색하고 수정·관리할 수 있습니다.
+              초안, 예약 대기, 공개 글을 구분해서 검색하고 수정·관리할 수 있습니다.
             </p>
 
           </div>
@@ -527,7 +569,7 @@ export default function AdminManagePage() {
         {/* =================================================
             간단 통계
         ================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4">
 
@@ -537,6 +579,20 @@ export default function AdminManagePage() {
 
             <strong className="block text-2xl text-white mt-1">
               {posts.length.toLocaleString(
+                'ko-KR'
+              )}
+            </strong>
+
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4">
+
+            <p className="text-xs text-slate-500">
+              예약 대기
+            </p>
+
+            <strong className="block text-2xl text-violet-400 mt-1">
+              {scheduledCount.toLocaleString(
                 'ko-KR'
               )}
             </strong>
@@ -588,11 +644,11 @@ export default function AdminManagePage() {
         </div>
 
         {/* =================================================
-            전체 / 초안 / 공개 탭
+            전체 / 초안 / 예약 / 공개 탭
         ================================================= */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2 mb-4">
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 
             <button
               type="button"
@@ -620,6 +676,20 @@ export default function AdminManagePage() {
               }`}
             >
               📝 초안 {draftCount}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setStatusFilter('scheduled')
+              }
+              className={`rounded-xl px-3 py-3 text-sm font-black transition-colors ${
+                statusFilter === 'scheduled'
+                  ? 'bg-violet-600 text-white'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              ⏰ 예약 {scheduledCount}
             </button>
 
             <button
@@ -785,12 +855,16 @@ export default function AdminManagePage() {
               (post) => {
                 const draft =
                   isDraft(post);
+                const scheduled =
+                  isScheduled(post);
 
                 return (
                   <div
                     key={post.id}
                     className={`bg-slate-900 border rounded-2xl p-5 transition-colors ${
-                      draft
+                      scheduled
+                        ? 'border-violet-500/30 hover:border-violet-500/50'
+                        : draft
                         ? 'border-amber-500/20 hover:border-amber-500/40'
                         : 'border-slate-800 hover:border-slate-700'
                     }`}
@@ -804,7 +878,11 @@ export default function AdminManagePage() {
                         <div className="flex flex-wrap items-center gap-2 mb-2">
 
                           {/* 상태 */}
-                          {draft ? (
+                          {scheduled ? (
+                            <span className="text-xs font-black bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2.5 py-1 rounded-lg">
+                              ⏰ 예약 대기
+                            </span>
+                          ) : draft ? (
                             <span className="text-xs font-black bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-lg">
                               📝 초안
                             </span>
@@ -836,7 +914,7 @@ export default function AdminManagePage() {
                           )}
 
                           {/* 조회수 */}
-                          {!draft && (
+                          {!draft && !scheduled && (
                             <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg">
                               👁{' '}
                               {(post.view_count ||
@@ -854,6 +932,12 @@ export default function AdminManagePage() {
                             )}
                           </span>
 
+                          {scheduled && (
+                            <span className="text-xs font-bold bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2.5 py-1 rounded-lg">
+                              공개 예정: {formatScheduledDate(post.scheduled_at)}
+                            </span>
+                          )}
+
                         </div>
 
                         <h2 className="text-lg font-black text-white truncate">
@@ -868,7 +952,11 @@ export default function AdminManagePage() {
                           </p>
                         )}
 
-                        {draft ? (
+                        {scheduled ? (
+                          <p className="text-xs text-violet-400/80 mt-2 truncate">
+                            {formatScheduledDate(post.scheduled_at)}에 자동 공개될 예정입니다.
+                          </p>
+                        ) : draft ? (
                           <p className="text-xs text-amber-400/70 mt-2 truncate">
                             아직 공개되지 않은 초안입니다.
                           </p>
@@ -884,7 +972,7 @@ export default function AdminManagePage() {
                       {/* 버튼 */}
                       <div className="flex flex-wrap gap-2 shrink-0">
 
-                        {!draft && (
+                        {!draft && !scheduled && (
                           <Link
                             href={`/blog/${post.slug}`}
                             target="_blank"
@@ -897,12 +985,16 @@ export default function AdminManagePage() {
                         <Link
                           href={`/admin/edit/${post.id}`}
                           className={`px-3 py-2 rounded-lg text-sm font-bold ${
-                            draft
+                            scheduled
+                              ? 'bg-violet-500/10 hover:bg-violet-500/20 text-violet-400'
+                              : draft
                               ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400'
                               : 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400'
                           }`}
                         >
-                          {draft
+                          {scheduled
+                            ? '⏰ 예약 수정'
+                            : draft
                             ? '✍️ 이어쓰기'
                             : '✏️ 수정'}
                         </Link>

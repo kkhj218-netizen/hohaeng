@@ -101,6 +101,68 @@ const formatSaveTime =
     );
   };
 
+function toDateTimeLocalValue(
+  value: string | null
+) {
+  if (!value) {
+    return '';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '';
+  }
+
+  const timezoneOffset =
+    date.getTimezoneOffset() *
+    60 *
+    1000;
+
+  return new Date(
+    date.getTime() -
+      timezoneOffset
+  )
+    .toISOString()
+    .slice(0, 16);
+}
+
+function formatScheduledDateTime(
+  value: string | null
+) {
+  if (!value) {
+    return '';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '';
+  }
+
+  return date.toLocaleString(
+    'ko-KR',
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }
+  );
+}
+
 export default function AdminEditPage() {
   const router = useRouter();
 
@@ -248,6 +310,25 @@ export default function AdminEditPage() {
     string | null
   >(null);
 
+  // 예약 발행 시각은 DB의 ISO 값과
+  // datetime-local 입력값을 분리해서 관리한다.
+  const [
+    scheduledAt,
+    setScheduledAt,
+  ] = useState<
+    string | null
+  >(null);
+
+  const [
+    scheduleInput,
+    setScheduleInput,
+  ] = useState('');
+
+  const [
+    scheduleSaving,
+    setScheduleSaving,
+  ] = useState(false);
+
   const [
     uploading,
     setUploading,
@@ -314,6 +395,28 @@ export default function AdminEditPage() {
 
   const lastObservedMetadataRef =
     useRef<string | null>(null);
+
+  const minimumScheduleDateTime =
+    toDateTimeLocalValue(
+      new Date(
+        Date.now() +
+          60 * 1000
+      ).toISOString()
+    );
+
+  const scheduledDateTimeLabel =
+    formatScheduledDateTime(
+      scheduledAt
+    );
+
+  const selectedScheduleLabel =
+    formatScheduledDateTime(
+      scheduleInput
+    );
+
+  const hasScheduledPublish =
+    postStatus === 'draft' &&
+    Boolean(scheduledAt);
 
   const clearAutoSaveTimer =
     useCallback(() => {
@@ -452,7 +555,7 @@ export default function AdminEditPage() {
             supabase
               .from('posts')
               .select(
-                'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image, status, published_at'
+                'id, title, slug, content, category, subcategory, description, seo_title, meta_description, og_image, status, published_at, scheduled_at'
               )
               .eq(
                 'id',
@@ -855,6 +958,20 @@ export default function AdminEditPage() {
         setPublishedAt(
           postData.published_at ||
             null
+        );
+
+        const loadedScheduledAt =
+          postData.scheduled_at ||
+          null;
+
+        setScheduledAt(
+          loadedScheduledAt
+        );
+
+        setScheduleInput(
+          toDateTimeLocalValue(
+            loadedScheduledAt
+          )
         );
 
         // 기존 HTML 본문 또는 복구한 임시 수정본 불러오기
@@ -1343,7 +1460,11 @@ export default function AdminEditPage() {
           const now =
             new Date().toISOString();
 
-          const { error } =
+          const {
+            data:
+              updatedDraft,
+            error,
+          } =
             await supabase
               .from('posts')
               .update({
@@ -1378,10 +1499,42 @@ export default function AdminEditPage() {
               .eq(
                 'id',
                 postId
-              );
+              )
+              .eq(
+                'status',
+                'draft'
+              )
+              .select(
+                'id'
+              )
+              .maybeSingle();
 
           if (error) {
             throw error;
+          }
+
+          // 예약 시간이 되어 Cron이 이미 공개한 글을
+          // 늦게 실행된 초안 자동저장이 다시 비공개로 되돌리지 못하게 한다.
+          if (!updatedDraft) {
+            setPostStatus(
+              'published'
+            );
+
+            setScheduledAt(
+              null
+            );
+
+            setScheduleInput('');
+
+            setAutoSaveStatus(
+              'error'
+            );
+
+            alert(
+              '예약 시간이 되어 글이 이미 공개되었습니다. 페이지를 새로고침한 뒤 공개글 수정 모드로 이어서 작업해주세요.'
+            );
+
+            return;
           }
 
           serverSnapshotRef.current =
@@ -1695,6 +1848,14 @@ export default function AdminEditPage() {
                 published_at:
                   nextPublishedAt,
 
+                // 즉시 공개하면 기존 예약을 제거하고,
+                // 초안 저장은 현재 예약을 그대로 유지한다.
+                scheduled_at:
+                  targetStatus ===
+                  'published'
+                    ? null
+                    : scheduledAt,
+
                 // 마지막 수정 시간
                 updated_at:
                   new Date().toISOString(),
@@ -1715,6 +1876,17 @@ export default function AdminEditPage() {
           setPublishedAt(
             nextPublishedAt
           );
+
+          if (
+            targetStatus ===
+            'published'
+          ) {
+            setScheduledAt(
+              null
+            );
+
+            setScheduleInput('');
+          }
 
           const savedEditData:
             EditData = {
@@ -1776,7 +1948,9 @@ export default function AdminEditPage() {
             'draft'
           ) {
             alert(
-              '초안으로 저장되었습니다! 💾'
+              scheduledAt
+                ? '초안 내용이 저장되었습니다! 💾\n기존 예약 발행 시간은 그대로 유지됩니다.'
+                : '초안으로 저장되었습니다! 💾'
             );
 
             return;
@@ -1857,6 +2031,461 @@ export default function AdminEditPage() {
         publishedAt,
         router,
         savePublishedLocalBackup,
+        scheduledAt,
+        seoTitle,
+        subcategory,
+        title,
+      ]
+    );
+
+  // =========================================================
+  // 예약 발행 등록·변경
+  // =========================================================
+
+  const handleSchedulePublish =
+    useCallback(
+      async () => {
+        clearAutoSaveTimer();
+
+        if (
+          postStatus !==
+          'draft'
+        ) {
+          alert(
+            '초안 상태의 글만 예약 발행할 수 있습니다.'
+          );
+
+          return;
+        }
+
+        if (!title.trim()) {
+          alert(
+            '예약 발행하려면 제목을 입력해주세요.'
+          );
+
+          return;
+        }
+
+        if (!category) {
+          alert(
+            '카테고리를 선택해주세요.'
+          );
+
+          return;
+        }
+
+        if (!scheduleInput) {
+          alert(
+            '예약 발행 날짜와 시간을 선택해주세요.'
+          );
+
+          return;
+        }
+
+        const scheduleDate =
+          new Date(
+            scheduleInput
+          );
+
+        if (
+          Number.isNaN(
+            scheduleDate.getTime()
+          )
+        ) {
+          alert(
+            '예약 날짜와 시간을 다시 선택해주세요.'
+          );
+
+          return;
+        }
+
+        if (
+          scheduleDate.getTime() <=
+          Date.now()
+        ) {
+          alert(
+            '예약 시간은 현재보다 미래로 설정해주세요.'
+          );
+
+          return;
+        }
+
+        if (
+          !editor ||
+          !postId ||
+          saveInFlightRef.current
+        ) {
+          return;
+        }
+
+        const editData =
+          getCurrentEditData();
+
+        if (!editData) {
+          return;
+        }
+
+        const nextScheduledAt =
+          scheduleDate.toISOString();
+
+        saveInFlightRef.current =
+          true;
+
+        try {
+          setScheduleSaving(
+            true
+          );
+
+          const now =
+            new Date().toISOString();
+
+          const {
+            data:
+              updatedDraft,
+            error,
+          } =
+            await supabase
+              .from('posts')
+              .update({
+                title:
+                  title.trim(),
+                content:
+                  editData.content,
+                category,
+                subcategory:
+                  subcategory.trim() ||
+                  null,
+                description:
+                  description.trim() ||
+                  null,
+                seo_title:
+                  seoTitle.trim() ||
+                  title.trim(),
+                meta_description:
+                  metaDescription.trim() ||
+                  description.trim() ||
+                  null,
+                og_image:
+                  ogImage.trim() ||
+                  null,
+                status:
+                  'draft',
+                published_at:
+                  null,
+                scheduled_at:
+                  nextScheduledAt,
+                updated_at:
+                  now,
+              })
+              .eq(
+                'id',
+                postId
+              )
+              .eq(
+                'status',
+                'draft'
+              )
+              .select(
+                'id'
+              )
+              .maybeSingle();
+
+          if (error) {
+            throw error;
+          }
+
+          if (!updatedDraft) {
+            setPostStatus(
+              'published'
+            );
+
+            setScheduledAt(
+              null
+            );
+
+            setScheduleInput('');
+
+            alert(
+              '예약 시간이 지나 글이 이미 공개되었습니다. 페이지를 새로고침해주세요.'
+            );
+
+            return;
+          }
+
+          setScheduledAt(
+            nextScheduledAt
+          );
+
+          setScheduleInput(
+            toDateTimeLocalValue(
+              nextScheduledAt
+            )
+          );
+
+          setPublishedAt(
+            null
+          );
+
+          const savedSnapshot =
+            createEditSnapshot(
+              editData
+            );
+
+          serverSnapshotRef.current =
+            savedSnapshot;
+
+          lastSavedSnapshotRef.current =
+            savedSnapshot;
+
+          lastSavedVersionRef.current =
+            latestChangeVersionRef.current;
+
+          setLastAutoSavedAt(
+            new Date()
+          );
+
+          setAutoSaveStatus(
+            'saved'
+          );
+
+          alert(
+            `${scheduledAt ? '예약 발행 시간이 변경되었습니다! ⏰' : '예약 발행이 등록되었습니다! ⏰'}\n\n${formatScheduledDateTime(
+              nextScheduledAt
+            )}\n\n예약 전에는 초안으로 유지되고, 시간이 되면 자동 공개됩니다.`
+          );
+        } catch (
+          error: any
+        ) {
+          alert(
+            '예약 발행 저장 실패: ' +
+              error.message
+          );
+        } finally {
+          saveInFlightRef.current =
+            false;
+
+          setScheduleSaving(
+            false
+          );
+        }
+      },
+      [
+        category,
+        clearAutoSaveTimer,
+        description,
+        editor,
+        getCurrentEditData,
+        metaDescription,
+        ogImage,
+        postId,
+        postStatus,
+        scheduleInput,
+        scheduledAt,
+        seoTitle,
+        subcategory,
+        title,
+      ]
+    );
+
+  // =========================================================
+  // 예약 발행 취소
+  // 현재 편집 중인 내용도 함께 초안으로 안전하게 저장한다.
+  // =========================================================
+
+  const handleCancelSchedule =
+    useCallback(
+      async () => {
+        if (!scheduledAt) {
+          return;
+        }
+
+        const shouldCancel =
+          window.confirm(
+            '예약 발행을 취소할까요?\n\n글은 삭제되지 않고 초안으로 계속 보관됩니다.'
+          );
+
+        if (!shouldCancel) {
+          return;
+        }
+
+        clearAutoSaveTimer();
+
+        if (
+          !editor ||
+          !postId ||
+          saveInFlightRef.current
+        ) {
+          return;
+        }
+
+        const editData =
+          getCurrentEditData();
+
+        if (!editData) {
+          return;
+        }
+
+        saveInFlightRef.current =
+          true;
+
+        try {
+          setScheduleSaving(
+            true
+          );
+
+          const savedTitle =
+            title.trim() ||
+            '제목 없는 초안';
+
+          const {
+            data:
+              updatedDraft,
+            error,
+          } =
+            await supabase
+              .from('posts')
+              .update({
+                title:
+                  savedTitle,
+                content:
+                  editData.content,
+                category,
+                subcategory:
+                  subcategory.trim() ||
+                  null,
+                description:
+                  description.trim() ||
+                  null,
+                seo_title:
+                  seoTitle.trim() ||
+                  savedTitle,
+                meta_description:
+                  metaDescription.trim() ||
+                  description.trim() ||
+                  null,
+                og_image:
+                  ogImage.trim() ||
+                  null,
+                status:
+                  'draft',
+                published_at:
+                  null,
+                scheduled_at:
+                  null,
+                updated_at:
+                  new Date().toISOString(),
+              })
+              .eq(
+                'id',
+                postId
+              )
+              .eq(
+                'status',
+                'draft'
+              )
+              .select(
+                'id'
+              )
+              .maybeSingle();
+
+          if (error) {
+            throw error;
+          }
+
+          if (!updatedDraft) {
+            setPostStatus(
+              'published'
+            );
+
+            setScheduledAt(
+              null
+            );
+
+            setScheduleInput('');
+
+            alert(
+              '예약 시간이 지나 글이 이미 공개되었습니다. 예약을 취소할 수 없습니다.'
+            );
+
+            return;
+          }
+
+          setScheduledAt(
+            null
+          );
+
+          setScheduleInput('');
+
+          setPublishedAt(
+            null
+          );
+
+          if (!title.trim()) {
+            setTitle(
+              savedTitle
+            );
+          }
+
+          const savedEditData:
+            EditData = {
+            ...editData,
+            title:
+              title.trim()
+                ? title
+                : savedTitle,
+          };
+
+          const savedSnapshot =
+            createEditSnapshot(
+              savedEditData
+            );
+
+          serverSnapshotRef.current =
+            savedSnapshot;
+
+          lastSavedSnapshotRef.current =
+            savedSnapshot;
+
+          lastSavedVersionRef.current =
+            latestChangeVersionRef.current;
+
+          setLastAutoSavedAt(
+            new Date()
+          );
+
+          setAutoSaveStatus(
+            'saved'
+          );
+
+          alert(
+            '예약 발행이 취소되었습니다. 글은 초안으로 계속 보관됩니다. 📝'
+          );
+        } catch (
+          error: any
+        ) {
+          alert(
+            '예약 취소 실패: ' +
+              error.message
+          );
+        } finally {
+          saveInFlightRef.current =
+            false;
+
+          setScheduleSaving(
+            false
+          );
+        }
+      },
+      [
+        category,
+        clearAutoSaveTimer,
+        description,
+        editor,
+        getCurrentEditData,
+        metaDescription,
+        ogImage,
+        postId,
+        scheduledAt,
         seoTitle,
         subcategory,
         title,
@@ -1882,7 +2511,8 @@ export default function AdminEditPage() {
       categoriesLoading ||
       uploading ||
       ogUploading ||
-      saving
+      saving ||
+      scheduleSaving
     ) {
       return;
     }
@@ -1931,6 +2561,7 @@ export default function AdminEditPage() {
     postStatus,
     savePublishedLocalBackup,
     saving,
+    scheduleSaving,
     uploading,
   ]);
 
@@ -2000,32 +2631,40 @@ export default function AdminEditPage() {
           </p>
 
           <h1 className="text-2xl font-black text-white">
-            {postStatus ===
-            'draft'
-              ? '✍️ 초안 이어쓰기'
-              : '✏️ 블로그 글 수정'}
+            {hasScheduledPublish
+              ? '⏰ 예약 글 수정'
+              : postStatus ===
+                  'draft'
+                ? '✍️ 초안 이어쓰기'
+                : '✏️ 블로그 글 수정'}
           </h1>
 
           <p className="text-sm text-slate-400 mt-1">
-            {postStatus ===
-            'draft'
-              ? '저장해둔 초안을 이어서 작성하고 준비가 되면 공개 발행하세요.'
-              : '글 내용 · 디자인 · 이미지 · SEO 설정을 수정합니다.'}
+            {hasScheduledPublish
+              ? '예약 전까지 내용을 수정하고 예약 시간을 변경하거나 취소할 수 있습니다.'
+              : postStatus ===
+                  'draft'
+                ? '저장해둔 초안을 이어서 작성하고 준비가 되면 공개 발행하세요.'
+                : '글 내용 · 디자인 · 이미지 · SEO 설정을 수정합니다.'}
           </p>
 
           <div className="mt-3">
             <span
               className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
-                postStatus ===
-                'draft'
-                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
-                  : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                hasScheduledPublish
+                  ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20'
+                  : postStatus ===
+                      'draft'
+                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
               }`}
             >
-              {postStatus ===
-              'draft'
-                ? '📝 현재 상태: 초안'
-                : '🌐 현재 상태: 공개'}
+              {hasScheduledPublish
+                ? '⏰ 현재 상태: 예약 대기'
+                : postStatus ===
+                    'draft'
+                  ? '📝 현재 상태: 초안'
+                  : '🌐 현재 상태: 공개'}
             </span>
           </div>
 
@@ -2057,6 +2696,7 @@ export default function AdminEditPage() {
                 }
                 disabled={
                   saving ||
+                  scheduleSaving ||
                   autoSaveStatus === 'saving' ||
                   categoriesLoading ||
                   uploading ||
@@ -2078,6 +2718,7 @@ export default function AdminEditPage() {
                 }
                 disabled={
                   saving ||
+                  scheduleSaving ||
                   autoSaveStatus === 'saving' ||
                   categoriesLoading ||
                   uploading ||
@@ -2100,6 +2741,7 @@ export default function AdminEditPage() {
               }
               disabled={
                 saving ||
+                scheduleSaving ||
                 autoSaveStatus === 'saving' ||
                 categoriesLoading ||
                 uploading ||
@@ -2215,6 +2857,120 @@ export default function AdminEditPage() {
           )}
         </div>
       </div>
+
+      {/* =====================================================
+          예약 발행 설정
+      ===================================================== */}
+
+      {postStatus ===
+        'draft' && (
+        <div className="mb-6 rounded-2xl border border-violet-800 bg-violet-950/30 p-5">
+          <div className="flex flex-col xl:flex-row xl:items-end gap-4">
+            <div className="flex-1">
+              <h2 className="text-lg font-black text-white">
+                {hasScheduledPublish
+                  ? '⏰ 예약 발행 변경·취소'
+                  : '⏰ 예약 발행 설정'}
+              </h2>
+
+              <p className="text-xs text-slate-300 mt-1 leading-5">
+                날짜와 시간을 고른 뒤 예약 버튼을 눌러야 DB에 반영됩니다. 날짜 입력만 바꾸고 화면을 나가면 기존 예약은 변경되지 않습니다.
+              </p>
+
+              <label className="block text-xs font-bold text-violet-300 mt-4 mb-2">
+                예약 날짜와 시간
+              </label>
+
+              <input
+                type="datetime-local"
+                value={
+                  scheduleInput
+                }
+                min={
+                  minimumScheduleDateTime
+                }
+                onChange={(e) =>
+                  setScheduleInput(
+                    e.target.value
+                  )
+                }
+                disabled={
+                  scheduleSaving ||
+                  saving
+                }
+                className="w-full bg-slate-950 border border-violet-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-400 disabled:opacity-50"
+              />
+
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={
+                    handleSchedulePublish
+                  }
+                  disabled={
+                    scheduleSaving ||
+                    saving ||
+                    autoSaveStatus ===
+                      'saving' ||
+                    !scheduleInput
+                  }
+                  className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold rounded-xl"
+                >
+                  {scheduleSaving
+                    ? '처리 중...'
+                    : hasScheduledPublish
+                      ? '⏰ 예약 시간 변경'
+                      : '⏰ 예약 발행 등록'}
+                </button>
+
+                {hasScheduledPublish && (
+                  <button
+                    type="button"
+                    onClick={
+                      handleCancelSchedule
+                    }
+                    disabled={
+                      scheduleSaving ||
+                      saving ||
+                      autoSaveStatus ===
+                        'saving'
+                    }
+                    className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 text-red-300 font-bold rounded-xl border border-red-500/20"
+                  >
+                    ✕ 예약 취소
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="xl:w-[340px] rounded-xl border border-violet-800/70 bg-slate-950/70 px-4 py-4">
+              <p className="text-xs font-black text-violet-300">
+                현재 DB 예약
+              </p>
+
+              <p className="text-sm font-bold text-white mt-2">
+                {scheduledDateTimeLabel ||
+                  '등록된 예약이 없습니다.'}
+              </p>
+
+              <div className="border-t border-slate-800 mt-3 pt-3">
+                <p className="text-xs font-black text-slate-400">
+                  입력창에서 선택한 시간
+                </p>
+
+                <p className="text-sm font-bold text-slate-200 mt-2">
+                  {selectedScheduleLabel ||
+                    '날짜와 시간을 선택해주세요.'}
+                </p>
+              </div>
+
+              <p className="text-xs text-slate-400 mt-3 leading-5">
+                현재 기기의 현지 시간 기준입니다. 예약 전에는 방문자에게 보이지 않습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           기본 정보

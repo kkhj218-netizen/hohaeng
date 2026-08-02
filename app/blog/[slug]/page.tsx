@@ -8,6 +8,31 @@ import ShareButtons from './ShareButtons';
 
 export const dynamic = 'force-dynamic';
 
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  'https://hohaeng.vercel.app'
+).replace(/\/$/, '');
+
+function toAbsoluteUrl(
+  value: string | null | undefined
+) {
+  const trimmed =
+    value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(
+      trimmed,
+      SITE_URL
+    ).toString();
+  } catch {
+    return null;
+  }
+}
+
 type Post = {
   id: string;
   title: string;
@@ -20,6 +45,7 @@ type Post = {
   description?: string | null;
   created_at?: string | null;
   published_at?: string | null;
+  updated_at?: string | null;
   status?: 'draft' | 'published' | null;
 
   // SEO
@@ -135,7 +161,7 @@ export async function generateMetadata({
   } = await supabase
     .from('posts')
     .select(
-      'title, slug, description, seo_title, meta_description, og_image, created_at'
+      'title, slug, description, seo_title, meta_description, og_image, created_at, published_at, updated_at'
     )
     .eq(
       'slug',
@@ -214,10 +240,19 @@ export async function generateMetadata({
       type:
         'article',
 
-      ...(post.created_at
+      ...(post.published_at ||
+      post.created_at
         ? {
             publishedTime:
+              post.published_at ||
               post.created_at,
+          }
+        : {}),
+
+      ...(post.updated_at
+        ? {
+            modifiedTime:
+              post.updated_at,
           }
         : {}),
 
@@ -600,8 +635,211 @@ export default async function BlogDetailPage({
     post.category ||
     'log';
 
+  // =========================================================
+  // JSON-LD 구조화 데이터
+  // BlogPosting + BreadcrumbList
+  // =========================================================
+
+  const canonicalUrl =
+    `${SITE_URL}/blog/${encodeURIComponent(
+      post.slug
+    )}`;
+
+  const blogUrl =
+    `${SITE_URL}/blog`;
+
+  const categoryUrl =
+    `${blogUrl}?category=${encodeURIComponent(
+      categorySlug
+    )}`;
+
+  const structuredDescription =
+    post.meta_description?.trim() ||
+    post.description?.trim() ||
+    `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
+
+  const structuredImage =
+    toAbsoluteUrl(
+      post.og_image
+    );
+
+  const structuredPublishedAt =
+    post.published_at ||
+    post.created_at ||
+    null;
+
+  const structuredModifiedAt =
+    post.updated_at ||
+    structuredPublishedAt;
+
+  const organizationId =
+    `${SITE_URL}/#organization`;
+
+  const jsonLd = {
+    '@context':
+      'https://schema.org',
+
+    '@graph': [
+      {
+        '@type':
+          'BlogPosting',
+
+        '@id':
+          `${canonicalUrl}#blogposting`,
+
+        mainEntityOfPage: {
+          '@type':
+            'WebPage',
+          '@id':
+            canonicalUrl,
+        },
+
+        url:
+          canonicalUrl,
+
+        headline:
+          post.seo_title?.trim() ||
+          post.title,
+
+        name:
+          post.title,
+
+        description:
+          structuredDescription,
+
+        ...(structuredImage
+          ? {
+              image: [
+                structuredImage,
+              ],
+            }
+          : {}),
+
+        ...(structuredPublishedAt
+          ? {
+              datePublished:
+                structuredPublishedAt,
+            }
+          : {}),
+
+        ...(structuredModifiedAt
+          ? {
+              dateModified:
+                structuredModifiedAt,
+            }
+          : {}),
+
+        author: {
+          '@type':
+            'Organization',
+          '@id':
+            organizationId,
+          name:
+            '호행처럼',
+          url:
+            SITE_URL,
+        },
+
+        publisher: {
+          '@type':
+            'Organization',
+          '@id':
+            organizationId,
+          name:
+            '호행처럼',
+          url:
+            SITE_URL,
+        },
+
+        articleSection:
+          category?.name ||
+          post.category ||
+          '블로그',
+
+        ...(post.subcategory
+          ? {
+              keywords: [
+                category?.name ||
+                  post.category ||
+                  '블로그',
+                post.subcategory,
+              ],
+            }
+          : {}),
+
+        inLanguage:
+          'ko-KR',
+      },
+
+      {
+        '@type':
+          'BreadcrumbList',
+
+        '@id':
+          `${canonicalUrl}#breadcrumb`,
+
+        itemListElement: [
+          {
+            '@type':
+              'ListItem',
+            position:
+              1,
+            name:
+              '홈',
+            item:
+              SITE_URL,
+          },
+          {
+            '@type':
+              'ListItem',
+            position:
+              2,
+            name:
+              '블로그',
+            item:
+              blogUrl,
+          },
+          {
+            '@type':
+              'ListItem',
+            position:
+              3,
+            name:
+              category?.name ||
+              post.category ||
+              '블로그',
+            item:
+              categoryUrl,
+          },
+          {
+            '@type':
+              'ListItem',
+            position:
+              4,
+            name:
+              post.title,
+            item:
+              canonicalUrl,
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <main className="min-h-screen bg-[#f6f7f9]">
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            jsonLd
+          ).replace(
+            /</g,
+            '\\u003c'
+          ),
+        }}
+      />
 
       {/* =====================================================
           전체 글 영역

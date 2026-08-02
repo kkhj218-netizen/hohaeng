@@ -44,6 +44,22 @@ type AdjacentPost = {
   created_at: string | null;
 };
 
+type RelatedPost = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  og_image: string | null;
+  category: string | null;
+  subcategory: string | null;
+  created_at: string | null;
+};
+
+type RecommendedPost =
+  RelatedPost & {
+    reason: string;
+  };
+
 function getPostTimestamp(
   post: Post
 ) {
@@ -421,6 +437,155 @@ export default async function BlogDetailPage({
     }
   }
 
+  // =========================================================
+  // 관련 글 자동 추천
+  // 1순위: 같은 세부주제
+  // 2순위: 같은 카테고리
+  // 3순위: 최신 공개글
+  // 초안과 현재 글은 항상 제외한다.
+  // 요청 수를 줄이기 위해 최대 2개의 조회를 동시에 실행한다.
+  // =========================================================
+
+  const relatedPosts:
+    RecommendedPost[] = [];
+
+  const relatedPostIds =
+    new Set<string>([
+      post.id,
+    ]);
+
+  const addRelatedPosts = (
+    items:
+      | RelatedPost[]
+      | null,
+    reason: string
+  ) => {
+    for (
+      const item of
+      items || []
+    ) {
+      if (
+        relatedPosts.length >=
+          3 ||
+        relatedPostIds.has(
+          item.id
+        )
+      ) {
+        continue;
+      }
+
+      relatedPostIds.add(
+        item.id
+      );
+
+      relatedPosts.push({
+        ...item,
+        reason,
+      });
+    }
+  };
+
+  const relatedPostSelect =
+    'id, title, slug, description, og_image, category, subcategory, created_at';
+
+  const [
+    sameCategoryResult,
+    latestPublishedResult,
+  ] = await Promise.all([
+    post.category
+      ? supabase
+          .from('posts')
+          .select(
+            relatedPostSelect
+          )
+          .eq(
+            'status',
+            'published'
+          )
+          .eq(
+            'category',
+            post.category
+          )
+          .neq(
+            'id',
+            post.id
+          )
+          .order(
+            'created_at',
+            { ascending: false }
+          )
+          .limit(12)
+      : Promise.resolve({
+          data:
+            [] as RelatedPost[],
+          error:
+            null,
+        }),
+
+    supabase
+      .from('posts')
+      .select(
+        relatedPostSelect
+      )
+      .eq(
+        'status',
+        'published'
+      )
+      .neq(
+        'id',
+        post.id
+      )
+      .order(
+        'created_at',
+        { ascending: false }
+      )
+      .limit(12),
+  ]);
+
+  if (
+    sameCategoryResult.error
+  ) {
+    console.error(
+      '같은 카테고리 관련 글 불러오기 오류:',
+      sameCategoryResult.error
+    );
+  }
+
+  if (
+    latestPublishedResult.error
+  ) {
+    console.error(
+      '최신 관련 글 불러오기 오류:',
+      latestPublishedResult.error
+    );
+  }
+
+  const sameCategoryPosts =
+    (sameCategoryResult.data ||
+      []) as RelatedPost[];
+
+  if (post.subcategory) {
+    addRelatedPosts(
+      sameCategoryPosts.filter(
+        (item) =>
+          item.subcategory ===
+          post.subcategory
+      ),
+      '같은 세부주제'
+    );
+  }
+
+  addRelatedPosts(
+    sameCategoryPosts,
+    '같은 카테고리'
+  );
+
+  addRelatedPosts(
+    (latestPublishedResult.data ||
+      []) as RelatedPost[],
+    '최신 글'
+  );
+
   const categoryLabel =
     category
       ? `${
@@ -772,6 +937,122 @@ export default async function BlogDetailPage({
                 '',
             }}
           />
+
+          {/* =================================================
+              관련 글 자동 추천
+          ================================================= */}
+
+          {relatedPosts.length >
+            0 && (
+            <section
+              aria-labelledby="related-posts-title"
+              className="px-6 sm:px-12 pb-10"
+            >
+
+              <div className="border-t border-slate-100 pt-9">
+
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-5">
+
+                  <div>
+
+                    <p className="text-xs font-black tracking-[0.08em] text-blue-600">
+                      RELATED POSTS
+                    </p>
+
+                    <h2
+                      id="related-posts-title"
+                      className="text-xl sm:text-2xl font-black text-slate-950 mt-1"
+                    >
+                      함께 읽으면 좋은 글
+                    </h2>
+
+                  </div>
+
+                  <Link
+                    href={`/blog?category=${categorySlug}`}
+                    className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                  >
+                    이 카테고리 더 보기 →
+                  </Link>
+
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                  {relatedPosts.map(
+                    (
+                      relatedPost
+                    ) => (
+                    <Link
+                      key={
+                        relatedPost.id
+                      }
+                      href={`/blog/${relatedPost.slug}`}
+                      className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-md transition-all"
+                    >
+
+                      {relatedPost.og_image ? (
+                        <div className="aspect-[16/9] overflow-hidden bg-slate-100">
+
+                          <img
+                            src={
+                              relatedPost.og_image
+                            }
+                            alt={
+                              relatedPost.title
+                            }
+                            className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                          />
+
+                        </div>
+                      ) : (
+                        <div className="aspect-[16/9] flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50">
+
+                          <div className="text-center">
+
+                            <span className="text-2xl">
+                              {category?.emoji ||
+                                '🌱'}
+                            </span>
+
+                            <p className="text-[10px] font-black tracking-[0.16em] text-slate-400 mt-2">
+                              HOHAENG
+                            </p>
+
+                          </div>
+
+                        </div>
+                      )}
+
+                      <div className="p-4">
+
+                        <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-600">
+                          {relatedPost.reason}
+                        </span>
+
+                        <h3 className="mt-3 text-[15px] font-black leading-6 text-slate-900 group-hover:text-blue-700 transition-colors line-clamp-2 break-words">
+                          {relatedPost.title}
+                        </h3>
+
+                        {relatedPost.description && (
+                          <p className="mt-2 text-xs leading-5 text-slate-500 line-clamp-2 break-words">
+                            {
+                              relatedPost.description
+                            }
+                          </p>
+                        )}
+
+                      </div>
+
+                    </Link>
+                  ))}
+
+                </div>
+
+              </div>
+
+            </section>
+          )}
 
           {/* =================================================
               이전 글 / 다음 글

@@ -60,10 +60,62 @@ type AutoSaveStatus =
   | 'saved'
   | 'error';
 
+type SaveTarget =
+  | 'draft'
+  | 'published'
+  | 'scheduled';
+
 type SaveOptions = {
   auto?: boolean;
   version?: number;
 };
+
+function toDateTimeLocalValue(
+  date: Date
+) {
+  const timezoneOffset =
+    date.getTimezoneOffset() *
+    60 *
+    1000;
+
+  return new Date(
+    date.getTime() -
+      timezoneOffset
+  )
+    .toISOString()
+    .slice(0, 16);
+}
+
+function formatScheduledDateTime(
+  value: string
+) {
+  if (!value) {
+    return '';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return '';
+  }
+
+  return date.toLocaleString(
+    'ko-KR',
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }
+  );
+}
 
 export default function AdminWritePage() {
   const router = useRouter();
@@ -130,6 +182,13 @@ export default function AdminWritePage() {
     setOgImage,
   ] = useState('');
 
+  // 예약 발행 날짜·시간
+  // datetime-local은 현재 기기의 현지 시간을 사용한다.
+  const [
+    scheduledAt,
+    setScheduledAt,
+  ] = useState('');
+
   // 상태
   const [
     uploading,
@@ -149,6 +208,11 @@ export default function AdminWritePage() {
   const [
     publishing,
     setPublishing,
+  ] = useState(false);
+
+  const [
+    scheduling,
+    setScheduling,
   ] = useState(false);
 
   // 자동저장 상태
@@ -203,6 +267,19 @@ export default function AdminWritePage() {
 
   const lastSavedVersionRef =
     useRef(0);
+
+  const minimumScheduleDateTime =
+    toDateTimeLocalValue(
+      new Date(
+        Date.now() +
+          60 * 1000
+      )
+    );
+
+  const scheduledDateTimeLabel =
+    formatScheduledDateTime(
+      scheduledAt
+    );
 
   const clearAutoSaveTimer =
     useCallback(() => {
@@ -629,15 +706,14 @@ export default function AdminWritePage() {
     };
 
   // =========================================================
-  // 초안 저장 / 공개 발행 / 자동저장
+  // 초안 저장 / 즉시 공개 / 예약 발행 / 자동저장
   // =========================================================
 
   const handleSave =
     useCallback(
       async (
-        targetStatus:
-          'draft' |
-          'published',
+        target:
+          SaveTarget,
         options: SaveOptions = {}
       ) => {
         const isAutoSave =
@@ -647,16 +723,20 @@ export default function AdminWritePage() {
           options.version ??
           latestChangeVersionRef.current;
 
-        // 수동 저장/발행을 누르면 예약된 자동저장 타이머를 먼저 정리
+        const isFinalAction =
+          target ===
+            'published' ||
+          target ===
+            'scheduled';
+
+        // 수동 저장·발행을 누르면 예약된 자동저장 타이머를 먼저 정리
         if (!isAutoSave) {
           clearAutoSaveTimer();
         }
 
-        // 공개 발행 중에는 자동저장이 절대 실행되지 않도록 잠금
-        if (
-          targetStatus ===
-          'published'
-        ) {
+        // 즉시 공개 또는 예약 발행 중에는
+        // 자동저장이 끼어들지 않도록 잠근다.
+        if (isFinalAction) {
           publishingRef.current =
             true;
         }
@@ -665,10 +745,7 @@ export default function AdminWritePage() {
         if (
           saveInFlightRef.current
         ) {
-          if (
-            targetStatus ===
-            'published'
-          ) {
+          if (isFinalAction) {
             publishingRef.current =
               false;
           }
@@ -676,17 +753,19 @@ export default function AdminWritePage() {
           return;
         }
 
-        // 공개 발행은 제목 필수
+        // 즉시 공개와 예약 발행은 제목 필수
         if (
-          targetStatus ===
-            'published' &&
+          isFinalAction &&
           !title.trim()
         ) {
           publishingRef.current =
             false;
 
           alert(
-            '공개 발행하려면 제목을 입력해주세요.'
+            target ===
+              'scheduled'
+              ? '예약 발행하려면 제목을 입력해주세요.'
+              : '공개 발행하려면 제목을 입력해주세요.'
           );
 
           return;
@@ -710,6 +789,63 @@ export default function AdminWritePage() {
             false;
 
           return;
+        }
+
+        let scheduledAtIso:
+          string |
+          null = null;
+
+        if (
+          target ===
+          'scheduled'
+        ) {
+          if (!scheduledAt) {
+            publishingRef.current =
+              false;
+
+            alert(
+              '예약 발행 날짜와 시간을 선택해주세요.'
+            );
+
+            return;
+          }
+
+          const scheduleDate =
+            new Date(
+              scheduledAt
+            );
+
+          if (
+            Number.isNaN(
+              scheduleDate.getTime()
+            )
+          ) {
+            publishingRef.current =
+              false;
+
+            alert(
+              '예약 날짜와 시간을 다시 선택해주세요.'
+            );
+
+            return;
+          }
+
+          if (
+            scheduleDate.getTime() <=
+            Date.now()
+          ) {
+            publishingRef.current =
+              false;
+
+            alert(
+              '예약 시간은 현재보다 미래로 설정해주세요.'
+            );
+
+            return;
+          }
+
+          scheduledAtIso =
+            scheduleDate.toISOString();
         }
 
         const htmlContent =
@@ -745,6 +881,12 @@ export default function AdminWritePage() {
           title.trim() ||
           '제목 없는 초안';
 
+        const databaseStatus =
+          target ===
+          'published'
+            ? 'published'
+            : 'draft';
+
         const snapshot =
           JSON.stringify({
             title:
@@ -769,7 +911,9 @@ export default function AdminWritePage() {
               ogImage.trim() ||
               null,
             status:
-              targetStatus,
+              databaseStatus,
+            scheduled_at:
+              scheduledAtIso,
           });
 
         // 같은 내용은 자동저장 요청을 다시 보내지 않음
@@ -795,7 +939,7 @@ export default function AdminWritePage() {
 
         try {
           if (
-            targetStatus ===
+            target ===
             'draft'
           ) {
             if (isAutoSave) {
@@ -807,6 +951,13 @@ export default function AdminWritePage() {
                 true
               );
             }
+          } else if (
+            target ===
+            'scheduled'
+          ) {
+            setScheduling(
+              true
+            );
           } else {
             setPublishing(
               true
@@ -847,13 +998,16 @@ export default function AdminWritePage() {
               null,
 
             status:
-              targetStatus,
+              databaseStatus,
 
             published_at:
-              targetStatus ===
+              target ===
               'published'
                 ? now
                 : null,
+
+            scheduled_at:
+              scheduledAtIso,
 
             updated_at:
               now,
@@ -960,7 +1114,7 @@ export default function AdminWritePage() {
           // =====================================================
 
           if (
-            targetStatus ===
+            target ===
             'draft'
           ) {
             lastSavedSnapshotRef.current =
@@ -996,7 +1150,7 @@ export default function AdminWritePage() {
               );
 
               alert(
-                '초안으로 저장되었습니다! 💾\n계속 작성한 뒤 다시 초안 저장하거나 공개 발행할 수 있습니다.'
+                '초안으로 저장되었습니다! 💾\n계속 작성한 뒤 다시 초안 저장하거나 공개·예약 발행할 수 있습니다.'
               );
             }
 
@@ -1004,7 +1158,43 @@ export default function AdminWritePage() {
           }
 
           // =====================================================
-          // 공개 발행
+          // 예약 발행
+          // =====================================================
+
+          if (
+            target ===
+            'scheduled'
+          ) {
+            lastSavedSnapshotRef.current =
+              snapshot;
+
+            lastSavedVersionRef.current =
+              latestChangeVersionRef.current;
+
+            setAutoSaveStatus(
+              'saved'
+            );
+
+            alert(
+              `예약 발행이 등록되었습니다! ⏰\n\n${formatScheduledDateTime(
+                scheduledAt
+              )}\n\n예약 전에는 초안으로 유지되고, 시간이 되면 자동 공개됩니다.`
+            );
+
+            router.push(
+              '/admin/manage'
+            );
+
+            router.refresh();
+
+            void savedPostId;
+            void savedSlug;
+
+            return;
+          }
+
+          // =====================================================
+          // 즉시 공개 발행
           // =====================================================
 
           alert(
@@ -1048,6 +1238,10 @@ export default function AdminWritePage() {
           );
 
           setOgImage(
+            ''
+          );
+
+          setScheduledAt(
             ''
           );
 
@@ -1119,13 +1313,18 @@ export default function AdminWritePage() {
               'error'
             );
           } else {
-            alert(
-              targetStatus ===
+            const errorPrefix =
+              target ===
               'draft'
-                ? '초안 저장 실패: ' +
-                    error.message
-                : '글 발행 실패: ' +
-                    error.message
+                ? '초안 저장 실패: '
+                : target ===
+                    'scheduled'
+                  ? '예약 발행 실패: '
+                  : '글 발행 실패: ';
+
+            alert(
+              errorPrefix +
+                error.message
             );
           }
         } finally {
@@ -1140,10 +1339,11 @@ export default function AdminWritePage() {
             false
           );
 
-          if (
-            targetStatus ===
-            'published'
-          ) {
+          setScheduling(
+            false
+          );
+
+          if (isFinalAction) {
             publishingRef.current =
               false;
           }
@@ -1158,6 +1358,7 @@ export default function AdminWritePage() {
         metaDescription,
         ogImage,
         router,
+        scheduledAt,
         seoTitle,
         subcategory,
         title,
@@ -1180,6 +1381,7 @@ export default function AdminWritePage() {
       uploading ||
       ogUploading ||
       publishing ||
+      scheduling ||
       publishingRef.current
     ) {
       return;
@@ -1222,6 +1424,7 @@ export default function AdminWritePage() {
     handleSave,
     ogUploading,
     publishing,
+    scheduling,
     subcategoriesLoading,
     uploading,
   ]);
@@ -1297,6 +1500,7 @@ export default function AdminWritePage() {
             disabled={
               draftSaving ||
               publishing ||
+              scheduling ||
               autoSaveStatus === 'saving' ||
               categoriesLoading ||
               subcategoriesLoading ||
@@ -1316,12 +1520,37 @@ export default function AdminWritePage() {
             type="button"
             onClick={() =>
               handleSave(
+                'scheduled'
+              )
+            }
+            disabled={
+              draftSaving ||
+              publishing ||
+              scheduling ||
+              autoSaveStatus === 'saving' ||
+              categoriesLoading ||
+              subcategoriesLoading ||
+              uploading ||
+              ogUploading
+            }
+            className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg"
+          >
+            {scheduling
+              ? '예약 등록 중...'
+              : '⏰ 예약 발행'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSave(
                 'published'
               )
             }
             disabled={
               draftSaving ||
               publishing ||
+              scheduling ||
               autoSaveStatus === 'saving' ||
               categoriesLoading ||
               subcategoriesLoading ||
@@ -1332,7 +1561,7 @@ export default function AdminWritePage() {
           >
             {publishing
               ? '발행 중...'
-              : '🚀 공개 발행'}
+              : '🚀 지금 공개'}
           </button>
 
         </div>
@@ -1379,9 +1608,85 @@ export default function AdminWritePage() {
 
       {currentPostId && (
         <div className="mb-6 px-4 py-3 rounded-xl border border-emerald-800 bg-emerald-950/40 text-sm text-emerald-300 font-bold">
-          ✓ 이 글은 현재 초안으로 저장되어 있습니다. 계속 작성한 뒤 다시 초안 저장하거나 공개 발행하세요.
+          ✓ 이 글은 현재 초안으로 저장되어 있습니다. 계속 작성한 뒤 초안 저장·예약 발행·즉시 공개할 수 있습니다.
         </div>
       )}
+
+      {/* =====================================================
+          예약 발행
+      ===================================================== */}
+
+      <div className="mb-6 rounded-2xl border border-violet-800 bg-violet-950/30 p-5">
+
+        <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+
+          <div className="flex-1">
+
+            <h2 className="text-lg font-black text-white">
+              ⏰ 예약 발행 설정
+            </h2>
+
+            <p className="text-xs text-slate-300 mt-1">
+              날짜와 시간을 선택한 뒤 상단의 ‘예약 발행’ 버튼을 누르세요. 버튼을 누르기 전에는 예약이 등록되지 않습니다.
+            </p>
+
+            <label className="block text-xs font-bold text-violet-300 mt-4 mb-2">
+              예약 날짜와 시간
+            </label>
+
+            <input
+              type="datetime-local"
+              value={
+                scheduledAt
+              }
+              min={
+                minimumScheduleDateTime
+              }
+              onChange={(e) =>
+                setScheduledAt(
+                  e.target.value
+                )
+              }
+              className="w-full bg-slate-950 border border-violet-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-400"
+            />
+
+          </div>
+
+          <div className="lg:w-[310px] rounded-xl border border-violet-800/70 bg-slate-950/70 px-4 py-4">
+
+            <p className="text-xs font-black text-violet-300">
+              예약 상태
+            </p>
+
+            <p className="text-sm font-bold text-white mt-2">
+              {scheduledDateTimeLabel
+                ? scheduledDateTimeLabel
+                : '아직 날짜와 시간을 선택하지 않았습니다.'}
+            </p>
+
+            <p className="text-xs text-slate-400 mt-2 leading-5">
+              현재 사용 중인 기기의 현지 시간 기준입니다. 예약 전에는 글이 초안으로 유지됩니다.
+            </p>
+
+            {scheduledAt && (
+              <button
+                type="button"
+                onClick={() =>
+                  setScheduledAt(
+                    ''
+                  )
+                }
+                className="mt-3 text-xs font-bold text-red-300 hover:text-red-200"
+              >
+                ✕ 예약 시간 지우기
+              </button>
+            )}
+
+          </div>
+
+        </div>
+
+      </div>
 
       {/* =====================================================
           기본 정보

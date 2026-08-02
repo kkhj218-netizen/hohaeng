@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/app/lib/supabase';
 import ViewCounter from './ViewCounter';
 import ShareButtons from './ShareButtons';
+import EngagementTracker from './EngagementTracker';
 
 export const dynamic = 'force-dynamic';
 
@@ -828,6 +829,11 @@ export default async function BlogDetailPage({
 
   return (
     <main className="min-h-screen bg-[#f6f7f9]">
+
+      <EngagementTracker
+        title={post.title}
+        slug={post.slug}
+      />
 
       <script
         type="application/ld+json"

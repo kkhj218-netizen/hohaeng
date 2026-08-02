@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import { supabase } from '@/app/lib/supabase';
 import ViewCounter from './ViewCounter';
+import ShareButtons from './ShareButtons';
 
 export const dynamic = 'force-dynamic';
 
@@ -936,6 +937,16 @@ export default async function BlogDetailPage({
                 post.content ||
                 '',
             }}
+          />
+
+          {/* =================================================
+              공유 버튼
+          ================================================= */}
+
+          <ShareButtons
+            title={post.title}
+            description={post.description}
+            slug={post.slug}
           />
 
           {/* =================================================

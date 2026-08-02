@@ -40,6 +40,16 @@ type Category = {
   is_active: boolean;
 };
 
+type Subcategory = {
+  id: number;
+  category_slug: string;
+  slug: string;
+  name: string;
+  emoji: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
 const DEFAULT_EDITOR_CONTENT =
   '<p>여기에 블로그 글을 자유롭게 작성하세요...</p>';
 
@@ -85,6 +95,24 @@ export default function AdminWritePage() {
     categoriesLoading,
     setCategoriesLoading,
   ] = useState(true);
+
+  // 세부주제
+  const [
+    subcategories,
+    setSubcategories,
+  ] = useState<Subcategory[]>([]);
+
+  const [
+    subcategoriesLoading,
+    setSubcategoriesLoading,
+  ] = useState(true);
+
+  const filteredSubcategories =
+    subcategories.filter(
+      (item) =>
+        item.category_slug ===
+        category
+    );
 
   // SEO
   const [
@@ -213,38 +241,68 @@ export default function AdminWritePage() {
     }, []);
 
   // =========================================================
-  // 카테고리 불러오기
+  // 카테고리 + 세부주제 불러오기
   // =========================================================
 
   useEffect(() => {
-    const loadCategories =
+    const loadCategoriesAndSubcategories =
       async () => {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('categories')
-          .select(
-            'id, slug, name, emoji, sort_order, is_active'
-          )
-          .eq(
-            'is_active',
-            true
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            }
-          );
+        const [
+          categoryResult,
+          subcategoryResult,
+        ] = await Promise.all([
+          supabase
+            .from('categories')
+            .select(
+              'id, slug, name, emoji, sort_order, is_active'
+            )
+            .eq(
+              'is_active',
+              true
+            )
+            .order(
+              'sort_order',
+              {
+                ascending: true,
+              }
+            ),
 
-        if (error) {
+          supabase
+            .from('subcategories')
+            .select(
+              'id, category_slug, slug, name, emoji, sort_order, is_active'
+            )
+            .eq(
+              'is_active',
+              true
+            )
+            .order(
+              'category_slug',
+              {
+                ascending: true,
+              }
+            )
+            .order(
+              'sort_order',
+              {
+                ascending: true,
+              }
+            ),
+        ]);
+
+        if (
+          categoryResult.error
+        ) {
           console.error(
             '카테고리 불러오기 오류:',
-            error
+            categoryResult.error
           );
 
           setCategoriesLoading(
+            false
+          );
+
+          setSubcategoriesLoading(
             false
           );
 
@@ -252,7 +310,7 @@ export default function AdminWritePage() {
         }
 
         const activeCategories =
-          (data ||
+          (categoryResult.data ||
             []) as Category[];
 
         setCategories(
@@ -274,12 +332,32 @@ export default function AdminWritePage() {
           );
         }
 
+        if (
+          subcategoryResult.error
+        ) {
+          console.error(
+            '세부주제 불러오기 오류:',
+            subcategoryResult.error
+          );
+
+          setSubcategories([]);
+        } else {
+          setSubcategories(
+            (subcategoryResult.data ||
+              []) as Subcategory[]
+          );
+        }
+
         setCategoriesLoading(
+          false
+        );
+
+        setSubcategoriesLoading(
           false
         );
       };
 
-    loadCategories();
+    void loadCategoriesAndSubcategories();
   }, []);
 
   // =========================================================
@@ -1098,6 +1176,7 @@ export default function AdminWritePage() {
       !editor ||
       !category ||
       categoriesLoading ||
+      subcategoriesLoading ||
       uploading ||
       ogUploading ||
       publishing ||
@@ -1143,6 +1222,7 @@ export default function AdminWritePage() {
     handleSave,
     ogUploading,
     publishing,
+    subcategoriesLoading,
     uploading,
   ]);
 
@@ -1219,6 +1299,7 @@ export default function AdminWritePage() {
               publishing ||
               autoSaveStatus === 'saving' ||
               categoriesLoading ||
+              subcategoriesLoading ||
               uploading ||
               ogUploading
             }
@@ -1243,6 +1324,7 @@ export default function AdminWritePage() {
               publishing ||
               autoSaveStatus === 'saving' ||
               categoriesLoading ||
+              subcategoriesLoading ||
               uploading ||
               ogUploading
             }
@@ -1348,7 +1430,7 @@ export default function AdminWritePage() {
                 }
                 className="text-xs font-bold text-blue-400 hover:text-blue-300"
               >
-                ⚙️ 카테고리 관리
+                ⚙️ 카테고리·세부주제 관리
               </button>
 
             </div>
@@ -1358,9 +1440,16 @@ export default function AdminWritePage() {
                 category
               }
               onChange={(e) => {
+                const nextCategory =
+                  e.target.value;
+
                 setCategory(
-                  e.target.value
+                  nextCategory
                 );
+
+                // 카테고리가 바뀌면 이전 카테고리의
+                // 세부주제가 잘못 연결되지 않도록 초기화
+                setSubcategory('');
 
                 markChanged();
               }}
@@ -1410,13 +1499,17 @@ export default function AdminWritePage() {
 
           <div>
 
-            <label className="block text-xs font-bold text-slate-400 mb-1">
-              세부 주제
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-400">
+                세부 주제
+              </label>
 
-            <input
-              type="text"
-              placeholder="예: invest, routine, dividend"
+              <span className="text-[11px] font-bold text-violet-400">
+                선택한 카테고리와 자동 연동
+              </span>
+            </div>
+
+            <select
               value={
                 subcategory
               }
@@ -1427,8 +1520,38 @@ export default function AdminWritePage() {
 
                 markChanged();
               }}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white"
-            />
+              disabled={
+                categoriesLoading ||
+                subcategoriesLoading ||
+                !category
+              }
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-violet-500 disabled:opacity-50"
+            >
+              <option value="">
+                세부주제 없음
+              </option>
+
+              {filteredSubcategories.map(
+                (item) => (
+                  <option
+                    key={item.id}
+                    value={item.slug}
+                  >
+                    {item.emoji ||
+                      '•'}{' '}
+                    {item.name}
+                  </option>
+                )
+              )}
+            </select>
+
+            <p className="text-xs text-slate-500 mt-1">
+              {subcategoriesLoading
+                ? '세부주제를 불러오는 중입니다.'
+                : filteredSubcategories.length > 0
+                  ? `${filteredSubcategories.length}개의 활성 세부주제 중에서 선택할 수 있습니다.`
+                  : '이 카테고리에 등록된 활성 세부주제가 없습니다.'}
+            </p>
 
           </div>
 

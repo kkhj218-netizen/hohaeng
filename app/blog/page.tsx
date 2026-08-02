@@ -1,24 +1,21 @@
 import Link from 'next/link';
+
 import { supabase } from '@/app/lib/supabase';
 
 export const dynamic = 'force-dynamic';
+
+const POSTS_PER_PAGE = 12;
 
 type Post = {
   id: string;
   title: string;
   slug: string;
   content?: string | null;
-
   category?: string | null;
   subcategory?: string | null;
-
   description?: string | null;
   created_at?: string | null;
-
-  // 대표 이미지
   og_image?: string | null;
-
-  // 조회수
   view_count?: number | null;
 };
 
@@ -31,43 +28,26 @@ type Category = {
   is_active: boolean;
 };
 
-function getPostTimestamp(
-  post: Post
-) {
+function getPostTimestamp(post: Post) {
   if (post.created_at) {
-    const time =
-      new Date(
-        post.created_at
-      ).getTime();
+    const time = new Date(post.created_at).getTime();
 
-    if (
-      !Number.isNaN(time)
-    ) {
+    if (!Number.isNaN(time)) {
       return time;
     }
   }
 
-  const timestamp =
-    Number(
-      post.slug
-        .split('-')
-        .pop()
-    );
+  const timestamp = Number(
+    post.slug.split('-').pop()
+  );
 
-  return Number.isNaN(
-    timestamp
-  )
+  return Number.isNaN(timestamp)
     ? 0
     : timestamp;
 }
 
-function formatDate(
-  post: Post
-) {
-  const timestamp =
-    getPostTimestamp(
-      post
-    );
+function formatDate(post: Post) {
+  const timestamp = getPostTimestamp(post);
 
   if (!timestamp) {
     return '';
@@ -80,9 +60,27 @@ function formatDate(
       month: '2-digit',
       day: '2-digit',
     }
-  ).format(
-    new Date(timestamp)
-  );
+  ).format(new Date(timestamp));
+}
+
+function getSafePage(value?: string) {
+  const parsed = Number(value);
+
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1
+  ) {
+    return 1;
+  }
+
+  return parsed;
+}
+
+function getSafeSearchTerm(value: string) {
+  return value
+    .replace(/[%_,()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export default async function BlogListPage({
@@ -94,10 +92,10 @@ export default async function BlogListPage({
     sub?: string;
     year?: string;
     q?: string;
+    page?: string;
   }>;
 }) {
-  const params =
-    await searchParams;
+  const params = await searchParams;
 
   const requestedCategory =
     params.category ||
@@ -116,93 +114,38 @@ export default async function BlogListPage({
     params.q?.trim() ||
     '';
 
-  const normalizedQuery =
-    query.toLowerCase();
+  const currentPage =
+    getSafePage(
+      params.page
+    );
 
   // =========================================================
-  // 카테고리 + 글 동시에 불러오기
+  // 활성 카테고리 불러오기
   // =========================================================
 
-  const [
-    categoryResult,
-    postResult,
-  ] =
-    await Promise.all([
-      supabase
-        .from(
-          'categories'
-        )
-        .select(
-          'id, slug, name, emoji, sort_order, is_active'
-        )
-        .eq(
-          'is_active',
-          true
-        )
-        .order(
-          'sort_order',
-          {
-            ascending:
-              true,
-          }
-        ),
-
-      supabase
-        .from('posts')
-        .select(
-          'id, title, slug, content, category, subcategory, description, created_at, og_image, view_count'
-        ),
-    ]);
-
   const {
-    data:
-      categoryData,
-    error:
-      categoryError,
-  } =
-    categoryResult;
+    data: categoryData,
+    error: categoryError,
+  } = await supabase
+    .from('categories')
+    .select(
+      'id, slug, name, emoji, sort_order, is_active'
+    )
+    .eq(
+      'is_active',
+      true
+    )
+    .order(
+      'sort_order',
+      {
+        ascending: true,
+      }
+    );
 
-  const {
-    data:
-      postData,
-    error:
-      postError,
-  } =
-    postResult;
-
-  if (
-    categoryError
-  ) {
+  if (categoryError) {
     console.error(
       '카테고리 불러오기 오류:',
       categoryError
-    );
-  }
-
-  if (
-    postError
-  ) {
-    console.error(
-      'Supabase 글 불러오기 오류:',
-      postError
-    );
-
-    return (
-      <main className="min-h-screen bg-[#f6f7f9]">
-
-        <div className="max-w-5xl mx-auto p-6">
-
-          <h1 className="text-3xl font-black text-slate-900 mb-6">
-            글을 불러올 수 없습니다.
-          </h1>
-
-          <p className="text-red-500">
-            Supabase 연결을 확인해주세요.
-          </p>
-
-        </div>
-
-      </main>
     );
   }
 
@@ -229,8 +172,7 @@ export default async function BlogListPage({
             item.slug ===
             'log'
         )?.slug ||
-        categories[0]
-          ?.slug ||
+        categories[0]?.slug ||
         'log';
 
   const currentCategory =
@@ -239,6 +181,132 @@ export default async function BlogListPage({
         item.slug ===
         category
     );
+
+  // =========================================================
+  // DB에서 필요한 공개글만 가져오기
+  // 페이지가 늘어날수록 12개씩 누적해서 표시
+  // =========================================================
+
+  const visibleLimit =
+    currentPage *
+    POSTS_PER_PAGE;
+
+  let postQuery = supabase
+    .from('posts')
+    .select(
+      'id, title, slug, content, category, subcategory, description, created_at, og_image, view_count',
+      {
+        count: 'exact',
+      }
+    )
+    .eq(
+      'status',
+      'published'
+    )
+    .eq(
+      'category',
+      category
+    );
+
+  if (
+    sub !==
+    'all'
+  ) {
+    postQuery =
+      postQuery.eq(
+        'subcategory',
+        sub
+      );
+  }
+
+  if (
+    year !==
+      'all' &&
+    /^\d{4}$/.test(
+      year
+    )
+  ) {
+    const startYear =
+      Number(year);
+
+    const startDate =
+      `${startYear}-01-01T00:00:00.000Z`;
+
+    const endDate =
+      `${startYear + 1}-01-01T00:00:00.000Z`;
+
+    postQuery =
+      postQuery
+        .gte(
+          'created_at',
+          startDate
+        )
+        .lt(
+          'created_at',
+          endDate
+        );
+  }
+
+  const safeSearchTerm =
+    getSafeSearchTerm(
+      query
+    );
+
+  if (safeSearchTerm) {
+    postQuery =
+      postQuery.or(
+        `title.ilike.%${safeSearchTerm}%,description.ilike.%${safeSearchTerm}%,subcategory.ilike.%${safeSearchTerm}%`
+      );
+  }
+
+  const {
+    data: postData,
+    error: postError,
+    count: postCount,
+  } = await postQuery
+    .order(
+      'created_at',
+      {
+        ascending: false,
+      }
+    )
+    .range(
+      0,
+      visibleLimit - 1
+    );
+
+  if (postError) {
+    console.error(
+      'Supabase 글 불러오기 오류:',
+      postError
+    );
+
+    return (
+      <main className="min-h-screen bg-[#f6f7f9]">
+        <div className="max-w-5xl mx-auto p-6">
+          <h1 className="text-3xl font-black text-slate-900 mb-6">
+            글을 불러올 수 없습니다.
+          </h1>
+
+          <p className="text-red-500">
+            Supabase 연결을 확인해주세요.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  const posts =
+    (postData ||
+      []) as Post[];
+
+  const totalPostCount =
+    postCount ??
+    posts.length;
+
+  const hasMore =
+    posts.length <
+    totalPostCount;
 
   // =========================================================
   // slug → 실제 카테고리 이름
@@ -275,7 +343,7 @@ export default async function BlogListPage({
     >;
 
   // =========================================================
-  // 카테고리 이동 주소
+  // URL 생성 함수
   // =========================================================
 
   const makeCategoryHref =
@@ -301,10 +369,6 @@ export default async function BlogListPage({
       return `/blog?${search.toString()}`;
     };
 
-  // =========================================================
-  // 세부 주제 이동 주소
-  // =========================================================
-
   const makeSubHref =
     (
       targetSub:
@@ -318,10 +382,25 @@ export default async function BlogListPage({
         'log'
       );
 
-      search.set(
-        'sub',
-        targetSub
-      );
+      if (
+        targetSub !==
+        'all'
+      ) {
+        search.set(
+          'sub',
+          targetSub
+        );
+      }
+
+      if (
+        year !==
+        'all'
+      ) {
+        search.set(
+          'year',
+          year
+        );
+      }
 
       if (query) {
         search.set(
@@ -333,120 +412,67 @@ export default async function BlogListPage({
       return `/blog?${search.toString()}`;
     };
 
-  // =========================================================
-  // 정렬 + 필터 + 검색
-  // =========================================================
+  const makeLoadMoreHref =
+    () => {
+      const search =
+        new URLSearchParams();
 
-  const posts =
-    ((postData ||
-      []) as Post[])
-      .sort(
-        (
-          a,
-          b
-        ) =>
-          getPostTimestamp(
-            b
-          ) -
-          getPostTimestamp(
-            a
-          )
-      )
-      .filter(
-        (post) => {
-          // 카테고리
-          const matchCategory =
-            post.category ===
-            category;
-
-          // 세부 주제
-          const matchSub =
-            sub === 'all' ||
-            post.subcategory ===
-              sub;
-
-          // 연도
-          let matchYear =
-            true;
-
-          if (
-            year !==
-            'all'
-          ) {
-            const timestamp =
-              getPostTimestamp(
-                post
-              );
-
-            if (timestamp) {
-              matchYear =
-                String(
-                  new Date(
-                    timestamp
-                  ).getFullYear()
-                ) ===
-                year;
-            }
-          }
-
-          // 검색
-          let matchSearch =
-            true;
-
-          if (
-            normalizedQuery
-          ) {
-            const categoryName =
-              categoryLabelMap[
-                post.category ||
-                  ''
-              ] || '';
-
-            const searchableText =
-              [
-                post.title,
-                post.description,
-                post.subcategory,
-                categoryName,
-              ]
-                .filter(
-                  Boolean
-                )
-                .join(' ')
-                .toLowerCase();
-
-            matchSearch =
-              searchableText.includes(
-                normalizedQuery
-              );
-          }
-
-          return (
-            matchCategory &&
-            matchSub &&
-            matchYear &&
-            matchSearch
-          );
-        }
+      search.set(
+        'category',
+        category
       );
+
+      if (
+        sub !==
+        'all'
+      ) {
+        search.set(
+          'sub',
+          sub
+        );
+      }
+
+      if (
+        year !==
+        'all'
+      ) {
+        search.set(
+          'year',
+          year
+        );
+      }
+
+      if (query) {
+        search.set(
+          'q',
+          query
+        );
+      }
+
+      search.set(
+        'page',
+        String(
+          currentPage +
+          1
+        )
+      );
+
+      return `/blog?${search.toString()}`;
+    };
 
   return (
     <main className="min-h-screen bg-[#f6f7f9]">
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-
         {/* =====================================================
             상단 제목
         ===================================================== */}
 
         <div className="mb-8">
-
           <p className="text-xs font-black text-blue-600 tracking-[0.16em] mb-2">
             HOHAENG BLOG
           </p>
 
           <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-[-0.03em]">
-
             {currentCategory
               ? `${
                   currentCategory.emoji ||
@@ -455,7 +481,6 @@ export default async function BlogListPage({
                   currentCategory.name
                 }`
               : '📚 호행의 글'}
-
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 mt-3">
@@ -465,13 +490,10 @@ export default async function BlogListPage({
           <p className="text-xs text-slate-400 mt-2">
             총{' '}
             <strong className="text-slate-700">
-              {
-                posts.length
-              }
+              {totalPostCount}
             </strong>
             개의 글
           </p>
-
         </div>
 
         {/* =====================================================
@@ -479,13 +501,11 @@ export default async function BlogListPage({
         ===================================================== */}
 
         <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-sm">
-
           <form
             action="/blog"
             method="GET"
             className="flex flex-col sm:flex-row gap-2"
           >
-
             <input
               type="hidden"
               name="category"
@@ -494,32 +514,29 @@ export default async function BlogListPage({
               }
             />
 
-            {category ===
-              'log' &&
-              sub !==
-                'all' && (
-                <input
-                  type="hidden"
-                  name="sub"
-                  value={
-                    sub
-                  }
-                />
-              )}
+            {sub !==
+              'all' && (
+              <input
+                type="hidden"
+                name="sub"
+                value={
+                  sub
+                }
+              />
+            )}
 
             {year !==
               'all' && (
-                <input
-                  type="hidden"
-                  name="year"
-                  value={
-                    year
-                  }
-                />
-              )}
+              <input
+                type="hidden"
+                name="year"
+                value={
+                  year
+                }
+              />
+            )}
 
             <div className="relative flex-1">
-
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                 🔎
               </span>
@@ -533,7 +550,6 @@ export default async function BlogListPage({
                 placeholder="글 제목, 설명, 주제를 검색하세요"
                 className="w-full border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-slate-900 bg-slate-50 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
-
             </div>
 
             <button
@@ -542,29 +558,23 @@ export default async function BlogListPage({
             >
               검색
             </button>
-
           </form>
 
           {query && (
             <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100">
-
               <p className="text-sm text-slate-600">
-
                 <span className="font-black text-slate-900">
                   &quot;
                   {query}
                   &quot;
                 </span>{' '}
-
                 검색 결과{' '}
-
                 <span className="font-black text-blue-600">
                   {
-                    posts.length
+                    totalPostCount
                   }
                   개
                 </span>
-
               </p>
 
               <Link
@@ -573,10 +583,8 @@ export default async function BlogListPage({
               >
                 ✕ 검색 초기화
               </Link>
-
             </div>
           )}
-
         </div>
 
         {/* =====================================================
@@ -584,7 +592,6 @@ export default async function BlogListPage({
         ===================================================== */}
 
         <div className="flex flex-wrap gap-2 mb-6">
-
           {categories.map(
             (item) => (
               <Link
@@ -609,7 +616,6 @@ export default async function BlogListPage({
               </Link>
             )
           )}
-
         </div>
 
         {/* =====================================================
@@ -619,13 +625,11 @@ export default async function BlogListPage({
         {category ===
           'log' && (
           <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-8 shadow-sm">
-
             <p className="text-xs font-bold text-slate-400 mb-3">
               세부 주제
             </p>
 
             <div className="flex flex-wrap gap-2">
-
               <Link
                 href={
                   makeSubHref(
@@ -689,9 +693,7 @@ export default async function BlogListPage({
               >
                 🏃 일상/루틴
               </Link>
-
             </div>
-
           </div>
         )}
 
@@ -701,19 +703,15 @@ export default async function BlogListPage({
 
         {posts.length ===
         0 ? (
-
           <div className="bg-white border border-slate-200 rounded-[24px] p-12 text-center shadow-sm">
-
             <div className="text-5xl mb-4">
               🔎
             </div>
 
             <p className="text-slate-900 font-black text-lg">
-
               {query
                 ? '검색 결과가 없습니다.'
                 : '아직 등록된 글이 없습니다.'}
-
             </p>
 
             {query && (
@@ -721,243 +719,244 @@ export default async function BlogListPage({
                 다른 검색어로 다시 검색해보세요.
               </p>
             )}
-
           </div>
-
         ) : (
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 sm:gap-6">
-
-            {posts.map(
-              (post) => {
-                const categoryLabel =
-                  categoryLabelMap[
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 sm:gap-6">
+              {posts.map(
+                (post) => {
+                  const categoryLabel =
+                    categoryLabelMap[
+                      post.category ||
+                        ''
+                    ] ||
                     post.category ||
-                      ''
-                  ] ||
-                  post.category ||
-                  'BLOG';
+                    'BLOG';
 
-                const categoryEmoji =
-                  categoryEmojiMap[
-                    post.category ||
-                      ''
-                  ] ||
-                  '📚';
+                  const categoryEmoji =
+                    categoryEmojiMap[
+                      post.category ||
+                        ''
+                    ] ||
+                    '📚';
 
-                return (
-                  <Link
-                    key={
-                      post.id
-                    }
-                    href={`/blog/${post.slug}`}
-                    className="
-                      group
-                      flex
-                      flex-col
-                      overflow-hidden
-                      bg-white
-                      border
-                      border-slate-200
-                      rounded-[22px]
-                      shadow-sm
-                      hover:shadow-xl
-                      hover:-translate-y-1
-                      hover:border-blue-200
-                      transition-all
-                      duration-300
-                    "
-                  >
-
-                    {/* =========================================
-                        대표 이미지
-                    ========================================= */}
-
-                    <div className="relative aspect-[16/9] overflow-hidden bg-slate-100">
-
-                      {post.og_image ? (
-
-                        <img
-                          src={
-                            post.og_image
-                          }
-                          alt={
-                            post.title
-                          }
-                          className="
+                  return (
+                    <Link
+                      key={
+                        post.id
+                      }
+                      href={`/blog/${post.slug}`}
+                      className="
+                        group
+                        flex
+                        flex-col
+                        overflow-hidden
+                        bg-white
+                        border
+                        border-slate-200
+                        rounded-[22px]
+                        shadow-sm
+                        hover:shadow-xl
+                        hover:-translate-y-1
+                        hover:border-blue-200
+                        transition-all
+                        duration-300
+                      "
+                    >
+                      {/* 대표 이미지 */}
+                      <div className="relative aspect-[16/9] overflow-hidden bg-slate-100">
+                        {post.og_image ? (
+                          <img
+                            src={
+                              post.og_image
+                            }
+                            alt={
+                              post.title
+                            }
+                            className="
+                              w-full
+                              h-full
+                              object-cover
+                              group-hover:scale-[1.035]
+                              transition-transform
+                              duration-500
+                            "
+                          />
+                        ) : (
+                          <div className="
                             w-full
                             h-full
-                            object-cover
-                            group-hover:scale-[1.035]
-                            transition-transform
-                            duration-500
-                          "
-                        />
-
-                      ) : (
-
-                        <div className="
-                          w-full
-                          h-full
-                          flex
-                          flex-col
-                          items-center
-                          justify-center
-                          bg-gradient-to-br
-                          from-slate-50
-                          via-blue-50
-                          to-slate-100
-                        ">
-
-                          <span className="text-5xl sm:text-6xl mb-3">
-                            {
-                              categoryEmoji
-                            }
-                          </span>
-
-                          <span className="text-xs font-black text-slate-400 tracking-[0.15em]">
-                            HOHAENG
-                          </span>
-
-                        </div>
-
-                      )}
-
-                      {/* 카테고리 뱃지 */}
-                      <div className="absolute top-3 left-3">
-
-                        <span className="
-                          inline-flex
-                          items-center
-                          rounded-full
-                          bg-white/95
-                          backdrop-blur
-                          px-3
-                          py-1.5
-                          text-[11px]
-                          font-black
-                          text-slate-800
-                          shadow-sm
-                          border
-                          border-white/70
-                        ">
-                          {
-                            categoryLabel
-                          }
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                    {/* =========================================
-                        글 정보
-                    ========================================= */}
-
-                    <div className="flex flex-col flex-1 p-5 sm:p-6">
-
-                      {/* 세부 주제 */}
-                      {post.subcategory && (
-                        <div className="mb-3">
-
-                          <span className="inline-flex text-[11px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
-                            #
-                            {
-                              post.subcategory
-                            }
-                          </span>
-
-                        </div>
-                      )}
-
-                      {/* 제목 */}
-                      <h2 className="
-                        text-[20px]
-                        sm:text-[22px]
-                        font-black
-                        leading-[1.4]
-                        tracking-[-0.02em]
-                        text-slate-950
-                        group-hover:text-blue-600
-                        transition-colors
-                        line-clamp-2
-                      ">
-                        {
-                          post.title
-                        }
-                      </h2>
-
-                      {/* 설명 */}
-                      <div className="flex-1">
-
-                        {post.description ? (
-
-                          <p className="
-                            text-sm
-                            sm:text-[15px]
-                            text-slate-500
-                            leading-6
-                            mt-3
-                            line-clamp-2
+                            flex
+                            flex-col
+                            items-center
+                            justify-center
+                            bg-gradient-to-br
+                            from-slate-50
+                            via-blue-50
+                            to-slate-100
                           ">
-                            {
-                              post.description
-                            }
-                          </p>
+                            <span className="text-5xl sm:text-6xl mb-3">
+                              {
+                                categoryEmoji
+                              }
+                            </span>
 
-                        ) : (
-
-                          <p className="text-sm text-slate-400 mt-3">
-                            글을 눌러 내용을 확인해보세요.
-                          </p>
-
+                            <span className="text-xs font-black text-slate-400 tracking-[0.15em]">
+                              HOHAENG
+                            </span>
+                          </div>
                         )}
 
+                        <div className="absolute top-3 left-3">
+                          <span className="
+                            inline-flex
+                            items-center
+                            rounded-full
+                            bg-white/95
+                            backdrop-blur
+                            px-3
+                            py-1.5
+                            text-[11px]
+                            font-black
+                            text-slate-800
+                            shadow-sm
+                            border
+                            border-white/70
+                          ">
+                            {
+                              categoryLabel
+                            }
+                          </span>
+                        </div>
                       </div>
 
-                      {/* 날짜 + 조회수 */}
-                      <div className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-3
-                        border-t
-                        border-slate-100
-                        mt-5
-                        pt-4
-                        text-xs
-                        text-slate-400
-                      ">
+                      {/* 글 정보 */}
+                      <div className="flex flex-col flex-1 p-5 sm:p-6">
+                        {post.subcategory && (
+                          <div className="mb-3">
+                            <span className="inline-flex text-[11px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                              #
+                              {
+                                post.subcategory
+                              }
+                            </span>
+                          </div>
+                        )}
 
-                        <span>
-                          {formatDate(
-                            post
-                          ) || '날짜 없음'}
-                        </span>
+                        <h2 className="
+                          text-[20px]
+                          sm:text-[22px]
+                          font-black
+                          leading-[1.4]
+                          tracking-[-0.02em]
+                          text-slate-950
+                          group-hover:text-blue-600
+                          transition-colors
+                          line-clamp-2
+                        ">
+                          {
+                            post.title
+                          }
+                        </h2>
 
-                        <span className="inline-flex items-center gap-1">
-                          👁{' '}
-                          {(post.view_count ||
-                            0).toLocaleString(
-                            'ko-KR'
+                        <div className="flex-1">
+                          {post.description ? (
+                            <p className="
+                              text-sm
+                              sm:text-[15px]
+                              text-slate-500
+                              leading-6
+                              mt-3
+                              line-clamp-2
+                            ">
+                              {
+                                post.description
+                              }
+                            </p>
+                          ) : (
+                            <p className="text-sm text-slate-400 mt-3">
+                              글을 눌러 내용을 확인해보세요.
+                            </p>
                           )}
-                        </span>
+                        </div>
 
+                        <div className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+                          border-t
+                          border-slate-100
+                          mt-5
+                          pt-4
+                          text-xs
+                          text-slate-400
+                        ">
+                          <span>
+                            {formatDate(
+                              post
+                            ) ||
+                              '날짜 없음'}
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            👁{' '}
+                            {(
+                              post.view_count ||
+                              0
+                            ).toLocaleString(
+                              'ko-KR'
+                            )}
+                          </span>
+                        </div>
                       </div>
+                    </Link>
+                  );
+                }
+              )}
+            </div>
 
-                    </div>
+            {/* 더보기 */}
+            <div className="flex flex-col items-center gap-3 mt-10">
+              <p className="text-sm text-slate-500">
+                총{' '}
+                <strong className="text-slate-800">
+                  {
+                    totalPostCount
+                  }
+                </strong>
+                개 중{' '}
+                <strong className="text-blue-600">
+                  {
+                    posts.length
+                  }
+                </strong>
+                개 표시
+              </p>
 
-                  </Link>
-                );
-              }
-            )}
+              {hasMore && (
+                <Link
+                  href={
+                    makeLoadMoreHref()
+                  }
+                  scroll={
+                    false
+                  }
+                  className="inline-flex items-center justify-center min-w-[220px] px-7 py-3.5 rounded-xl bg-slate-900 hover:bg-blue-600 text-white font-black shadow-sm hover:shadow-lg transition-all"
+                >
+                  ＋ 글 12개 더보기
+                </Link>
+              )}
 
-          </div>
-
+              {!hasMore && (
+                <p className="text-xs font-bold text-slate-400">
+                  모든 글을 불러왔습니다.
+                </p>
+              )}
+            </div>
+          </>
         )}
-
       </div>
-
     </main>
   );
 }

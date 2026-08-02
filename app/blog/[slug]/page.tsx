@@ -18,6 +18,8 @@ type Post = {
 
   description?: string | null;
   created_at?: string | null;
+  published_at?: string | null;
+  status?: 'draft' | 'published' | null;
 
   // SEO
   seo_title?: string | null;
@@ -33,6 +35,13 @@ type Category = {
   name: string;
   emoji: string | null;
   is_active: boolean;
+};
+
+type AdjacentPost = {
+  id: string;
+  title: string;
+  slug: string;
+  created_at: string | null;
 };
 
 function getPostTimestamp(
@@ -114,6 +123,10 @@ export async function generateMetadata({
     .eq(
       'slug',
       slug
+    )
+    .eq(
+      'status',
+      'published'
     )
     .maybeSingle();
 
@@ -257,6 +270,10 @@ export default async function BlogDetailPage({
       'slug',
       slug
     )
+    .eq(
+      'status',
+      'published'
+    )
     .maybeSingle();
 
   if (error) {
@@ -318,6 +335,90 @@ export default async function BlogDetailPage({
       categoryData as
         | Category
         | null;
+  }
+
+  // =========================================================
+  // 이전 글 / 다음 글 불러오기
+  // 공개된 글만 작성일 순서로 연결한다.
+  // =========================================================
+
+  let previousPost:
+    | AdjacentPost
+    | null = null;
+
+  let nextPost:
+    | AdjacentPost
+    | null = null;
+
+  if (post.created_at) {
+    const [
+      previousResult,
+      nextResult,
+    ] = await Promise.all([
+      supabase
+        .from('posts')
+        .select(
+          'id, title, slug, created_at'
+        )
+        .eq(
+          'status',
+          'published'
+        )
+        .lt(
+          'created_at',
+          post.created_at
+        )
+        .order(
+          'created_at',
+          { ascending: false }
+        )
+        .limit(1)
+        .maybeSingle(),
+
+      supabase
+        .from('posts')
+        .select(
+          'id, title, slug, created_at'
+        )
+        .eq(
+          'status',
+          'published'
+        )
+        .gt(
+          'created_at',
+          post.created_at
+        )
+        .order(
+          'created_at',
+          { ascending: true }
+        )
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (previousResult.error) {
+      console.error(
+        '이전 글 불러오기 오류:',
+        previousResult.error
+      );
+    } else {
+      previousPost =
+        previousResult.data as
+          | AdjacentPost
+          | null;
+    }
+
+    if (nextResult.error) {
+      console.error(
+        '다음 글 불러오기 오류:',
+        nextResult.error
+      );
+    } else {
+      nextPost =
+        nextResult.data as
+          | AdjacentPost
+          | null;
+    }
   }
 
   const categoryLabel =
@@ -671,6 +772,70 @@ export default async function BlogDetailPage({
                 '',
             }}
           />
+
+          {/* =================================================
+              이전 글 / 다음 글
+          ================================================= */}
+
+          {(previousPost ||
+            nextPost) && (
+            <nav
+              aria-label="이전 글과 다음 글"
+              className="px-6 sm:px-12 pb-10"
+            >
+
+              <div className="border-t border-slate-100 pt-8">
+
+                <p className="text-xs font-black tracking-[0.08em] text-slate-400 mb-4">
+                  이어서 읽기
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                  {previousPost && (
+                    <Link
+                      href={`/blog/${previousPost.slug}`}
+                      className="group min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 hover:border-blue-300 hover:bg-blue-50/60 transition-colors"
+                    >
+
+                      <span className="text-xs font-black text-slate-400 group-hover:text-blue-600 transition-colors">
+                        ← 이전 글
+                      </span>
+
+                      <p className="mt-2 text-sm sm:text-base font-black leading-6 text-slate-800 group-hover:text-blue-700 transition-colors line-clamp-2 break-words">
+                        {previousPost.title}
+                      </p>
+
+                    </Link>
+                  )}
+
+                  {nextPost && (
+                    <Link
+                      href={`/blog/${nextPost.slug}`}
+                      className={`group min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 text-right hover:border-blue-300 hover:bg-blue-50/60 transition-colors ${
+                        !previousPost
+                          ? 'sm:col-start-2'
+                          : ''
+                      }`}
+                    >
+
+                      <span className="text-xs font-black text-slate-400 group-hover:text-blue-600 transition-colors">
+                        다음 글 →
+                      </span>
+
+                      <p className="mt-2 text-sm sm:text-base font-black leading-6 text-slate-800 group-hover:text-blue-700 transition-colors line-clamp-2 break-words">
+                        {nextPost.title}
+                      </p>
+
+                    </Link>
+                  )}
+
+                </div>
+
+              </div>
+
+            </nav>
+          )}
 
           {/* =================================================
               글 하단

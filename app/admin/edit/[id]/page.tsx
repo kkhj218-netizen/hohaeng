@@ -44,6 +44,16 @@ type Category = {
   is_active: boolean;
 };
 
+type Subcategory = {
+  id: number;
+  category_slug: string;
+  slug: string;
+  name: string;
+  emoji: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
 type AutoSaveStatus =
   | 'idle'
   | 'waiting'
@@ -145,6 +155,48 @@ export default function AdminEditPage() {
     categoriesLoading,
     setCategoriesLoading,
   ] = useState(true);
+
+  // =========================================================
+  // 세부주제
+  // =========================================================
+
+  const [
+    subcategories,
+    setSubcategories,
+  ] = useState<Subcategory[]>([]);
+
+  const [
+    subcategoriesLoading,
+    setSubcategoriesLoading,
+  ] = useState(true);
+
+  // 현재 선택한 카테고리에 속한 세부주제만 표시한다.
+  // 비활성 세부주제라도 현재 글이 사용 중이면 수정 화면에는 유지한다.
+  const filteredSubcategories =
+    subcategories.filter(
+      (item) =>
+        item.category_slug ===
+          category &&
+        (
+          item.is_active ||
+          item.slug ===
+            subcategory
+        )
+    );
+
+  const currentSubcategoryExists =
+    !subcategory ||
+    filteredSubcategories.some(
+      (item) =>
+        item.slug ===
+        subcategory
+    );
+
+  const activeSubcategoryCount =
+    filteredSubcategories.filter(
+      (item) =>
+        item.is_active
+    ).length;
 
   // =========================================================
   // SEO
@@ -390,10 +442,11 @@ export default function AdminEditPage() {
           return;
         }
 
-        // 글 + 카테고리 동시에 불러오기
+        // 글 + 카테고리 + 세부주제를 동시에 불러오기
         const [
           postResult,
           categoryResult,
+          subcategoryResult,
         ] =
           await Promise.all([
             supabase
@@ -421,6 +474,28 @@ export default function AdminEditPage() {
                     true,
                 }
               ),
+
+            supabase
+              .from(
+                'subcategories'
+              )
+              .select(
+                'id, category_slug, slug, name, emoji, sort_order, is_active'
+              )
+              .order(
+                'category_slug',
+                {
+                  ascending:
+                    true,
+                }
+              )
+              .order(
+                'sort_order',
+                {
+                  ascending:
+                    true,
+                }
+              ),
           ]);
 
         const {
@@ -438,6 +513,14 @@ export default function AdminEditPage() {
             categoryError,
         } =
           categoryResult;
+
+        const {
+          data:
+            subcategoryData,
+          error:
+            subcategoryError,
+        } =
+          subcategoryResult;
 
         // 글 오류
         if (
@@ -472,6 +555,10 @@ export default function AdminEditPage() {
           );
 
           setCategoriesLoading(
+            false
+          );
+
+          setSubcategoriesLoading(
             false
           );
 
@@ -530,6 +617,32 @@ export default function AdminEditPage() {
         );
 
         setCategoriesLoading(
+          false
+        );
+
+        if (
+          subcategoryError
+        ) {
+          console.error(
+            '세부주제 불러오기 오류:',
+            subcategoryError
+          );
+
+          // 기존 글에 저장된 subcategory 값은 그대로 유지하고,
+          // 선택 목록만 비워 안전하게 수정할 수 있게 한다.
+          setSubcategories([]);
+
+          alert(
+            '세부주제 목록을 불러오지 못했습니다. 기존 세부주제 값은 유지됩니다.'
+          );
+        } else {
+          setSubcategories(
+            (subcategoryData ||
+              []) as Subcategory[]
+          );
+        }
+
+        setSubcategoriesLoading(
           false
         );
 
@@ -2151,7 +2264,7 @@ export default function AdminEditPage() {
                 }
                 className="text-xs font-bold text-blue-400 hover:text-blue-300"
               >
-                ⚙️ 카테고리 관리
+                ⚙️ 카테고리·세부주제 관리
               </button>
 
             </div>
@@ -2160,11 +2273,18 @@ export default function AdminEditPage() {
               value={
                 category
               }
-              onChange={(e) =>
+              onChange={(e) => {
+                const nextCategory =
+                  e.target.value;
+
                 setCategory(
-                  e.target.value
-                )
-              }
+                  nextCategory
+                );
+
+                // 카테고리가 바뀌면 이전 카테고리의
+                // 세부주제가 잘못 연결되지 않도록 초기화
+                setSubcategory('');
+              }}
               disabled={
                 categoriesLoading
               }
@@ -2224,12 +2344,17 @@ export default function AdminEditPage() {
 
           <div>
 
-            <label className="block text-xs font-bold text-slate-400 mb-1">
-              세부 주제
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-400">
+                세부 주제
+              </label>
 
-            <input
-              type="text"
+              <span className="text-[11px] font-bold text-violet-400">
+                선택한 카테고리와 자동 연동
+              </span>
+            </div>
+
+            <select
               value={
                 subcategory
               }
@@ -2238,9 +2363,59 @@ export default function AdminEditPage() {
                   e.target.value
                 )
               }
-              placeholder="예: invest, routine, dividend"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-            />
+              disabled={
+                categoriesLoading ||
+                subcategoriesLoading ||
+                !category
+              }
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-violet-500 disabled:opacity-50"
+            >
+              <option value="">
+                세부주제 없음
+              </option>
+
+              {!currentSubcategoryExists &&
+                subcategory && (
+                <option
+                  value={
+                    subcategory
+                  }
+                >
+                  ⚠️ 기존 세부주제 ({subcategory})
+                </option>
+              )}
+
+              {filteredSubcategories.map(
+                (item) => (
+                  <option
+                    key={
+                      item.id
+                    }
+                    value={
+                      item.slug
+                    }
+                  >
+                    {item.emoji ||
+                      '•'}{' '}
+                    {item.name}
+                    {!item.is_active
+                      ? ' (비활성 · 기존 글)'
+                      : ''}
+                  </option>
+                )
+              )}
+            </select>
+
+            <p className="text-xs text-slate-500 mt-1">
+              {subcategoriesLoading
+                ? '세부주제를 불러오는 중입니다.'
+                : !currentSubcategoryExists &&
+                    subcategory
+                  ? `DB에 없는 기존 값 “${subcategory}”을 유지하고 있습니다. 다른 항목을 선택하면 새 값으로 변경됩니다.`
+                  : activeSubcategoryCount > 0
+                    ? `${activeSubcategoryCount}개의 활성 세부주제 중에서 선택할 수 있습니다.`
+                    : '이 카테고리에 등록된 활성 세부주제가 없습니다.'}
+            </p>
 
           </div>
 

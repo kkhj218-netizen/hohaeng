@@ -32,7 +32,6 @@ export async function getAnalyticsData(days: AnalyticsPeriod = 30) {
     client.runReport({
       property: `properties/${propertyId}`,
       dateRanges: [currentRange, previousRange],
-      dimensions: [{ name: 'dateRange' }],
       metrics: [
         { name: 'activeUsers' },
         { name: 'sessions' },

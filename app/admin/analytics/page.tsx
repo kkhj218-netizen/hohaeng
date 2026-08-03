@@ -13,6 +13,7 @@ import {
 export const dynamic = "force-dynamic";
 
 type SearchConsoleData = Awaited<ReturnType<typeof getSearchConsoleData>>;
+type SearchKeyword = SearchConsoleData["keywords"][number];
 
 type SearchConsoleResult = {
   data: SearchConsoleData;
@@ -50,6 +51,10 @@ function formatDate(value: string) {
 function changeText(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
+}
+
+function byOpportunityScore(a: SearchKeyword, b: SearchKeyword) {
+  return b.impressions - a.impressions || a.position - b.position;
 }
 
 function MetricCard({
@@ -142,6 +147,18 @@ export default async function AdminAnalyticsPage({
     ]);
     const searchData = searchResult.data;
     const supabaseData = supabaseResult.data;
+    const maintainedKeywords = searchData.keywords
+      .filter((keyword) => keyword.position >= 1 && keyword.position <= 3)
+      .sort(byOpportunityScore);
+    const topThreeCandidates = searchData.keywords
+      .filter((keyword) => keyword.position > 3 && keyword.position <= 10)
+      .sort(byOpportunityScore);
+    const firstPageCandidates = searchData.keywords
+      .filter((keyword) => keyword.position > 10 && keyword.position <= 20)
+      .sort(byOpportunityScore);
+    const lowCtrCandidates = searchData.keywords
+      .filter((keyword) => keyword.impressions >= 10 && keyword.ctr < 0.03)
+      .sort(byOpportunityScore);
     const maxViews = Math.max(...data.dailyData.map((item) => item.views), 1);
     const bestPost = data.popularPosts[0];
 
@@ -224,6 +241,48 @@ export default async function AdminAnalyticsPage({
                 ? `현재 가장 많이 읽힌 콘텐츠는 “${bestPost.title}”이며 ${formatNumber(bestPost.views)}회 조회되었습니다.`
                 : "데이터가 쌓이면 성과가 좋은 콘텐츠를 이곳에서 바로 확인할 수 있습니다."}
             </p>
+          </section>
+
+          <section className="mt-7 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+            <SectionTitle
+              eyebrow="SEO OPPORTUNITY"
+              title="SEO 기회 키워드"
+              description={`Search Console 최근 ${days}일 데이터를 순위와 CTR 기준으로 자동 분류했습니다.`}
+            />
+            {searchResult.error ? (
+              <div className="mt-6 rounded-xl border border-rose-800/60 bg-rose-950/30 p-5 text-sm leading-6 text-rose-100/80">
+                Search Console 연결 오류: {searchResult.error}
+              </div>
+            ) : searchData.keywords.length === 0 ? (
+              <EmptyState text="검색 노출 데이터가 쌓이면 SEO 기회 키워드를 자동으로 분류합니다." />
+            ) : (
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <SeoOpportunityCard
+                  title="상위 유지"
+                  description="현재 1~3위"
+                  keywords={maintainedKeywords}
+                  accent="emerald"
+                />
+                <SeoOpportunityCard
+                  title="TOP 3 후보"
+                  description="현재 3위 초과~10위"
+                  keywords={topThreeCandidates}
+                  accent="blue"
+                />
+                <SeoOpportunityCard
+                  title="1페이지 진입 후보"
+                  description="현재 10위 초과~20위"
+                  keywords={firstPageCandidates}
+                  accent="amber"
+                />
+                <SeoOpportunityCard
+                  title="CTR 개선 후보"
+                  description="노출 10회 이상·CTR 3% 미만"
+                  keywords={lowCtrCandidates}
+                  accent="rose"
+                />
+              </div>
+            )}
           </section>
 
           <section className="mt-7 grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
@@ -602,6 +661,62 @@ function EventCard({ label, value }: { label: string; value: number }) {
         {formatNumber(value)}
       </strong>
     </div>
+  );
+}
+
+function SeoOpportunityCard({
+  title,
+  description,
+  keywords,
+  accent,
+}: {
+  title: string;
+  description: string;
+  keywords: SearchKeyword[];
+  accent: "emerald" | "blue" | "amber" | "rose";
+}) {
+  const accentClasses = {
+    emerald: "border-emerald-900/70 bg-emerald-950/20 text-emerald-300",
+    blue: "border-blue-900/70 bg-blue-950/20 text-blue-300",
+    amber: "border-amber-900/70 bg-amber-950/20 text-amber-300",
+    rose: "border-rose-900/70 bg-rose-950/20 text-rose-300",
+  };
+
+  return (
+    <article className={`rounded-xl border p-4 ${accentClasses[accent]}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-black text-white">{title}</h3>
+          <p className="mt-1 text-xs text-slate-500">{description}</p>
+        </div>
+        <span className="rounded-full bg-slate-950/70 px-2.5 py-1 text-xs font-black">
+          {formatNumber(keywords.length)}개
+        </span>
+      </div>
+      {keywords.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-500">해당 키워드가 없습니다.</p>
+      ) : (
+        <ol className="mt-5 space-y-3">
+          {keywords.slice(0, 5).map((keyword) => (
+            <li key={keyword.query} className="rounded-lg bg-slate-950/60 p-3">
+              <p className="truncate text-sm font-black text-white">
+                {keyword.query}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {keyword.position.toFixed(1)}위 · 노출{" "}
+                {formatNumber(keyword.impressions)} · CTR{" "}
+                {(keyword.ctr * 100).toFixed(1)}%
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {keywords.length > 5 && (
+        <p className="mt-3 text-xs font-bold text-slate-500">
+          외 {formatNumber(keywords.length - 5)}개
+        </p>
+      )}
+    </article>
   );
 }
 

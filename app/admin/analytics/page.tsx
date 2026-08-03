@@ -5,6 +5,10 @@ import {
   type AnalyticsPeriod,
 } from "@/app/lib/googleAnalytics";
 import { getSearchConsoleData } from "@/app/lib/googleSearchConsole";
+import {
+  getSupabaseAnalytics,
+  type SupabaseAnalyticsData,
+} from "@/app/lib/supabaseAnalytics";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +17,20 @@ type SearchConsoleData = Awaited<ReturnType<typeof getSearchConsoleData>>;
 type SearchConsoleResult = {
   data: SearchConsoleData;
   error: string;
+};
+
+type SupabaseResult = {
+  data: SupabaseAnalyticsData;
+  error: string;
+};
+
+const emptySupabaseData: SupabaseAnalyticsData = {
+  connected: false,
+  totalPosts: 0,
+  totalViews: 0,
+  categoryCount: 0,
+  recentPosts: [],
+  popularPosts: [],
 };
 
 const formatNumber = (value: number) =>
@@ -110,11 +128,20 @@ export default async function AdminAnalyticsPage({
             error instanceof Error ? error.message : "알 수 없는 연결 오류",
         }));
 
-    const [data, searchResult] = await Promise.all([
+    const supabaseRequest: Promise<SupabaseResult> = getSupabaseAnalytics()
+      .then((value) => ({ data: value, error: "" }))
+      .catch((error: unknown) => ({
+        data: emptySupabaseData,
+        error: error instanceof Error ? error.message : "알 수 없는 연결 오류",
+      }));
+
+    const [data, searchResult, supabaseResult] = await Promise.all([
       getAnalyticsData(days),
       searchConsoleRequest,
+      supabaseRequest,
     ]);
     const searchData = searchResult.data;
+    const supabaseData = supabaseResult.data;
     const maxViews = Math.max(...data.dailyData.map((item) => item.views), 1);
     const bestPost = data.popularPosts[0];
 
@@ -336,6 +363,95 @@ export default async function AdminAnalyticsPage({
             )}
           </section>
 
+          <section className="mt-7 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+            <SectionTitle
+              eyebrow="CONTENT DATABASE"
+              title="Supabase 콘텐츠 현황"
+              description="게시글 데이터베이스에 저장된 실제 콘텐츠 통계입니다."
+            />
+            {supabaseResult.error ? (
+              <div className="mt-6 rounded-xl border border-rose-800/60 bg-rose-950/30 p-5 text-sm leading-6 text-rose-100/80">
+                Supabase 연결 오류: {supabaseResult.error}
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <DatabaseMetric
+                    label="전체 게시글"
+                    value={`${formatNumber(supabaseData.totalPosts)}개`}
+                    description="현재 저장된 콘텐츠"
+                  />
+                  <DatabaseMetric
+                    label="누적 조회수"
+                    value={`${formatNumber(supabaseData.totalViews)}회`}
+                    description="게시글 자체 조회수 합계"
+                  />
+                  <DatabaseMetric
+                    label="활성 카테고리"
+                    value={`${formatNumber(supabaseData.categoryCount)}개`}
+                    description="글이 등록된 카테고리"
+                  />
+                </div>
+
+                <div className="mt-7">
+                  <h3 className="text-base font-black text-white">
+                    조회수 높은 글 TOP 5
+                  </h3>
+                  {supabaseData.popularPosts.length === 0 ? (
+                    <EmptyState text="아직 등록된 게시글이 없습니다." />
+                  ) : (
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full min-w-[620px] border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-left">
+                            <th className="px-3 py-3 text-xs text-slate-500">
+                              순위
+                            </th>
+                            <th className="px-3 py-3 text-xs text-slate-500">
+                              콘텐츠
+                            </th>
+                            <th className="px-3 py-3 text-xs text-slate-500">
+                              카테고리
+                            </th>
+                            <th className="px-3 py-3 text-right text-xs text-slate-500">
+                              조회수
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {supabaseData.popularPosts.map((post, index) => (
+                            <tr
+                              key={post.slug}
+                              className="border-b border-slate-800/70 last:border-0"
+                            >
+                              <td className="px-3 py-4 font-black text-emerald-300">
+                                {index + 1}
+                              </td>
+                              <td className="px-3 py-4">
+                                <p className="font-black text-white">
+                                  {post.title || "제목 없는 글"}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {post.slug}
+                                </p>
+                              </td>
+                              <td className="px-3 py-4 text-sm text-slate-400">
+                                {post.category || "미분류"}
+                              </td>
+                              <td className="px-3 py-4 text-right font-black text-emerald-300">
+                                {formatNumber(post.view_count ?? 0)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
           <section className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
             <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
               <SectionTitle
@@ -437,7 +553,11 @@ export default async function AdminAnalyticsPage({
                 connected={searchData.connected}
               />
               <Connection name="Naver" description="네이버 검색 데이터" />
-              <Connection name="Supabase" description="자체 행동 이벤트" />
+              <Connection
+                name="Supabase"
+                description="게시글·조회수·카테고리"
+                connected={supabaseData.connected}
+              />
             </div>
           </section>
 
@@ -481,6 +601,26 @@ function EventCard({ label, value }: { label: string; value: number }) {
       <strong className="mt-3 block text-2xl text-emerald-400">
         {formatNumber(value)}
       </strong>
+    </div>
+  );
+}
+
+function DatabaseMetric({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-5">
+      <p className="text-sm font-bold text-slate-400">{label}</p>
+      <strong className="mt-3 block text-2xl font-black text-emerald-300">
+        {value}
+      </strong>
+      <p className="mt-2 text-xs text-slate-500">{description}</p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+// HOHAENG Blog Detail v2 - recently viewed + saved posts
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -7,6 +8,7 @@ import ViewCounter from "./ViewCounter";
 import ShareButtons from "./ShareButtons";
 import EngagementTracker from "./EngagementTracker";
 import RecentlyViewedPosts from "./RecentlyViewedPosts";
+import SavedPosts from "./SavedPosts";
 
 export const dynamic = "force-dynamic";
 
@@ -854,6 +856,22 @@ export default async function BlogDetailPage({
             title={post.title}
             description={post.description}
             slug={post.slug}
+          />
+
+          {/* =================================================
+              관심 글 저장 및 보관함
+          ================================================= */}
+
+          <SavedPosts
+            currentPost={{
+              slug: post.slug,
+              title: post.title,
+              description: post.description || null,
+              category: post.category || null,
+              categoryLabel: category?.name || post.category || "블로그",
+              categoryEmoji: category?.emoji || "📁",
+              image: post.og_image || null,
+            }}
           />
 
           {/* =================================================

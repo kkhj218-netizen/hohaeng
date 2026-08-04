@@ -1,3 +1,4 @@
+// HOHAENG Analytics v4: keyword ranking movement dashboard
 import Link from "next/link";
 
 import {
@@ -159,6 +160,21 @@ export default async function AdminAnalyticsPage({
     const lowCtrCandidates = searchData.keywords
       .filter((keyword) => keyword.impressions >= 10 && keyword.ctr < 0.03)
       .sort(byOpportunityScore);
+    const risingKeywords = searchData.keywords
+      .filter(
+        (keyword) =>
+          keyword.positionChange !== null && keyword.positionChange > 0.1,
+      )
+      .sort((a, b) => (b.positionChange ?? 0) - (a.positionChange ?? 0));
+    const fallingKeywords = searchData.keywords
+      .filter(
+        (keyword) =>
+          keyword.positionChange !== null && keyword.positionChange < -0.1,
+      )
+      .sort((a, b) => (a.positionChange ?? 0) - (b.positionChange ?? 0));
+    const newKeywords = searchData.keywords
+      .filter((keyword) => keyword.isNew)
+      .sort(byOpportunityScore);
     const maxViews = Math.max(...data.dailyData.map((item) => item.views), 1);
     const bestPost = data.popularPosts[0];
 
@@ -280,6 +296,42 @@ export default async function AdminAnalyticsPage({
                   description="노출 10회 이상·CTR 3% 미만"
                   keywords={lowCtrCandidates}
                   accent="rose"
+                />
+              </div>
+            )}
+          </section>
+
+          <section className="mt-7 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+            <SectionTitle
+              eyebrow="SEO MOVEMENT"
+              title="키워드 순위 변화"
+              description={`최근 ${days}일과 직전 ${days}일의 평균 검색 순위를 비교했습니다.`}
+            />
+            {searchResult.error ? (
+              <div className="mt-6 rounded-xl border border-rose-800/60 bg-rose-950/30 p-5 text-sm leading-6 text-rose-100/80">
+                Search Console 연결 오류: {searchResult.error}
+              </div>
+            ) : searchData.keywords.length === 0 ? (
+              <EmptyState text="검색 데이터가 쌓이면 키워드별 상승·하락을 비교합니다." />
+            ) : (
+              <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <KeywordMovementCard
+                  title="상승 키워드"
+                  description="직전 기간보다 순위 상승"
+                  keywords={risingKeywords}
+                  type="rising"
+                />
+                <KeywordMovementCard
+                  title="하락 키워드"
+                  description="직전 기간보다 순위 하락"
+                  keywords={fallingKeywords}
+                  type="falling"
+                />
+                <KeywordMovementCard
+                  title="새로 발견된 키워드"
+                  description="직전 기간에는 없던 검색어"
+                  keywords={newKeywords}
+                  type="new"
                 />
               </div>
             )}
@@ -715,6 +767,91 @@ function SeoOpportunityCard({
         <p className="mt-3 text-xs font-bold text-slate-500">
           외 {formatNumber(keywords.length - 5)}개
         </p>
+      )}
+    </article>
+  );
+}
+
+function KeywordMovementCard({
+  title,
+  description,
+  keywords,
+  type,
+}: {
+  title: string;
+  description: string;
+  keywords: SearchKeyword[];
+  type: "rising" | "falling" | "new";
+}) {
+  const styles = {
+    rising: {
+      border: "border-emerald-900/70",
+      badge: "bg-emerald-950 text-emerald-300",
+      value: "text-emerald-300",
+      symbol: "▲",
+    },
+    falling: {
+      border: "border-rose-900/70",
+      badge: "bg-rose-950 text-rose-300",
+      value: "text-rose-300",
+      symbol: "▼",
+    },
+    new: {
+      border: "border-blue-900/70",
+      badge: "bg-blue-950 text-blue-300",
+      value: "text-blue-300",
+      symbol: "NEW",
+    },
+  }[type];
+
+  return (
+    <article
+      className={`rounded-xl border bg-slate-950/50 p-4 ${styles.border}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-black text-white">{title}</h3>
+          <p className="mt-1 text-xs text-slate-500">{description}</p>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-black ${styles.badge}`}
+        >
+          {formatNumber(keywords.length)}개
+        </span>
+      </div>
+      {keywords.length === 0 ? (
+        <p className="mt-5 text-sm text-slate-500">해당 키워드가 없습니다.</p>
+      ) : (
+        <ol className="mt-5 space-y-3">
+          {keywords.slice(0, 5).map((keyword) => (
+            <li key={keyword.query} className="rounded-lg bg-slate-900 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-black text-white">
+                  {keyword.query}
+                </p>
+                <span className={`shrink-0 text-xs font-black ${styles.value}`}>
+                  {type === "new"
+                    ? styles.symbol
+                    : `${styles.symbol} ${Math.abs(keyword.positionChange ?? 0).toFixed(1)}`}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                현재 {keyword.position.toFixed(1)}위
+                {keyword.previousPosition !== null
+                  ? ` · 이전 ${keyword.previousPosition.toFixed(1)}위`
+                  : " · 신규 노출"}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                클릭 {formatNumber(keyword.clicks)}
+                {keyword.clicksChange !== null &&
+                  ` (${keyword.clicksChange >= 0 ? "+" : ""}${formatNumber(keyword.clicksChange)})`}
+                {" · "}노출 {formatNumber(keyword.impressions)}
+                {keyword.impressionsChange !== null &&
+                  ` (${keyword.impressionsChange >= 0 ? "+" : ""}${formatNumber(keyword.impressionsChange)})`}
+              </p>
+            </li>
+          ))}
+        </ol>
       )}
     </article>
   );

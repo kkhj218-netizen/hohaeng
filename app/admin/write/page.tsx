@@ -97,7 +97,9 @@ const EDITOR_CONTENT_CLASS = `
   [&_pre]:leading-7 [&_pre]:text-slate-100
   [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit
   [&_s]:text-slate-500
-`;
+`
+  .trim()
+  .replace(/\s+/g, ' ');
 
 type AutoSaveStatus =
   | 'idle'

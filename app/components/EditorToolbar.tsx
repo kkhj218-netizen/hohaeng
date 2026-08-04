@@ -139,7 +139,7 @@ export default function EditorToolbar({
 
   if (!editor) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-t-2xl p-4 text-sm text-slate-500">
+      <div className="sticky top-16 z-40 bg-slate-900 border border-slate-800 rounded-t-2xl p-4 text-sm text-slate-500 shadow-xl">
         에디터 준비 중...
       </div>
     );
@@ -258,7 +258,7 @@ export default function EditorToolbar({
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-t-2xl overflow-hidden">
+    <div className="sticky top-16 z-40 bg-slate-900 border border-slate-800 rounded-t-2xl overflow-hidden shadow-xl">
 
       {/* ==========================================
           1줄: 글꼴 / 크기 / 문단 / 줄간격

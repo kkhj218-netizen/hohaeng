@@ -774,6 +774,13 @@ export default async function BlogDetailPage({
 
               [&_blockquote_p]:my-0
 
+              [&_blockquote_blockquote]:my-0
+              [&_blockquote_blockquote]:rounded-none
+              [&_blockquote_blockquote]:border-l-0
+              [&_blockquote_blockquote]:bg-transparent
+              [&_blockquote_blockquote]:px-0
+              [&_blockquote_blockquote]:py-0
+
 
               /* ===============================
                  링크

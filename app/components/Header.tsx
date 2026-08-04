@@ -1,5 +1,7 @@
 "use client";
 
+// Final header: category navigation, saved-post library, and save/install guide.
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
@@ -162,6 +164,15 @@ export default function Header() {
               </Link>
             ))}
           </nav>
+
+          <Link
+            href="/saved"
+            className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+            aria-label="내 관심 글 열기"
+          >
+            <span aria-hidden="true">♥</span>{" "}
+            <span className="hidden lg:inline">관심 글</span>
+          </Link>
 
           <button
             type="button"

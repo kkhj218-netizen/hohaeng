@@ -1,34 +1,28 @@
-import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import Link from 'next/link';
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
 
-import { supabase } from '@/app/lib/supabase';
-import ViewCounter from './ViewCounter';
-import ShareButtons from './ShareButtons';
-import EngagementTracker from './EngagementTracker';
+import { supabase } from "@/app/lib/supabase";
+import ViewCounter from "./ViewCounter";
+import ShareButtons from "./ShareButtons";
+import EngagementTracker from "./EngagementTracker";
+import RecentlyViewedPosts from "./RecentlyViewedPosts";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  'https://hohaeng.vercel.app'
-).replace(/\/$/, '');
+  process.env.NEXT_PUBLIC_SITE_URL || "https://hohaeng.vercel.app"
+).replace(/\/$/, "");
 
-function toAbsoluteUrl(
-  value: string | null | undefined
-) {
-  const trimmed =
-    value?.trim();
+function toAbsoluteUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
 
   if (!trimmed) {
     return null;
   }
 
   try {
-    return new URL(
-      trimmed,
-      SITE_URL
-    ).toString();
+    return new URL(trimmed, SITE_URL).toString();
   } catch {
     return null;
   }
@@ -47,7 +41,7 @@ type Post = {
   created_at?: string | null;
   published_at?: string | null;
   updated_at?: string | null;
-  status?: 'draft' | 'published' | null;
+  status?: "draft" | "published" | null;
 
   // SEO
   seo_title?: string | null;
@@ -83,63 +77,36 @@ type RelatedPost = {
   created_at: string | null;
 };
 
-type RecommendedPost =
-  RelatedPost & {
-    reason: string;
-  };
+type RecommendedPost = RelatedPost & {
+  reason: string;
+};
 
-function getPostTimestamp(
-  post: Post
-) {
+function getPostTimestamp(post: Post) {
   if (post.created_at) {
-    const time =
-      new Date(
-        post.created_at
-      ).getTime();
+    const time = new Date(post.created_at).getTime();
 
-    if (
-      !Number.isNaN(time)
-    ) {
+    if (!Number.isNaN(time)) {
       return time;
     }
   }
 
-  const timestamp =
-    Number(
-      post.slug
-        .split('-')
-        .pop()
-    );
+  const timestamp = Number(post.slug.split("-").pop());
 
-  return Number.isNaN(
-    timestamp
-  )
-    ? 0
-    : timestamp;
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function formatDate(
-  post: Post
-) {
-  const timestamp =
-    getPostTimestamp(
-      post
-    );
+function formatDate(post: Post) {
+  const timestamp = getPostTimestamp(post);
 
   if (!timestamp) {
-    return '';
+    return "";
   }
 
-  return new Intl.DateTimeFormat(
-    'ko-KR',
-    {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }
-  ).format(
-    new Date(timestamp)
-  );
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 /* =========================================================
@@ -153,34 +120,20 @@ export async function generateMetadata({
     slug: string;
   }>;
 }): Promise<Metadata> {
-  const { slug } =
-    await params;
+  const { slug } = await params;
 
-  const {
-    data: post,
-    error,
-  } = await supabase
-    .from('posts')
+  const { data: post, error } = await supabase
+    .from("posts")
     .select(
-      'title, slug, description, seo_title, meta_description, og_image, created_at, published_at, updated_at'
+      "title, slug, description, seo_title, meta_description, og_image, created_at, published_at, updated_at",
     )
-    .eq(
-      'slug',
-      slug
-    )
-    .eq(
-      'status',
-      'published'
-    )
+    .eq("slug", slug)
+    .eq("status", "published")
     .maybeSingle();
 
-  if (
-    error ||
-    !post
-  ) {
+  if (error || !post) {
     return {
-      title:
-        '글을 찾을 수 없습니다 | 호행처럼',
+      title: "글을 찾을 수 없습니다 | 호행처럼",
 
       robots: {
         index: false,
@@ -189,32 +142,24 @@ export async function generateMetadata({
     };
   }
 
-  const seoTitle =
-    post.seo_title?.trim() ||
-    post.title;
+  const seoTitle = post.seo_title?.trim() || post.title;
 
   const seoDescription =
     post.meta_description?.trim() ||
     post.description?.trim() ||
     `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
 
-  const canonicalUrl =
-    `/blog/${slug}`;
+  const canonicalUrl = `/blog/${slug}`;
 
-  const ogImage =
-    post.og_image?.trim() ||
-    null;
+  const ogImage = post.og_image?.trim() || null;
 
   return {
-    title:
-      seoTitle,
+    title: seoTitle,
 
-    description:
-      seoDescription,
+    description: seoDescription,
 
     alternates: {
-      canonical:
-        canonicalUrl,
+      canonical: canonicalUrl,
     },
 
     robots: {
@@ -223,37 +168,27 @@ export async function generateMetadata({
     },
 
     openGraph: {
-      title:
-        seoTitle,
+      title: seoTitle,
 
-      description:
-        seoDescription,
+      description: seoDescription,
 
-      url:
-        canonicalUrl,
+      url: canonicalUrl,
 
-      siteName:
-        '호행처럼',
+      siteName: "호행처럼",
 
-      locale:
-        'ko_KR',
+      locale: "ko_KR",
 
-      type:
-        'article',
+      type: "article",
 
-      ...(post.published_at ||
-      post.created_at
+      ...(post.published_at || post.created_at
         ? {
-            publishedTime:
-              post.published_at ||
-              post.created_at,
+            publishedTime: post.published_at || post.created_at,
           }
         : {}),
 
       ...(post.updated_at
         ? {
-            modifiedTime:
-              post.updated_at,
+            modifiedTime: post.updated_at,
           }
         : {}),
 
@@ -261,11 +196,9 @@ export async function generateMetadata({
         ? {
             images: [
               {
-                url:
-                  ogImage,
+                url: ogImage,
 
-                alt:
-                  post.title,
+                alt: post.title,
               },
             ],
           }
@@ -273,22 +206,15 @@ export async function generateMetadata({
     },
 
     twitter: {
-      card:
-        ogImage
-          ? 'summary_large_image'
-          : 'summary',
+      card: ogImage ? "summary_large_image" : "summary",
 
-      title:
-        seoTitle,
+      title: seoTitle,
 
-      description:
-        seoDescription,
+      description: seoDescription,
 
       ...(ogImage
         ? {
-            images: [
-              ogImage,
-            ],
+            images: [ogImage],
           }
         : {}),
     },
@@ -306,34 +232,21 @@ export default async function BlogDetailPage({
     slug: string;
   }>;
 }) {
-  const { slug } =
-    await params;
+  const { slug } = await params;
 
   // =========================================================
   // 글 불러오기
   // =========================================================
 
-  const {
-    data,
-    error,
-  } = await supabase
-    .from('posts')
-    .select('*')
-    .eq(
-      'slug',
-      slug
-    )
-    .eq(
-      'status',
-      'published'
-    )
+  const { data, error } = await supabase
+    .from("posts")
+    .select("*")
+    .eq("slug", slug)
+    .eq("status", "published")
     .maybeSingle();
 
   if (error) {
-    console.error(
-      'Supabase 글 상세 불러오기 오류:',
-      error
-    );
+    console.error("Supabase 글 상세 불러오기 오류:", error);
 
     notFound();
   }
@@ -342,52 +255,26 @@ export default async function BlogDetailPage({
     notFound();
   }
 
-  const post =
-    data as Post;
+  const post = data as Post;
 
   // =========================================================
   // DB에서 실제 카테고리 정보 불러오기
   // =========================================================
 
-  let category:
-    | Category
-    | null = null;
+  let category: Category | null = null;
 
-  if (
-    post.category
-  ) {
-    const {
-      data:
-        categoryData,
-      error:
-        categoryError,
-    } =
-      await supabase
-        .from(
-          'categories'
-        )
-        .select(
-          'slug, name, emoji, is_active'
-        )
-        .eq(
-          'slug',
-          post.category
-        )
-        .maybeSingle();
+  if (post.category) {
+    const { data: categoryData, error: categoryError } = await supabase
+      .from("categories")
+      .select("slug, name, emoji, is_active")
+      .eq("slug", post.category)
+      .maybeSingle();
 
-    if (
-      categoryError
-    ) {
-      console.error(
-        '카테고리 불러오기 오류:',
-        categoryError
-      );
+    if (categoryError) {
+      console.error("카테고리 불러오기 오류:", categoryError);
     }
 
-    category =
-      categoryData as
-        | Category
-        | null;
+    category = categoryData as Category | null;
   }
 
   // =========================================================
@@ -395,82 +282,41 @@ export default async function BlogDetailPage({
   // 공개된 글만 작성일 순서로 연결한다.
   // =========================================================
 
-  let previousPost:
-    | AdjacentPost
-    | null = null;
+  let previousPost: AdjacentPost | null = null;
 
-  let nextPost:
-    | AdjacentPost
-    | null = null;
+  let nextPost: AdjacentPost | null = null;
 
   if (post.created_at) {
-    const [
-      previousResult,
-      nextResult,
-    ] = await Promise.all([
+    const [previousResult, nextResult] = await Promise.all([
       supabase
-        .from('posts')
-        .select(
-          'id, title, slug, created_at'
-        )
-        .eq(
-          'status',
-          'published'
-        )
-        .lt(
-          'created_at',
-          post.created_at
-        )
-        .order(
-          'created_at',
-          { ascending: false }
-        )
+        .from("posts")
+        .select("id, title, slug, created_at")
+        .eq("status", "published")
+        .lt("created_at", post.created_at)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
 
       supabase
-        .from('posts')
-        .select(
-          'id, title, slug, created_at'
-        )
-        .eq(
-          'status',
-          'published'
-        )
-        .gt(
-          'created_at',
-          post.created_at
-        )
-        .order(
-          'created_at',
-          { ascending: true }
-        )
+        .from("posts")
+        .select("id, title, slug, created_at")
+        .eq("status", "published")
+        .gt("created_at", post.created_at)
+        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle(),
     ]);
 
     if (previousResult.error) {
-      console.error(
-        '이전 글 불러오기 오류:',
-        previousResult.error
-      );
+      console.error("이전 글 불러오기 오류:", previousResult.error);
     } else {
-      previousPost =
-        previousResult.data as
-          | AdjacentPost
-          | null;
+      previousPost = previousResult.data as AdjacentPost | null;
     }
 
     if (nextResult.error) {
-      console.error(
-        '다음 글 불러오기 오류:',
-        nextResult.error
-      );
+      console.error("다음 글 불러오기 오류:", nextResult.error);
     } else {
-      nextPost =
-        nextResult.data as
-          | AdjacentPost
-          | null;
+      nextPost = nextResult.data as AdjacentPost | null;
     }
   }
 
@@ -483,37 +329,17 @@ export default async function BlogDetailPage({
   // 요청 수를 줄이기 위해 최대 2개의 조회를 동시에 실행한다.
   // =========================================================
 
-  const relatedPosts:
-    RecommendedPost[] = [];
+  const relatedPosts: RecommendedPost[] = [];
 
-  const relatedPostIds =
-    new Set<string>([
-      post.id,
-    ]);
+  const relatedPostIds = new Set<string>([post.id]);
 
-  const addRelatedPosts = (
-    items:
-      | RelatedPost[]
-      | null,
-    reason: string
-  ) => {
-    for (
-      const item of
-      items || []
-    ) {
-      if (
-        relatedPosts.length >=
-          3 ||
-        relatedPostIds.has(
-          item.id
-        )
-      ) {
+  const addRelatedPosts = (items: RelatedPost[] | null, reason: string) => {
+    for (const item of items || []) {
+      if (relatedPosts.length >= 3 || relatedPostIds.has(item.id)) {
         continue;
       }
 
-      relatedPostIds.add(
-        item.id
-      );
+      relatedPostIds.add(item.id);
 
       relatedPosts.push({
         ...item,
@@ -523,304 +349,186 @@ export default async function BlogDetailPage({
   };
 
   const relatedPostSelect =
-    'id, title, slug, description, og_image, category, subcategory, created_at';
+    "id, title, slug, description, og_image, category, subcategory, created_at";
 
-  const [
-    sameCategoryResult,
-    latestPublishedResult,
-  ] = await Promise.all([
+  const [sameCategoryResult, latestPublishedResult] = await Promise.all([
     post.category
       ? supabase
-          .from('posts')
-          .select(
-            relatedPostSelect
-          )
-          .eq(
-            'status',
-            'published'
-          )
-          .eq(
-            'category',
-            post.category
-          )
-          .neq(
-            'id',
-            post.id
-          )
-          .order(
-            'created_at',
-            { ascending: false }
-          )
+          .from("posts")
+          .select(relatedPostSelect)
+          .eq("status", "published")
+          .eq("category", post.category)
+          .neq("id", post.id)
+          .order("created_at", { ascending: false })
           .limit(12)
       : Promise.resolve({
-          data:
-            [] as RelatedPost[],
-          error:
-            null,
+          data: [] as RelatedPost[],
+          error: null,
         }),
 
     supabase
-      .from('posts')
-      .select(
-        relatedPostSelect
-      )
-      .eq(
-        'status',
-        'published'
-      )
-      .neq(
-        'id',
-        post.id
-      )
-      .order(
-        'created_at',
-        { ascending: false }
-      )
+      .from("posts")
+      .select(relatedPostSelect)
+      .eq("status", "published")
+      .neq("id", post.id)
+      .order("created_at", { ascending: false })
       .limit(12),
   ]);
 
-  if (
-    sameCategoryResult.error
-  ) {
+  if (sameCategoryResult.error) {
     console.error(
-      '같은 카테고리 관련 글 불러오기 오류:',
-      sameCategoryResult.error
+      "같은 카테고리 관련 글 불러오기 오류:",
+      sameCategoryResult.error,
     );
   }
 
-  if (
-    latestPublishedResult.error
-  ) {
-    console.error(
-      '최신 관련 글 불러오기 오류:',
-      latestPublishedResult.error
-    );
+  if (latestPublishedResult.error) {
+    console.error("최신 관련 글 불러오기 오류:", latestPublishedResult.error);
   }
 
-  const sameCategoryPosts =
-    (sameCategoryResult.data ||
-      []) as RelatedPost[];
+  const sameCategoryPosts = (sameCategoryResult.data || []) as RelatedPost[];
 
   if (post.subcategory) {
     addRelatedPosts(
-      sameCategoryPosts.filter(
-        (item) =>
-          item.subcategory ===
-          post.subcategory
-      ),
-      '같은 세부주제'
+      sameCategoryPosts.filter((item) => item.subcategory === post.subcategory),
+      "같은 세부주제",
     );
   }
 
-  addRelatedPosts(
-    sameCategoryPosts,
-    '같은 카테고리'
-  );
+  addRelatedPosts(sameCategoryPosts, "같은 카테고리");
 
   addRelatedPosts(
-    (latestPublishedResult.data ||
-      []) as RelatedPost[],
-    '최신 글'
+    (latestPublishedResult.data || []) as RelatedPost[],
+    "최신 글",
   );
 
-  const categoryLabel =
-    category
-      ? `${
-          category.emoji ||
-          '📁'
-        } ${category.name}`
-      : post.category ||
-        'BLOG';
+  const categoryLabel = category
+    ? `${category.emoji || "📁"} ${category.name}`
+    : post.category || "BLOG";
 
-  const categorySlug =
-    post.category ||
-    'log';
+  const categorySlug = post.category || "log";
 
   // =========================================================
   // JSON-LD 구조화 데이터
   // BlogPosting + BreadcrumbList
   // =========================================================
 
-  const canonicalUrl =
-    `${SITE_URL}/blog/${encodeURIComponent(
-      post.slug
-    )}`;
+  const canonicalUrl = `${SITE_URL}/blog/${encodeURIComponent(post.slug)}`;
 
-  const blogUrl =
-    `${SITE_URL}/blog`;
+  const blogUrl = `${SITE_URL}/blog`;
 
-  const categoryUrl =
-    `${blogUrl}?category=${encodeURIComponent(
-      categorySlug
-    )}`;
+  const categoryUrl = `${blogUrl}?category=${encodeURIComponent(categorySlug)}`;
 
   const structuredDescription =
     post.meta_description?.trim() ||
     post.description?.trim() ||
     `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
 
-  const structuredImage =
-    toAbsoluteUrl(
-      post.og_image
-    );
+  const structuredImage = toAbsoluteUrl(post.og_image);
 
-  const structuredPublishedAt =
-    post.published_at ||
-    post.created_at ||
-    null;
+  const structuredPublishedAt = post.published_at || post.created_at || null;
 
-  const structuredModifiedAt =
-    post.updated_at ||
-    structuredPublishedAt;
+  const structuredModifiedAt = post.updated_at || structuredPublishedAt;
 
-  const organizationId =
-    `${SITE_URL}/#organization`;
+  const organizationId = `${SITE_URL}/#organization`;
 
   const jsonLd = {
-    '@context':
-      'https://schema.org',
+    "@context": "https://schema.org",
 
-    '@graph': [
+    "@graph": [
       {
-        '@type':
-          'BlogPosting',
+        "@type": "BlogPosting",
 
-        '@id':
-          `${canonicalUrl}#blogposting`,
+        "@id": `${canonicalUrl}#blogposting`,
 
         mainEntityOfPage: {
-          '@type':
-            'WebPage',
-          '@id':
-            canonicalUrl,
+          "@type": "WebPage",
+          "@id": canonicalUrl,
         },
 
-        url:
-          canonicalUrl,
+        url: canonicalUrl,
 
-        headline:
-          post.seo_title?.trim() ||
-          post.title,
+        headline: post.seo_title?.trim() || post.title,
 
-        name:
-          post.title,
+        name: post.title,
 
-        description:
-          structuredDescription,
+        description: structuredDescription,
 
         ...(structuredImage
           ? {
-              image: [
-                structuredImage,
-              ],
+              image: [structuredImage],
             }
           : {}),
 
         ...(structuredPublishedAt
           ? {
-              datePublished:
-                structuredPublishedAt,
+              datePublished: structuredPublishedAt,
             }
           : {}),
 
         ...(structuredModifiedAt
           ? {
-              dateModified:
-                structuredModifiedAt,
+              dateModified: structuredModifiedAt,
             }
           : {}),
 
         author: {
-          '@type':
-            'Organization',
-          '@id':
-            organizationId,
-          name:
-            '호행처럼',
-          url:
-            SITE_URL,
+          "@type": "Organization",
+          "@id": organizationId,
+          name: "호행처럼",
+          url: SITE_URL,
         },
 
         publisher: {
-          '@type':
-            'Organization',
-          '@id':
-            organizationId,
-          name:
-            '호행처럼',
-          url:
-            SITE_URL,
+          "@type": "Organization",
+          "@id": organizationId,
+          name: "호행처럼",
+          url: SITE_URL,
         },
 
-        articleSection:
-          category?.name ||
-          post.category ||
-          '블로그',
+        articleSection: category?.name || post.category || "블로그",
 
         ...(post.subcategory
           ? {
               keywords: [
-                category?.name ||
-                  post.category ||
-                  '블로그',
+                category?.name || post.category || "블로그",
                 post.subcategory,
               ],
             }
           : {}),
 
-        inLanguage:
-          'ko-KR',
+        inLanguage: "ko-KR",
       },
 
       {
-        '@type':
-          'BreadcrumbList',
+        "@type": "BreadcrumbList",
 
-        '@id':
-          `${canonicalUrl}#breadcrumb`,
+        "@id": `${canonicalUrl}#breadcrumb`,
 
         itemListElement: [
           {
-            '@type':
-              'ListItem',
-            position:
-              1,
-            name:
-              '홈',
-            item:
-              SITE_URL,
+            "@type": "ListItem",
+            position: 1,
+            name: "홈",
+            item: SITE_URL,
           },
           {
-            '@type':
-              'ListItem',
-            position:
-              2,
-            name:
-              '블로그',
-            item:
-              blogUrl,
+            "@type": "ListItem",
+            position: 2,
+            name: "블로그",
+            item: blogUrl,
           },
           {
-            '@type':
-              'ListItem',
-            position:
-              3,
-            name:
-              category?.name ||
-              post.category ||
-              '블로그',
-            item:
-              categoryUrl,
+            "@type": "ListItem",
+            position: 3,
+            name: category?.name || post.category || "블로그",
+            item: categoryUrl,
           },
           {
-            '@type':
-              'ListItem',
-            position:
-              4,
-            name:
-              post.title,
-            item:
-              canonicalUrl,
+            "@type": "ListItem",
+            position: 4,
+            name: post.title,
+            item: canonicalUrl,
           },
         ],
       },
@@ -829,21 +537,12 @@ export default async function BlogDetailPage({
 
   return (
     <main className="min-h-screen bg-[#f6f7f9]">
-
-      <EngagementTracker
-        title={post.title}
-        slug={post.slug}
-      />
+      <EngagementTracker title={post.title} slug={post.slug} />
 
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(
-            jsonLd
-          ).replace(
-            /</g,
-            '\\u003c'
-          ),
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
         }}
       />
 
@@ -852,17 +551,14 @@ export default async function BlogDetailPage({
       ===================================================== */}
 
       <article className="max-w-[860px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
-
         {/* 목록 이동 */}
         <div className="mb-5">
-
           <Link
             href={`/blog?category=${categorySlug}`}
             className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
           >
             ← 목록으로 돌아가기
           </Link>
-
         </div>
 
         {/* ===================================================
@@ -870,16 +566,13 @@ export default async function BlogDetailPage({
         =================================================== */}
 
         <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">
-
           {/* =================================================
               글 헤더
           ================================================= */}
 
           <header className="px-6 sm:px-12 pt-9 sm:pt-12 pb-8">
-
             {/* 카테고리 */}
             <div className="flex flex-wrap items-center gap-2 mb-5">
-
               <Link
                 href={`/blog?category=${categorySlug}`}
                 className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors"
@@ -889,12 +582,9 @@ export default async function BlogDetailPage({
 
               {post.subcategory && (
                 <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-                  {
-                    post.subcategory
-                  }
+                  {post.subcategory}
                 </span>
               )}
-
             </div>
 
             {/* 제목 */}
@@ -905,38 +595,19 @@ export default async function BlogDetailPage({
             {/* 설명 */}
             {post.description && (
               <p className="text-base sm:text-lg text-slate-500 leading-7 sm:leading-8 mt-5">
-                {
-                  post.description
-                }
+                {post.description}
               </p>
             )}
 
             {/* 날짜 + 조회수 */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-400 mt-6">
-
-              {formatDate(
-                post
-              ) && (
-                <span>
-                  📅{' '}
-                  {formatDate(
-                    post
-                  )}
-                </span>
-              )}
+              {formatDate(post) && <span>📅 {formatDate(post)}</span>}
 
               <ViewCounter
-                slug={
-                  post.slug
-                }
-                initialCount={
-                  post.view_count ||
-                  0
-                }
+                slug={post.slug}
+                initialCount={post.view_count || 0}
               />
-
             </div>
-
           </header>
 
           {/* =================================================
@@ -945,17 +616,11 @@ export default async function BlogDetailPage({
 
           {post.og_image && (
             <div className="px-6 sm:px-12 pb-4">
-
               <img
-                src={
-                  post.og_image
-                }
-                alt={
-                  post.title
-                }
+                src={post.og_image}
+                alt={post.title}
                 className="w-full max-h-[520px] object-cover rounded-2xl border border-slate-100"
               />
-
             </div>
           )}
 
@@ -1177,9 +842,7 @@ export default async function BlogDetailPage({
               [&_s]:text-slate-500
             "
             dangerouslySetInnerHTML={{
-              __html:
-                post.content ||
-                '',
+              __html: post.content || "",
             }}
           />
 
@@ -1194,22 +857,33 @@ export default async function BlogDetailPage({
           />
 
           {/* =================================================
+              최근 본 글 자동 저장 및 표시
+          ================================================= */}
+
+          <RecentlyViewedPosts
+            currentPost={{
+              slug: post.slug,
+              title: post.title,
+              description: post.description || null,
+              category: post.category || null,
+              categoryLabel: category?.name || post.category || "블로그",
+              categoryEmoji: category?.emoji || "📁",
+              image: post.og_image || null,
+            }}
+          />
+
+          {/* =================================================
               관련 글 자동 추천
           ================================================= */}
 
-          {relatedPosts.length >
-            0 && (
+          {relatedPosts.length > 0 && (
             <section
               aria-labelledby="related-posts-title"
               className="px-6 sm:px-12 pb-10"
             >
-
               <div className="border-t border-slate-100 pt-9">
-
                 <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-5">
-
                   <div>
-
                     <p className="text-xs font-black tracking-[0.08em] text-blue-600">
                       RELATED POSTS
                     </p>
@@ -1220,7 +894,6 @@ export default async function BlogDetailPage({
                     >
                       함께 읽으면 좋은 글
                     </h2>
-
                   </div>
 
                   <Link
@@ -1229,58 +902,38 @@ export default async function BlogDetailPage({
                   >
                     이 카테고리 더 보기 →
                   </Link>
-
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                  {relatedPosts.map(
-                    (
-                      relatedPost
-                    ) => (
+                  {relatedPosts.map((relatedPost) => (
                     <Link
-                      key={
-                        relatedPost.id
-                      }
+                      key={relatedPost.id}
                       href={`/blog/${relatedPost.slug}`}
                       className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-md transition-all"
                     >
-
                       {relatedPost.og_image ? (
                         <div className="aspect-[16/9] overflow-hidden bg-slate-100">
-
                           <img
-                            src={
-                              relatedPost.og_image
-                            }
-                            alt={
-                              relatedPost.title
-                            }
+                            src={relatedPost.og_image}
+                            alt={relatedPost.title}
                             className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
                           />
-
                         </div>
                       ) : (
                         <div className="aspect-[16/9] flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50">
-
                           <div className="text-center">
-
                             <span className="text-2xl">
-                              {category?.emoji ||
-                                '🌱'}
+                              {category?.emoji || "🌱"}
                             </span>
 
                             <p className="text-[10px] font-black tracking-[0.16em] text-slate-400 mt-2">
                               HOHAENG
                             </p>
-
                           </div>
-
                         </div>
                       )}
 
                       <div className="p-4">
-
                         <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-600">
                           {relatedPost.reason}
                         </span>
@@ -1291,21 +944,14 @@ export default async function BlogDetailPage({
 
                         {relatedPost.description && (
                           <p className="mt-2 text-xs leading-5 text-slate-500 line-clamp-2 break-words">
-                            {
-                              relatedPost.description
-                            }
+                            {relatedPost.description}
                           </p>
                         )}
-
                       </div>
-
                     </Link>
                   ))}
-
                 </div>
-
               </div>
-
             </section>
           )}
 
@@ -1313,27 +959,19 @@ export default async function BlogDetailPage({
               이전 글 / 다음 글
           ================================================= */}
 
-          {(previousPost ||
-            nextPost) && (
-            <nav
-              aria-label="이전 글과 다음 글"
-              className="px-6 sm:px-12 pb-10"
-            >
-
+          {(previousPost || nextPost) && (
+            <nav aria-label="이전 글과 다음 글" className="px-6 sm:px-12 pb-10">
               <div className="border-t border-slate-100 pt-8">
-
                 <p className="text-xs font-black tracking-[0.08em] text-slate-400 mb-4">
                   이어서 읽기
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
                   {previousPost && (
                     <Link
                       href={`/blog/${previousPost.slug}`}
                       className="group min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 hover:border-blue-300 hover:bg-blue-50/60 transition-colors"
                     >
-
                       <span className="text-xs font-black text-slate-400 group-hover:text-blue-600 transition-colors">
                         ← 이전 글
                       </span>
@@ -1341,7 +979,6 @@ export default async function BlogDetailPage({
                       <p className="mt-2 text-sm sm:text-base font-black leading-6 text-slate-800 group-hover:text-blue-700 transition-colors line-clamp-2 break-words">
                         {previousPost.title}
                       </p>
-
                     </Link>
                   )}
 
@@ -1349,12 +986,9 @@ export default async function BlogDetailPage({
                     <Link
                       href={`/blog/${nextPost.slug}`}
                       className={`group min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-5 text-right hover:border-blue-300 hover:bg-blue-50/60 transition-colors ${
-                        !previousPost
-                          ? 'sm:col-start-2'
-                          : ''
+                        !previousPost ? "sm:col-start-2" : ""
                       }`}
                     >
-
                       <span className="text-xs font-black text-slate-400 group-hover:text-blue-600 transition-colors">
                         다음 글 →
                       </span>
@@ -1362,14 +996,10 @@ export default async function BlogDetailPage({
                       <p className="mt-2 text-sm sm:text-base font-black leading-6 text-slate-800 group-hover:text-blue-700 transition-colors line-clamp-2 break-words">
                         {nextPost.title}
                       </p>
-
                     </Link>
                   )}
-
                 </div>
-
               </div>
-
             </nav>
           )}
 
@@ -1378,21 +1008,14 @@ export default async function BlogDetailPage({
           ================================================= */}
 
           <footer className="px-6 sm:px-12 pb-10">
-
             <div className="border-t border-slate-100 pt-7">
-
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
                 <div>
-
-                  <p className="text-xs text-slate-400">
-                    HOHAENG OS
-                  </p>
+                  <p className="text-xs text-slate-400">HOHAENG OS</p>
 
                   <p className="text-sm font-bold text-slate-700 mt-1">
                     호행처럼의 기록과 정보
                   </p>
-
                 </div>
 
                 <Link
@@ -1401,17 +1024,11 @@ export default async function BlogDetailPage({
                 >
                   ← 다른 글 더 보기
                 </Link>
-
               </div>
-
             </div>
-
           </footer>
-
         </div>
-
       </article>
-
     </main>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-// HOHAENG Blog Detail v2 - recently viewed + saved posts
+// HOHAENG Blog Detail v3 - recently viewed + saved posts + newsletter
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -9,6 +9,7 @@ import ShareButtons from "./ShareButtons";
 import EngagementTracker from "./EngagementTracker";
 import RecentlyViewedPosts from "./RecentlyViewedPosts";
 import SavedPosts from "./SavedPosts";
+import NewsletterSubscribe from "./NewsletterSubscribe";
 
 export const dynamic = "force-dynamic";
 
@@ -857,6 +858,12 @@ export default async function BlogDetailPage({
             description={post.description}
             slug={post.slug}
           />
+
+          {/* =================================================
+              새 글 이메일 알림 신청
+          ================================================= */}
+
+          <NewsletterSubscribe />
 
           {/* =================================================
               관심 글 저장 및 보관함

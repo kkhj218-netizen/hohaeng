@@ -1,4 +1,4 @@
-// HOHAENG Analytics v4: keyword ranking movement dashboard
+// HOHAENG Analytics v5: SEO action priority dashboard
 import Link from "next/link";
 
 import {
@@ -15,6 +15,15 @@ export const dynamic = "force-dynamic";
 
 type SearchConsoleData = Awaited<ReturnType<typeof getSearchConsoleData>>;
 type SearchKeyword = SearchConsoleData["keywords"][number];
+
+type SeoActionPriority = "urgent" | "high" | "medium" | "maintain";
+
+type SeoAction = {
+  keyword: SearchKeyword;
+  priority: SeoActionPriority;
+  action: string;
+  reason: string;
+};
 
 type SearchConsoleResult = {
   data: SearchConsoleData;
@@ -175,6 +184,63 @@ export default async function AdminAnalyticsPage({
     const newKeywords = searchData.keywords
       .filter((keyword) => keyword.isNew)
       .sort(byOpportunityScore);
+    const seoActions: SeoAction[] = searchData.keywords
+      .map((keyword): SeoAction | null => {
+        if (keyword.positionChange !== null && keyword.positionChange < -0.1) {
+          return {
+            keyword,
+            priority: "urgent",
+            action: "순위 하락 원인 점검",
+            reason: `직전 기간보다 ${Math.abs(keyword.positionChange).toFixed(1)}계단 하락`,
+          };
+        }
+        if (keyword.impressions >= 10 && keyword.ctr < 0.03) {
+          return {
+            keyword,
+            priority: "high",
+            action: "제목·검색 설명 개선",
+            reason: `노출 ${formatNumber(keyword.impressions)}회 대비 CTR ${(keyword.ctr * 100).toFixed(1)}%`,
+          };
+        }
+        if (keyword.position > 10 && keyword.position <= 20) {
+          return {
+            keyword,
+            priority: "medium",
+            action: "본문·내부링크 보강",
+            reason: `현재 ${keyword.position.toFixed(1)}위 · 1페이지 진입 후보`,
+          };
+        }
+        if (keyword.position > 3 && keyword.position <= 10) {
+          return {
+            keyword,
+            priority: "medium",
+            action: "TOP 3 진입 보강",
+            reason: `현재 ${keyword.position.toFixed(1)}위 · 상위권 후보`,
+          };
+        }
+        if (keyword.position >= 1 && keyword.position <= 3) {
+          return {
+            keyword,
+            priority: "maintain",
+            action: "상위 순위 유지",
+            reason: `현재 ${keyword.position.toFixed(1)}위 · 성과 모니터링`,
+          };
+        }
+        return null;
+      })
+      .filter((item): item is SeoAction => item !== null)
+      .sort((a, b) => {
+        const score: Record<SeoActionPriority, number> = {
+          urgent: 4,
+          high: 3,
+          medium: 2,
+          maintain: 1,
+        };
+        return (
+          score[b.priority] - score[a.priority] ||
+          b.keyword.impressions - a.keyword.impressions
+        );
+      });
     const maxViews = Math.max(...data.dailyData.map((item) => item.views), 1);
     const bestPost = data.popularPosts[0];
 
@@ -334,6 +400,23 @@ export default async function AdminAnalyticsPage({
                   type="new"
                 />
               </div>
+            )}
+          </section>
+
+          <section className="mt-7 rounded-2xl border border-violet-900/70 bg-gradient-to-br from-violet-950/40 via-slate-900 to-slate-900 p-5 sm:p-6">
+            <SectionTitle
+              eyebrow="SEO ACTION CENTER"
+              title="이번에 먼저 할 일"
+              description="검색 성과를 기준으로 가장 효과가 클 가능성이 높은 작업부터 자동 정렬했습니다."
+            />
+            {searchResult.error ? (
+              <div className="mt-6 rounded-xl border border-rose-800/60 bg-rose-950/30 p-5 text-sm leading-6 text-rose-100/80">
+                Search Console 연결 오류: {searchResult.error}
+              </div>
+            ) : seoActions.length === 0 ? (
+              <EmptyState text="검색 데이터가 쌓이면 어떤 키워드와 글부터 손볼지 자동으로 제안합니다." />
+            ) : (
+              <SeoActionCenter actions={seoActions} />
             )}
           </section>
 
@@ -854,6 +937,79 @@ function KeywordMovementCard({
         </ol>
       )}
     </article>
+  );
+}
+
+function SeoActionCenter({ actions }: { actions: SeoAction[] }) {
+  const priorityStyle: Record<
+    SeoActionPriority,
+    { label: string; badge: string; border: string }
+  > = {
+    urgent: {
+      label: "긴급",
+      badge: "bg-rose-950 text-rose-300",
+      border: "border-rose-900/70",
+    },
+    high: {
+      label: "높음",
+      badge: "bg-amber-950 text-amber-300",
+      border: "border-amber-900/70",
+    },
+    medium: {
+      label: "보통",
+      badge: "bg-blue-950 text-blue-300",
+      border: "border-blue-900/70",
+    },
+    maintain: {
+      label: "유지",
+      badge: "bg-emerald-950 text-emerald-300",
+      border: "border-emerald-900/70",
+    },
+  };
+
+  return (
+    <div className="mt-6 space-y-3">
+      {actions.slice(0, 10).map((item, index) => {
+        const styles = priorityStyle[item.priority];
+        return (
+          <article
+            key={item.keyword.query}
+            className={`grid gap-4 rounded-xl border bg-slate-950/60 p-4 md:grid-cols-[auto_1fr_auto] md:items-center ${styles.border}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-black text-white">
+                {index + 1}
+              </span>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-black ${styles.badge}`}
+              >
+                {styles.label}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-black text-white">
+                {item.keyword.query}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
+            </div>
+            <div className="md:text-right">
+              <p className="text-sm font-black text-violet-300">
+                {item.action}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                클릭 {formatNumber(item.keyword.clicks)} · 노출{" "}
+                {formatNumber(item.keyword.impressions)}
+              </p>
+            </div>
+          </article>
+        );
+      })}
+      {actions.length > 10 && (
+        <p className="pt-2 text-xs font-bold text-slate-500">
+          우선순위 상위 10개 표시 · 나머지 {formatNumber(actions.length - 10)}개
+        </p>
+      )}
+    </div>
   );
 }
 

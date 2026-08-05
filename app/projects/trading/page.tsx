@@ -1,4 +1,22 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: '매달 100만 원 트레이딩 계좌 성장 기록 | 호행처럼',
+  description:
+    '매달 100만 원을 입금하고 직접 트레이딩하며 계좌가 성장하는 과정을 공개합니다. 진입 이유와 손익, 실수와 월간 결산까지 솔직하게 기록합니다.',
+  alternates: {
+    canonical: 'https://hohaeng.vercel.app/projects/trading',
+  },
+  openGraph: {
+    title: '매달 100만 원 트레이딩 계좌 성장 기록',
+    description:
+      '수익만 보여주는 결과가 아니라 실제 매매 판단과 손실, 계좌 변화 과정을 기록합니다.',
+    url: 'https://hohaeng.vercel.app/projects/trading',
+    siteName: '호행처럼',
+    type: 'website',
+  },
+};
 
 const TRADING_LOGS = [
   {

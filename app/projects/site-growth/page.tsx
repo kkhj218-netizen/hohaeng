@@ -5,6 +5,17 @@ export const metadata: Metadata = {
   title: '검색 유입 0명부터 시작하는 웹사이트 성장 기록 | 호행처럼',
   description:
     '호행처럼을 직접 만들고 검색 유입 0명부터 콘텐츠, 계산기, SEO 데이터를 쌓아가는 전 과정을 공개합니다.',
+  alternates: {
+    canonical: 'https://hohaeng.vercel.app/projects/site-growth',
+  },
+  openGraph: {
+    title: '검색 유입 0명부터 시작하는 웹사이트 성장 기록',
+    description:
+      '사이트 제작부터 검색엔진 등록, 콘텐츠 발행과 방문자 증가까지 실제 성장 과정을 공개합니다.',
+    url: 'https://hohaeng.vercel.app/projects/site-growth',
+    siteName: '호행처럼',
+    type: 'website',
+  },
 };
 
 const SITE_LOGS = [

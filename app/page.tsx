@@ -18,7 +18,7 @@ const PROJECTS = [
       { label: '현재 단계', value: '첫 기록 시작' },
       { label: '핵심 원칙', value: '수익보다 생존' },
     ],
-    href: '/blog/post-log-1785889120887',
+    href: '/projects/trading',
     linkText: '트레이딩 첫 기록 보기',
     accent:
       'border-emerald-800/50 hover:border-emerald-500/60 hover:shadow-emerald-950/40',

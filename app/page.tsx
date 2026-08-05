@@ -5,6 +5,102 @@ import Link from 'next/link';
 import { TOOLS, CATEGORIES } from './tools';
 import FooterProfile from '@/app/components/FooterProfile';
 
+const PROJECTS = [
+  {
+    id: 'trading',
+    eyebrow: 'MONEY PROJECT',
+    status: '진행 중',
+    title: '매달 100만 원 트레이딩 계좌',
+    description:
+      '매달 100만 원을 입금하며, 수익과 손실뿐 아니라 실제 판단과 실수를 함께 기록합니다.',
+    stats: [
+      { label: '운용 계획', value: '매달 100만 원 입금' },
+      { label: '현재 단계', value: '첫 기록 시작' },
+      { label: '핵심 원칙', value: '수익보다 생존' },
+    ],
+    href: '/blog/post-log-1785889120887',
+    linkText: '트레이딩 첫 기록 보기',
+    accent:
+      'border-emerald-800/50 hover:border-emerald-500/60 hover:shadow-emerald-950/40',
+    badgeClass:
+      'bg-emerald-950/70 text-emerald-300 border-emerald-800/50',
+    arrowClass: 'text-emerald-400',
+  },
+  {
+    id: 'site-growth',
+    eyebrow: 'GROWTH PROJECT',
+    status: '새 글 준비 중',
+    title: '검색 유입 0명에서 사이트 키우기',
+    description:
+      '직접 만든 호행처럼을 검색 유입 0명에서 시작해, 방문자가 생기는 과정까지 공개합니다.',
+    stats: [
+      { label: '시작 지점', value: '검색 유입 0명' },
+      { label: '현재 단계', value: '콘텐츠 기반 만들기' },
+      { label: '다음 목표', value: '첫 검색 방문' },
+    ],
+    href: '/blog/post-log-1785418870111',
+    linkText: '사이트를 만들기 시작한 기록',
+    accent:
+      'border-blue-800/50 hover:border-blue-500/60 hover:shadow-blue-950/40',
+    badgeClass: 'bg-blue-950/70 text-blue-300 border-blue-800/50',
+    arrowClass: 'text-blue-400',
+  },
+];
+
+const GUIDE_POSTS = [
+  {
+    category: '직장·월급',
+    title: '2026 연봉 실수령액 총정리',
+    description: '연봉 3,000만 원부터 1억 원까지 실제 월급을 비교합니다.',
+    href: '/blog/post-log-1785841740573',
+  },
+  {
+    category: '직장·월급',
+    title: '2026년 4대보험 요율',
+    description: '국민연금·건강보험·장기요양보험·고용보험 공제 기준입니다.',
+    href: '/blog/post-guide-1785817962078',
+  },
+  {
+    category: '직장·월급',
+    title: '연봉 5,000만 원 실수령액',
+    description: '월 416만 원과 실제 통장 입금액의 차이를 계산했습니다.',
+    href: '/blog/post-guide-1785842145060',
+  },
+  {
+    category: '직장·월급',
+    title: '연봉 3,000만 원 실수령액',
+    description: '사회초년생과 직장인이 받는 현실적인 세후 월급을 확인합니다.',
+    href: '/blog/post-guide-1785842451564',
+  },
+];
+
+const START_POSTS = [
+  {
+    number: '01',
+    label: '호행처럼의 시작',
+    title: '완벽하지 않아도, 방향은 잃지 않기로 했다',
+    description:
+      '호행처럼을 왜 시작했고 앞으로 어떤 삶을 기록하려는지 담았습니다.',
+    href: '/blog/post-log-1785417915884',
+  },
+  {
+    number: '02',
+    label: '돈을 다시 쌓는 과정',
+    title: '매달 100만 원 트레이딩 계좌를 시작합니다',
+    description:
+      '결과만 보여주는 계좌가 아니라 판단과 실수까지 남기는 공개 기록입니다.',
+    href: '/blog/post-log-1785889120887',
+  },
+  {
+    number: '03',
+    label: '사이트 성장 과정',
+    title: '직접 웹페이지를 제작해 보다',
+    description:
+      '아무것도 없던 상태에서 호행처럼을 직접 만들기 시작한 과정입니다.',
+    href: '/blog/post-log-1785418870111',
+  },
+];
+
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
@@ -15,95 +111,373 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-blue-500 selection:text-white">
-      {/* 메인 히어로 섹션 */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-8 pt-12 pb-8 text-center sm:text-left">
-        <div className="inline-block px-3 py-1 mb-4 rounded-full bg-blue-950/60 border border-blue-800/50 text-blue-400 text-xs font-semibold tracking-wide">
-          ✨ 스마트 라이프 & 금융 가이드
-        </div>
+      {/* 1. 메인 히어로 */}
+      <section className="relative overflow-hidden border-b border-slate-900">
+        <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[680px] -translate-x-1/2 rounded-full bg-blue-700/10 blur-3xl" />
 
-        {/* 메인 슬로건 */}
-        <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight sm:leading-snug">
-          돈과 시간을 아껴주는<br className="hidden sm:inline" />{' '}
-          <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-            스마트한 수치 가이드, 호행처럼
-          </span>
-        </h1>
+        <div className="relative mx-auto max-w-5xl px-4 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-20">
+          <div className="inline-flex items-center rounded-full border border-blue-800/50 bg-blue-950/60 px-3 py-1 text-xs font-semibold tracking-wide text-blue-300">
+            치료사 호행의 돈·몸·삶 공개 기록
+          </div>
 
-        {/* 서브 슬로건 */}
-        <p className="mt-3 text-xs sm:text-sm text-slate-400 max-w-xl font-normal leading-relaxed">
-          연봉 실수령액, 퇴직금, 대출 이자부터 일상의 수치까지 3초 만에 명확하게 확인하세요.
-        </p>
+          <h1 className="mt-5 max-w-3xl text-3xl font-black leading-tight tracking-tight text-white sm:text-5xl sm:leading-[1.18]">
+            완벽하지 않지만,
+            <br />
+            <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+              오늘보다 나은 삶을 만들어갑니다
+            </span>
+          </h1>
 
-        {/* 모바일 대응 스크롤 카테고리 필터 탭 */}
-        <div className="mt-8 flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800/60">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-xl whitespace-nowrap transition-all duration-200 ${
-                activeCategory === cat.id
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-              }`}
+          <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-400 sm:text-base">
+            치료사 호행이 돈과 삶을 다시 세워가는 과정을 기록하고,
+            그 과정에서 필요했던 연봉 실수령액·퇴직금·대출 이자·ISA
+            계산기와 현실적인 생활 정보를 직접 만들어 나눕니다.
+          </p>
+
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <a
+              href="#projects"
+              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/50 transition hover:bg-blue-500"
             >
-              {cat.name}
-            </button>
-          ))}
+              진행 중인 호행 프로젝트
+              <span className="ml-2">↓</span>
+            </a>
+
+            <a
+              href="#tools"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-bold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800"
+            >
+              필요한 계산기 찾기
+            </a>
+          </div>
+
+          <p className="mt-5 text-xs text-slate-600">
+            정보로 처음 만나고, 변화 과정이 궁금해 다시 오는 곳
+          </p>
         </div>
       </section>
 
-      {/* 도구 그리드 카드 섹션 */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-8 pb-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {filteredTools.map((tool) => (
-            <Link
-              key={tool.id}
-              href={tool.href}
-              className={`group relative p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 transition-all duration-300 hover:-translate-y-1 hover:bg-slate-900 ${tool.hoverColor}`}
-            >
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-[11px] font-bold tracking-wider text-blue-400 uppercase bg-blue-950/80 px-2.5 py-1 rounded-md border border-blue-900/50">
-                  {tool.category}
-                </span>
-                {tool.badge && (
-                  <span className="text-[10px] font-extrabold text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40">
-                    {tool.badge}
-                  </span>
-                )}
-              </div>
+      {/* 2. 진행 중인 공개 프로젝트 */}
+      <section
+        id="projects"
+        className="scroll-mt-20 border-b border-slate-900 bg-slate-950"
+      >
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
+          <div className="mb-7">
+            <p className="text-xs font-bold tracking-[0.18em] text-blue-400">
+              HOHAENG PROJECT
+            </p>
 
-              <h2 className="text-lg font-bold text-white group-hover:text-blue-300 transition-colors flex items-center justify-between">
-                <span>{tool.title}</span>
-                <span className="text-slate-500 group-hover:text-blue-400 transition-transform group-hover:translate-x-1">
-                  →
-                </span>
-              </h2>
+            <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+              지금 진행 중인 공개 프로젝트
+            </h2>
 
-              <p className="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed font-normal">
-                {tool.description}
-              </p>
-            </Link>
-          ))}
-        </div>
-
-        {filteredTools.length === 0 && (
-          <div className="text-center py-16 bg-slate-900/30 rounded-2xl border border-slate-800/50">
-            <p className="text-slate-400 text-sm">
-              해당 카테고리의 새로운 도구가 곧 출시될 예정입니다! 🚀
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+              잘된 결과만 보여주지 않습니다. 시작부터 시행착오, 판단의
+              변화까지 숫자와 함께 기록합니다.
             </p>
           </div>
-        )}
 
-        {/* 🙋‍♂️ 하단 제작자 소개 & 최근 일지 컴포넌트 */}
-        <FooterProfile />
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {PROJECTS.map((project) => (
+              <article
+                key={project.id}
+                className={`group rounded-3xl border bg-slate-900/60 p-6 shadow-xl transition duration-300 hover:-translate-y-1 ${project.accent}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-extrabold tracking-[0.18em] text-slate-500">
+                    {project.eyebrow}
+                  </span>
+
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${project.badgeClass}`}
+                  >
+                    {project.status}
+                  </span>
+                </div>
+
+                <h3 className="mt-5 text-xl font-black leading-snug text-white">
+                  {project.title}
+                </h3>
+
+                <p className="mt-3 min-h-[48px] text-sm leading-6 text-slate-400">
+                  {project.description}
+                </p>
+
+                <dl className="mt-6 space-y-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+                  {project.stats.map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="flex items-center justify-between gap-4 text-xs"
+                    >
+                      <dt className="text-slate-500">{stat.label}</dt>
+                      <dd className="text-right font-bold text-slate-200">
+                        {stat.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <Link
+                  href={project.href}
+                  className="mt-5 flex items-center justify-between text-sm font-bold text-slate-200 transition group-hover:text-white"
+                >
+                  <span>{project.linkText}</span>
+                  <span
+                    className={`transition-transform group-hover:translate-x-1 ${project.arrowClass}`}
+                  >
+                    →
+                  </span>
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
-      {/* 풋터 */}
+      {/* 3. 호행 소개 및 최근 기록 */}
+      <section
+        id="weekly-hohaeng"
+        className="scroll-mt-20 border-b border-slate-900"
+      >
+        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-8 sm:py-16">
+          <FooterProfile />
+        </div>
+      </section>
+
+      {/* 4. 많이 찾는 계산기 */}
+      <section
+        id="tools"
+        className="scroll-mt-20 border-b border-slate-900 bg-slate-950"
+      >
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
+          <div className="mb-7">
+            <p className="text-xs font-bold tracking-[0.18em] text-emerald-400">
+              SMART TOOLS
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+              많이 찾는 계산기
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              복잡한 숫자를 직접 계산하지 않아도 필요한 결과를 빠르게
+              확인할 수 있습니다.
+            </p>
+          </div>
+
+          <div className="mb-6 flex items-center space-x-2 overflow-x-auto border-b border-slate-800/60 pb-3 scrollbar-none">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                aria-pressed={activeCategory === cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all duration-200 sm:text-sm ${
+                  activeCategory === cat.id
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'border border-slate-800 bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {filteredTools.map((tool) => {
+              const categoryName =
+                CATEGORIES.find((category) => category.id === tool.category)
+                  ?.name ?? tool.category;
+
+              return (
+                <Link
+                  key={tool.id}
+                  href={tool.href}
+                  className={`group relative rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-slate-900 ${tool.hoverColor}`}
+                >
+                  <div className="mb-3 flex items-start justify-between">
+                    <span className="rounded-md border border-blue-900/50 bg-blue-950/80 px-2.5 py-1 text-[11px] font-bold tracking-wider text-blue-400">
+                      {categoryName}
+                    </span>
+
+                    {tool.badge && (
+                      <span className="rounded border border-amber-800/40 bg-amber-950/60 px-2 py-0.5 text-[10px] font-extrabold text-amber-300">
+                        {tool.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="flex items-center justify-between text-lg font-bold text-white transition-colors group-hover:text-blue-300">
+                    <span>{tool.title}</span>
+                    <span className="text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-blue-400">
+                      →
+                    </span>
+                  </h3>
+
+                  <p className="mt-2 text-xs font-normal leading-relaxed text-slate-400 sm:text-sm">
+                    {tool.description}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+
+          {filteredTools.length === 0 && (
+            <div className="rounded-2xl border border-slate-800/50 bg-slate-900/30 py-16 text-center">
+              <p className="text-sm text-slate-400">
+                해당 카테고리의 새로운 도구를 준비하고 있습니다.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 5. 검색형 돈·직장 가이드 */}
+      <section className="border-b border-slate-900 bg-slate-950">
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
+          <div className="mb-7">
+            <p className="text-xs font-bold tracking-[0.18em] text-indigo-400">
+              MONEY GUIDE
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+              돈과 직장생활에 필요한 가이드
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              실제 월급과 공제액처럼 직장인이 자주 궁금해하는 내용을
+              기준과 숫자로 정리했습니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {GUIDE_POSTS.map((post) => (
+              <Link
+                key={post.href}
+                href={post.href}
+                className="group rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5 transition duration-300 hover:-translate-y-1 hover:border-indigo-700/60 hover:bg-slate-900"
+              >
+                <span className="text-[11px] font-bold text-indigo-400">
+                  {post.category}
+                </span>
+
+                <h3 className="mt-2 flex items-start justify-between gap-4 text-base font-bold leading-6 text-white group-hover:text-indigo-300">
+                  <span>{post.title}</span>
+                  <span className="shrink-0 text-slate-600 transition-transform group-hover:translate-x-1 group-hover:text-indigo-400">
+                    →
+                  </span>
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500 sm:text-sm">
+                  {post.description}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. 처음 방문한 사람을 위한 글 */}
+      <section className="border-b border-slate-900">
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
+          <div className="mb-7">
+            <p className="text-xs font-bold tracking-[0.18em] text-amber-400">
+              START HERE
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+              호행처럼에 처음 오셨다면
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              호행처럼이 어떤 곳인지 가장 잘 보여주는 세 가지 기록입니다.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {START_POSTS.map((post) => (
+              <Link
+                key={post.number}
+                href={post.href}
+                className="group flex gap-4 rounded-2xl border border-slate-800/80 bg-slate-900/40 p-5 transition hover:border-slate-700 hover:bg-slate-900/80"
+              >
+                <span className="text-lg font-black text-slate-700 transition group-hover:text-blue-500">
+                  {post.number}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-blue-400">
+                    {post.label}
+                  </span>
+
+                  <h3 className="mt-1 text-sm font-bold leading-6 text-white sm:text-base">
+                    {post.title}
+                  </h3>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
+                    {post.description}
+                  </p>
+                </div>
+
+                <span className="self-center text-slate-600 transition-transform group-hover:translate-x-1 group-hover:text-blue-400">
+                  →
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 7. 다음 기록 안내 */}
+      <section className="border-b border-slate-900 bg-gradient-to-b from-slate-950 to-blue-950/20">
+        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
+          <div className="rounded-3xl border border-blue-900/50 bg-blue-950/20 p-7 text-center sm:p-10">
+            <p className="text-xs font-bold tracking-[0.18em] text-blue-400">
+              NEXT HOHAENG
+            </p>
+
+            <h2 className="mt-3 text-2xl font-black text-white">
+              호행의 다음 결과가 궁금하다면
+            </h2>
+
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">
+              새로운 계산기와 검색 유입 0명에서 사이트를 키우는 과정,
+              매달 100만 원 트레이딩 계좌의 실제 변화를 계속 기록합니다.
+            </p>
+
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link
+                href="/blog/post-log-1785889120887"
+                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500"
+              >
+                최근 호행 기록 보기
+              </Link>
+
+              <a
+                href="/rss.xml"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white"
+              >
+                업데이트 피드 열기
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. 풋터 */}
       <footer className="border-t border-slate-800/80 py-8 text-center text-xs text-slate-500">
-        <div className="max-w-5xl mx-auto px-4">
-          <p>© {new Date().getFullYear()} 호행처럼 (Hohaeng). All rights reserved.</p>
+        <div className="mx-auto max-w-5xl px-4">
+          <p>
+            © {new Date().getFullYear()} 호행처럼 (Hohaeng). All rights
+            reserved.
+          </p>
+
           <p className="mt-1 text-[11px] text-slate-600">
-            본 사이트에서 제공하는 계산 결과는 참고용이며, 정확한 세법 및 정책은 관련 기관 기준을 확인하세요.
+            본 사이트에서 제공하는 계산 결과는 참고용이며, 정확한 세법 및
+            정책은 관련 기관 기준을 확인하세요.
           </p>
         </div>
       </footer>

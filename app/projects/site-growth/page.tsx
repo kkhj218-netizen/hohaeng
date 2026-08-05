@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { supabase } from '@/app/lib/supabase';
 
 export const metadata: Metadata = {
   title: '검색 유입 0명부터 시작하는 웹사이트 성장 기록 | 호행처럼',
@@ -18,18 +19,78 @@ export const metadata: Metadata = {
   },
 };
 
-const SITE_LOGS = [
-  {
-    number: '#001',
-    date: '2026.07.28',
-    category: '사이트 제작기',
-    title: '직접 웹페이지를 제작해 보다',
-    description:
-      '아무것도 없던 상태에서 호행처럼을 직접 만들기 시작한 첫 번째 기록입니다.',
-    href: '/blog/post-log-1785418870111',
-    status: '발행 완료',
-  },
+type ProjectPost = {
+  title: string;
+  slug: string;
+  description: string | null;
+  category: string | null;
+  subcategory: string | null;
+  created_at: string | null;
+  published_at: string | null;
+};
+
+const SITE_GROWTH_KEYWORDS = [
+  '사이트 제작기',
+  '웹사이트',
+  '웹페이지',
+  '검색 유입',
+  '사이트 성장',
 ];
+
+function isSiteGrowthPost(post: ProjectPost) {
+  const text = `${post.title} ${post.category || ''} ${post.subcategory || ''}`
+    .toLowerCase();
+
+  return SITE_GROWTH_KEYWORDS.some((keyword) =>
+    text.includes(keyword.toLowerCase())
+  );
+}
+
+function formatProjectDate(post: ProjectPost) {
+  const value = post.published_at || post.created_at;
+
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+async function getSiteLogs() {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(
+      'title, slug, description, category, subcategory, created_at, published_at'
+    )
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('사이트 성장 기록 불러오기 오류:', error);
+    return [];
+  }
+
+  return ((data || []) as ProjectPost[])
+    .filter(isSiteGrowthPost)
+    .map((post, index) => ({
+      number: `#${String(index + 1).padStart(3, '0')}`,
+      date: formatProjectDate(post),
+      category: post.subcategory || '사이트 제작기',
+      title: post.title,
+      description:
+        post.description ||
+        '호행처럼 웹사이트를 직접 만들고 성장시키는 과정을 기록했습니다.',
+      href: `/blog/${post.slug}`,
+      status: index === 0 ? '최신 기록' : '발행 완료',
+    }));
+}
 
 const COMPLETED_TASKS = [
   {
@@ -142,7 +203,9 @@ const MEASUREMENT_ITEMS = [
   },
 ];
 
-export default function SiteGrowthProjectPage() {
+export default async function SiteGrowthProjectPage() {
+  const siteLogs = await getSiteLogs();
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 antialiased">
       {/* 프로젝트 소개 */}
@@ -386,7 +449,13 @@ export default function SiteGrowthProjectPage() {
           </div>
 
           <div className="mt-7 space-y-4">
-            {SITE_LOGS.map((log) => (
+            {siteLogs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 p-6 text-center text-sm text-slate-500">
+                아직 발행된 사이트 성장 기록이 없습니다.
+              </div>
+            )}
+
+            {siteLogs.map((log) => (
               <Link
                 key={log.number}
                 href={log.href}

@@ -38,7 +38,7 @@ const PROJECTS = [
       { label: '현재 단계', value: '콘텐츠 기반 만들기' },
       { label: '다음 목표', value: '첫 검색 방문' },
     ],
-    href: '/blog/post-log-1785418870111',
+    href: '/projects/site-growth',
     linkText: '사이트를 만들기 시작한 기록',
     accent:
       'border-blue-800/50 hover:border-blue-500/60 hover:shadow-blue-950/40',

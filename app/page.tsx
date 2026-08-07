@@ -117,7 +117,7 @@ export default function Home() {
 
         <div className="relative mx-auto max-w-5xl px-4 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-20">
           <div className="inline-flex items-center rounded-full border border-blue-800/50 bg-blue-950/60 px-3 py-1 text-xs font-semibold tracking-wide text-blue-300">
-            치료사 호행의 돈·몸·삶 공개 기록
+            호행의 돈·건강·삶 공개 기록
           </div>
 
           <h1 className="mt-5 max-w-3xl text-3xl font-black leading-tight tracking-tight text-white sm:text-5xl sm:leading-[1.18]">
@@ -129,7 +129,7 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-400 sm:text-base">
-            치료사 호행이 돈과 삶을 다시 세워가는 과정을 기록하고,
+            호행이 돈과 삶을 다시 세워가는 과정을 기록하고,
             그 과정에서 필요했던 연봉 실수령액·퇴직금·대출 이자·ISA
             계산기와 현실적인 생활 정보를 직접 만들어 나눕니다.
           </p>

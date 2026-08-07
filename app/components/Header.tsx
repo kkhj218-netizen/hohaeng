@@ -148,7 +148,7 @@ export default function Header() {
 
           <nav className="ml-2 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2 text-sm font-medium text-slate-700 sm:gap-3">
             <Link
-              href="/"
+              href="/tools"
               className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
             >
               🧮 계산기

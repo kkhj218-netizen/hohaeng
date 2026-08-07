@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { supabase } from '@/app/lib/supabase';
 
 export const metadata: Metadata = {
   title: '매달 100만 원 트레이딩 계좌 성장 기록 | 호행처럼',
@@ -18,17 +19,71 @@ export const metadata: Metadata = {
   },
 };
 
-const TRADING_LOGS = [
-  {
-    number: '#001',
-    date: '2026.08.05',
-    title: '매달 100만 원 트레이딩 계좌를 시작합니다',
-    description:
-      '매월 일정한 금액을 입금하고, 매일의 판단과 손익을 숨김없이 기록하기로 했습니다.',
-    href: '/blog/post-log-1785889120887',
-    status: '첫 기록',
-  },
-];
+type ProjectPost = {
+  title: string;
+  slug: string;
+  description: string | null;
+  category: string | null;
+  subcategory: string | null;
+  created_at: string | null;
+  published_at: string | null;
+};
+
+const TRADING_KEYWORDS = ['트레이딩', '매매일지', '계좌 성장'];
+
+function isTradingPost(post: ProjectPost) {
+  const text = `${post.title} ${post.category || ''} ${post.subcategory || ''}`
+    .toLowerCase();
+
+  return TRADING_KEYWORDS.some((keyword) =>
+    text.includes(keyword.toLowerCase())
+  );
+}
+
+function formatProjectDate(post: ProjectPost) {
+  const value = post.published_at || post.created_at;
+
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+async function getTradingLogs() {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(
+      'title, slug, description, category, subcategory, created_at, published_at'
+    )
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('트레이딩 기록 불러오기 오류:', error);
+    return [];
+  }
+
+  return ((data || []) as ProjectPost[])
+    .filter(isTradingPost)
+    .map((post, index) => ({
+      number: `#${String(index + 1).padStart(3, '0')}`,
+      date: formatProjectDate(post),
+      title: post.title,
+      description:
+        post.description ||
+        '트레이딩 과정과 판단을 기록한 호행처럼의 공개 매매일지입니다.',
+      href: `/blog/${post.slug}`,
+      status: index === 0 ? '최신 기록' : '발행 완료',
+    }));
+}
 
 const PRINCIPLES = [
   {
@@ -83,7 +138,9 @@ const ROADMAP = [
   },
 ];
 
-export default function TradingProjectPage() {
+export default async function TradingProjectPage() {
+  const tradingLogs = await getTradingLogs();
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 antialiased">
       {/* 상단 */}
@@ -159,7 +216,7 @@ export default function TradingProjectPage() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="text-xs text-slate-500">현재 기록</p>
               <p className="mt-2 text-2xl font-black text-white">
-                {TRADING_LOGS.length}편
+                {tradingLogs.length}편
               </p>
               <p className="mt-2 text-xs text-slate-500">
                 첫 운용 기록을 시작했습니다.
@@ -241,7 +298,13 @@ export default function TradingProjectPage() {
           </div>
 
           <div className="mt-7 space-y-4">
-            {TRADING_LOGS.map((log) => (
+            {tradingLogs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 p-6 text-center text-sm text-slate-500">
+                아직 발행된 트레이딩 기록이 없습니다.
+              </div>
+            )}
+
+            {tradingLogs.map((log) => (
               <Link
                 key={log.number}
                 href={log.href}

@@ -690,7 +690,28 @@ export default function AdminHomePage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-10">
+          <Link
+            href="/admin/content-queue"
+            className="group bg-slate-900 border border-cyan-900 hover:border-cyan-500 rounded-2xl p-6 transition-all"
+          >
+            <div className="text-3xl mb-4">
+              ✅
+            </div>
+
+            <h3 className="text-lg font-black text-white">
+              발행 준비함
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              완성 원고 24편을 확인하고 공개 발행
+            </p>
+
+            <p className="text-sm font-bold text-cyan-400 mt-5">
+              마지막 확인하기 →
+            </p>
+          </Link>
+
           <Link
             href="/admin/write"
             className="group bg-slate-900 border border-slate-800 hover:border-blue-500 rounded-2xl p-6 transition-all"

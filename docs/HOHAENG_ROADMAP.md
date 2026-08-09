@@ -1,6 +1,8 @@
 # 🧠 HOHAENG OS
 ### AI 기반 SEO 콘텐츠 운영체제
 
+> 2026-08: 별도 Supabase 기반 `JH Hedge Fund Data Pack V1` 수집기·시장 레이더·GPT 복사팩 추가. 자세한 운영 방식은 `docs/JH_DATA_PACK.md` 참고.
+
 ---
 
 # Vision

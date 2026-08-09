@@ -690,7 +690,28 @@ export default function AdminHomePage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-10">
+          <Link
+            href="/admin/jh-market"
+            className="group bg-gradient-to-br from-cyan-950/80 to-slate-900 border border-cyan-800 hover:border-cyan-400 rounded-2xl p-6 transition-all"
+          >
+            <div className="text-3xl mb-4">
+              📡
+            </div>
+
+            <h3 className="text-lg font-black text-white">
+              JH 투자 레이더
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              시장 데이터 40개, 이상신호 TOP 5, GPT 분석팩
+            </p>
+
+            <p className="text-sm font-bold text-cyan-400 mt-5">
+              오늘 시장 확인하기 →
+            </p>
+          </Link>
+
           <Link
             href="/admin/content-queue"
             className="group bg-slate-900 border border-cyan-900 hover:border-cyan-500 rounded-2xl p-6 transition-all"

@@ -1,10 +1,24 @@
+import { MONTH_2_SOURCES } from './preparedPostsMonth2';
+import { MONTH_3_SOURCES } from './preparedPostsMonth3';
+import { MONTH_4_SOURCES } from './preparedPostsMonth4';
+import { MONTH_5_SOURCES } from './preparedPostsMonth5';
+import { MONTH_6_SOURCES } from './preparedPostsMonth6';
+
 export type PreparedPost = {
   sequence: number;
   day: number;
+  month: number;
   seedSlug: string;
   title: string;
   keyword: string;
-  cluster: '연봉·월급' | '투자 계산기';
+  cluster:
+    | '연봉·월급'
+    | '투자 계산기'
+    | '저축·생활비'
+    | '대출·부채'
+    | '투자·손실관리'
+    | '배당·은퇴'
+    | '부부 재정';
   category: 'guide';
   subcategory: null;
   description: string;
@@ -21,7 +35,7 @@ type Section = {
   paragraphs: string[];
 };
 
-type PreparedPostSource = {
+export type PreparedPostSource = {
   seedSlug: string;
   title: string;
   keyword: string;
@@ -39,6 +53,31 @@ type PreparedPostSource = {
 const SALARY_PILLAR =
   '/blog/post-log-1785841740573';
 const GUIDE_LIST = '/blog?category=guide';
+
+const CLUSTER_PILLARS: Partial<
+  Record<PreparedPost['cluster'], { href: string; label: string }>
+> = {
+  '저축·생활비': {
+    href: '/blog/prepared-month2-savings-living-cost-pillar',
+    label: '저축·생활비 관리 총정리',
+  },
+  '대출·부채': {
+    href: '/blog/prepared-month3-debt-payoff-pillar',
+    label: '대출·부채 상환 총정리',
+  },
+  '투자·손실관리': {
+    href: '/blog/prepared-month4-return-risk-pillar',
+    label: '투자 수익률·손실관리 총정리',
+  },
+  '배당·은퇴': {
+    href: '/blog/prepared-month5-dividend-retirement-pillar',
+    label: '배당·은퇴자금 총정리',
+  },
+  '부부 재정': {
+    href: '/blog/prepared-month6-couple-finance-pillar',
+    label: '부부 돈 관리 총정리',
+  },
+};
 
 function stripHtml(value: string) {
   return value
@@ -58,10 +97,13 @@ function buildPreparedContent(
       'prepared-2026-salary-'
     );
   const calculatorLink = `<a href="${source.calculatorHref}">${source.calculatorLabel}</a>`;
+  const clusterPillar = CLUSTER_PILLARS[source.cluster];
   const secondLink =
     source.cluster === '연봉·월급'
       ? `<a href="${SALARY_PILLAR}">2026 연봉 실수령액 총정리</a>`
-      : `<a href="/money/compound-calc">복리 계산기</a>`;
+      : clusterPillar
+        ? `<a href="${clusterPillar.href}">${clusterPillar.label}</a>`
+        : `<a href="/money/compound-calc">복리 계산기</a>`;
 
   return `
     <p>${source.introduction}</p>
@@ -753,14 +795,24 @@ const SOURCES: PreparedPostSource[] = [
   },
 ];
 
+const ALL_SOURCES: PreparedPostSource[] = [
+  ...SOURCES,
+  ...MONTH_2_SOURCES,
+  ...MONTH_3_SOURCES,
+  ...MONTH_4_SOURCES,
+  ...MONTH_5_SOURCES,
+  ...MONTH_6_SOURCES,
+];
+
 export const PREPARED_POSTS: PreparedPost[] =
-  SOURCES.map((source, index) => {
+  ALL_SOURCES.map((source, index) => {
     const content =
       buildPreparedContent(source);
 
     return {
       sequence: index + 1,
       day: index + 1,
+      month: Math.floor(index / 30) + 1,
       seedSlug: source.seedSlug,
       title: source.title,
       keyword: source.keyword,

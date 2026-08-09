@@ -27,6 +27,22 @@ type QueueState =
   | 'ready'
   | 'error';
 
+const MONTHS = [
+  { month: 1, range: '1~30일차', label: '연봉·투자 기초' },
+  { month: 2, range: '31~60일차', label: '저축·생활비' },
+  { month: 3, range: '61~90일차', label: '대출·부채 상환' },
+  { month: 4, range: '91~120일차', label: '투자·손실관리' },
+  { month: 5, range: '121~150일차', label: '배당·은퇴자금' },
+  { month: 6, range: '151~180일차', label: '부부 재정관리' },
+] as const;
+
+function chunkItems<T>(items: T[], size: number) {
+  return Array.from(
+    { length: Math.ceil(items.length / size) },
+    (_, index) => items.slice(index * size, (index + 1) * size)
+  );
+}
+
 function statusLabel(post: StoredPost | undefined) {
   if (!post) {
     return '준비 중';
@@ -67,6 +83,8 @@ export default function ContentQueuePage() {
     useState<StoredPost[]>([]);
   const [errorMessage, setErrorMessage] =
     useState('');
+  const [selectedMonth, setSelectedMonth] =
+    useState(1);
 
   const syncPreparedPosts =
     useCallback(async () => {
@@ -88,20 +106,23 @@ export default function ContentQueuePage() {
             (post) => post.seedSlug
           );
 
-        const { data: existingData, error: existingError } =
-          await supabase
+        const existingPosts: StoredPost[] = [];
+
+        for (const slugChunk of chunkItems(preparedSlugs, 40)) {
+          const { data, error } = await supabase
             .from('posts')
             .select(
               'id, slug, status, scheduled_at, published_at, updated_at'
             )
-            .in('slug', preparedSlugs);
+            .in('slug', slugChunk);
 
-        if (existingError) {
-          throw existingError;
+          if (error) {
+            throw error;
+          }
+
+          existingPosts.push(...((data || []) as StoredPost[]));
         }
 
-        const existingPosts =
-          (existingData || []) as StoredPost[];
         const existingSlugs = new Set(
           existingPosts.map((post) => post.slug)
         );
@@ -112,9 +133,11 @@ export default function ContentQueuePage() {
 
         if (missingPosts.length > 0) {
           const now = new Date().toISOString();
-          const { error: insertError } =
-            await supabase.from('posts').insert(
-              missingPosts.map((post) => ({
+
+          for (const postChunk of chunkItems(missingPosts, 20)) {
+            const { error: insertError } =
+              await supabase.from('posts').insert(
+                postChunk.map((post) => ({
                 slug: post.seedSlug,
                 title: post.title,
                 content: post.content,
@@ -128,29 +151,33 @@ export default function ContentQueuePage() {
                 published_at: null,
                 scheduled_at: null,
                 updated_at: now,
-              }))
-            );
+                }))
+              );
 
-          if (insertError) {
-            throw insertError;
+            if (insertError) {
+              throw insertError;
+            }
           }
         }
 
-        const { data: refreshedData, error: refreshedError } =
-          await supabase
-            .from('posts')
-            .select(
-              'id, slug, status, scheduled_at, published_at, updated_at'
-            )
-            .in('slug', preparedSlugs);
+        const refreshedPosts: StoredPost[] = [];
 
-        if (refreshedError) {
-          throw refreshedError;
+        for (const slugChunk of chunkItems(preparedSlugs, 40)) {
+          const { data, error } = await supabase
+              .from('posts')
+              .select(
+                'id, slug, status, scheduled_at, published_at, updated_at'
+              )
+              .in('slug', slugChunk);
+
+          if (error) {
+            throw error;
+          }
+
+          refreshedPosts.push(...((data || []) as StoredPost[]));
         }
 
-        setStoredPosts(
-          (refreshedData || []) as StoredPost[]
-        );
+        setStoredPosts(refreshedPosts);
         setQueueState('ready');
       } catch (error) {
         console.error('발행 준비함 동기화 오류:', error);
@@ -195,6 +222,13 @@ export default function ContentQueuePage() {
       publishedCount -
       scheduledCount
   );
+  const visiblePreparedPosts = useMemo(
+    () =>
+      PREPARED_POSTS.filter(
+        (post) => post.month === selectedMonth
+      ),
+    [selectedMonth]
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6">
@@ -208,7 +242,7 @@ export default function ContentQueuePage() {
               ✅ 발행 준비함
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-              30일 동안 하루 1편씩 발행할 원고입니다. 글을 열어 마지막으로 확인한 뒤
+              6개월 동안 하루 1편씩 발행할 180편의 원고입니다. 글을 열어 마지막으로 확인한 뒤
               기존 편집기의 ‘공개 발행’만 누르면 됩니다.
             </p>
           </div>
@@ -233,7 +267,7 @@ export default function ContentQueuePage() {
         queueState === 'checking-auth' ? (
           <section className="mb-8 rounded-3xl border border-cyan-800 bg-cyan-950/30 p-7 text-center">
             <p className="text-lg font-black text-cyan-200">
-              30편의 완성 원고를 초안함에 준비하는 중...
+              180편의 완성 원고를 초안함에 준비하는 중...
             </p>
             <p className="mt-2 text-sm text-cyan-100/70">
               이미 저장된 글은 건드리지 않고 누락된 초안만 추가합니다.
@@ -279,25 +313,32 @@ export default function ContentQueuePage() {
         </section>
 
         <section className="mb-8 rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <h2 className="font-black text-white">발행 순서</h2>
-          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div className="rounded-2xl border border-blue-900/70 bg-blue-950/30 p-4">
-              <p className="font-black text-blue-300">1~12일차 · 연봉·월급</p>
-              <p className="mt-2 leading-6 text-slate-400">
-                연봉 6천~1억 실수령액 → 식대·부양가족 → 계약서·급여명세서
-              </p>
-            </div>
-            <div className="rounded-2xl border border-emerald-900/70 bg-emerald-950/30 p-4">
-              <p className="font-black text-emerald-300">13~30일차 · 투자 계산기</p>
-              <p className="mt-2 leading-6 text-slate-400">
-                복리·적립식·목표금액 → 배당금 → 평균단가·계좌 기록
-              </p>
-            </div>
+          <h2 className="font-black text-white">월별 발행 순서</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            모바일에서도 확인하기 쉽도록 선택한 한 달의 원고 30편만 아래에 표시합니다.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {MONTHS.map((item) => (
+              <button
+                key={item.month}
+                type="button"
+                onClick={() => setSelectedMonth(item.month)}
+                className={`rounded-2xl border px-3 py-3 text-left transition ${
+                  selectedMonth === item.month
+                    ? 'border-cyan-500 bg-cyan-950/70 text-cyan-200'
+                    : 'border-slate-700 bg-slate-950/60 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <span className="block text-xs font-black">{item.month}개월차</span>
+                <span className="mt-1 block text-[11px]">{item.range}</span>
+                <span className="mt-1 block text-[11px] font-bold">{item.label}</span>
+              </button>
+            ))}
           </div>
         </section>
 
         <div className="space-y-4">
-          {PREPARED_POSTS.map((preparedPost) => {
+          {visiblePreparedPosts.map((preparedPost) => {
             const storedPost = storedPostMap.get(
               preparedPost.seedSlug
             );

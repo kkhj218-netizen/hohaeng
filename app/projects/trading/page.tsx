@@ -32,6 +32,10 @@ type ProjectPost = {
 const TRADING_KEYWORDS = ['트레이딩', '매매일지', '계좌 성장'];
 
 function isTradingPost(post: ProjectPost) {
+  if (post.category === 'log' && post.subcategory === 'invest') {
+    return true;
+  }
+
   const text = `${post.title} ${post.category || ''} ${post.subcategory || ''}`
     .toLowerCase();
 
@@ -63,8 +67,8 @@ async function getTradingLogs() {
       'title, slug, description, category, subcategory, created_at, published_at'
     )
     .eq('status', 'published')
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .order('published_at', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
 
   if (error) {
     console.error('트레이딩 기록 불러오기 오류:', error);
@@ -73,7 +77,7 @@ async function getTradingLogs() {
 
   return ((data || []) as ProjectPost[])
     .filter(isTradingPost)
-    .map((post, index) => ({
+    .map((post, index, posts) => ({
       number: `#${String(index + 1).padStart(3, '0')}`,
       date: formatProjectDate(post),
       title: post.title,
@@ -81,7 +85,7 @@ async function getTradingLogs() {
         post.description ||
         '트레이딩 과정과 판단을 기록한 호행처럼의 공개 매매일지입니다.',
       href: `/blog/${post.slug}`,
-      status: index === 0 ? '최신 기록' : '발행 완료',
+      status: index === posts.length - 1 ? '최신 기록' : '발행 완료',
     }));
 }
 
@@ -293,7 +297,7 @@ export default async function TradingProjectPage() {
             </div>
 
             <p className="text-xs text-slate-600">
-              최신 기록부터 순서대로 업데이트됩니다.
+              첫 기록부터 번호 순서대로 업데이트됩니다.
             </p>
           </div>
 

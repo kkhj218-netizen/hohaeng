@@ -182,6 +182,10 @@ export default async function BlogListPage({
         category
     );
 
+  const isInvestmentJournal =
+    category === 'log' &&
+    sub === 'invest';
+
   // =========================================================
   // DB에서 필요한 공개글만 가져오기
   // 페이지가 늘어날수록 12개씩 누적해서 표시
@@ -267,7 +271,7 @@ export default async function BlogListPage({
     .order(
       'created_at',
       {
-        ascending: false,
+        ascending: isInvestmentJournal,
       }
     )
     .range(

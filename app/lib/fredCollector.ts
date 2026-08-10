@@ -19,17 +19,77 @@ type FredObservation = {
   value: string;
 };
 
-type FredResponse = {
+type FredObservationsResponse = {
   observations?: FredObservation[];
   error_message?: string;
+};
+
+type FredSeriesInfo = {
+  id: string;
+  observation_end?: string;
+  frequency?: string;
+  last_updated?: string;
+};
+
+type FredSeriesResponse = {
+  seriess?: FredSeriesInfo[];
+  error_message?: string;
+};
+
+type FredRelease = {
+  id: number;
+  name: string;
+};
+
+type FredReleaseResponse = {
+  releases?: FredRelease[];
+  error_message?: string;
+};
+
+type FredReleaseDatesResponse = {
+  release_dates?: Array<{ release_id: number; date: string }>;
+  error_message?: string;
+};
+
+type PreviousSeriesState = {
+  mode: FredCollectionMode | null;
+  error: string | null;
+  historyComplete: boolean;
+  latestObservationDate: string | null;
+  sourceLastUpdatedAt: string | null;
+  releaseId: number | null;
+  releaseName: string | null;
+  nextReleaseDate: string | null;
+};
+
+type PreparedSeries = {
+  series: MarketSeries;
+  mode: FredCollectionMode;
+  historyComplete: boolean;
+  previous: PreviousSeriesState | null;
+  sourceLastUpdatedAt: string | null;
+  sourceObservationEnd: string | null;
+  releaseId: number | null;
+  releaseName: string | null;
+  metadataWarnings: string[];
+  error?: string;
 };
 
 type SeriesResult = {
   code: string;
   mode: FredCollectionMode;
+  historyComplete: boolean;
   fetched: number;
   saved: number;
   latestObservationDate: string | null;
+  sourceLastUpdatedAt: string | null;
+  sourceObservationEnd: string | null;
+  releaseId: number | null;
+  releaseName: string | null;
+  nextReleaseDate: string | null;
+  checkedAt: string;
+  unchanged: boolean;
+  metadataWarning?: string;
   error?: string;
 };
 
@@ -40,15 +100,18 @@ export type FredCollectionResult = {
   seriesCount: number;
   seriesSucceeded: number;
   seriesFailed: number;
+  seriesUpdated: number;
+  seriesUnchanged: number;
+  metadataWarnings: number;
   recordsFetched: number;
   recordsSaved: number;
   failures: Array<{ code: string; error: string }>;
 };
 
-const FRED_OBSERVATIONS_URL =
-  "https://api.stlouisfed.org/fred/series/observations";
+const FRED_API_BASE_URL = "https://api.stlouisfed.org/fred";
 const UPSERT_BATCH_SIZE = 500;
-const FETCH_CONCURRENCY = 4;
+const FETCH_CONCURRENCY = 6;
+const RELEASE_CONCURRENCY = 6;
 
 function getFredApiKey(): string {
   const apiKey = process.env.FRED_API_KEY;
@@ -62,6 +125,17 @@ function getFredApiKey(): string {
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+function dateInNewYork(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function daysAgo(days: number): string {
@@ -93,12 +167,87 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function jsonObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeFredTimestamp(value: string | undefined): string | null {
+  if (!value) return null;
+  const isoLike = value
+    .replace(" ", "T")
+    .replace(/([+-]\d{2})$/, "$1:00");
+  const parsed = new Date(isoLike);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+
+async function fetchFredJson<T extends { error_message?: string }>(
+  path: string,
+  params: Record<string, string>
+): Promise<T> {
+  const url = new URL(`${FRED_API_BASE_URL}/${path}`);
+  url.search = new URLSearchParams({
+    ...params,
+    api_key: getFredApiKey(),
+    file_type: "json",
+  }).toString();
+
+  const response = await fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`FRED ${path} 요청 실패 (${response.status})`);
+  }
+
+  const payload = (await response.json()) as T;
+  if (payload.error_message) {
+    throw new Error(`FRED ${path}: ${payload.error_message}`);
+  }
+  return payload;
+}
+
 async function resolveSeriesMode(
   series: MarketSeries,
-  requestedMode: FredCollectionRequestMode
-): Promise<FredCollectionMode> {
-  if (requestedMode !== "auto") {
-    return requestedMode;
+  requestedMode: FredCollectionRequestMode,
+  previous: PreviousSeriesState | null
+): Promise<{ mode: FredCollectionMode; historyComplete: boolean }> {
+  if (requestedMode === "backfill") {
+    return { mode: "backfill", historyComplete: false };
+  }
+
+  if (requestedMode === "daily") {
+    return {
+      mode: "daily",
+      historyComplete: previous?.historyComplete ?? false,
+    };
+  }
+
+  // A successful earlier run already proved that the backfill window exists.
+  // Reusing that fact avoids forty separate COUNT queries on every refresh.
+  if (
+    previous &&
+    previous.error === null &&
+    previous.historyComplete &&
+    previous.latestObservationDate &&
+    (previous.mode === "daily" || previous.mode === "backfill")
+  ) {
+    return { mode: "daily", historyComplete: true };
   }
 
   const minimumHistoryCount =
@@ -120,40 +269,55 @@ async function resolveSeriesMode(
     );
   }
 
-  return (count ?? 0) >= minimumHistoryCount ? "daily" : "backfill";
+  return (count ?? 0) >= minimumHistoryCount
+    ? { mode: "daily", historyComplete: true }
+    : { mode: "backfill", historyComplete: false };
+}
+
+async function fetchFredSeriesInfo(code: string): Promise<FredSeriesInfo> {
+  const payload = await fetchFredJson<FredSeriesResponse>("series", {
+    series_id: code,
+  });
+  const info = payload.seriess?.[0];
+  if (!info) throw new Error(`${code} FRED 시리즈 메타데이터가 없습니다.`);
+  return info;
+}
+
+async function fetchFredRelease(code: string): Promise<FredRelease | null> {
+  const payload = await fetchFredJson<FredReleaseResponse>("series/release", {
+    series_id: code,
+  });
+  return payload.releases?.[0] ?? null;
+}
+
+async function fetchNextReleaseDate(releaseId: number): Promise<string | null> {
+  const payload = await fetchFredJson<FredReleaseDatesResponse>("release/dates", {
+    release_id: String(releaseId),
+    include_release_dates_with_no_data: "true",
+    sort_order: "desc",
+    limit: "1000",
+  });
+  const sourceToday = dateInNewYork();
+  const futureDates = (payload.release_dates ?? [])
+    .map((item) => item.date)
+    .filter((date) => date >= sourceToday)
+    .sort((left, right) => left.localeCompare(right));
+  return futureDates[0] ?? null;
 }
 
 async function fetchFredObservations(
   series: MarketSeries,
   mode: FredCollectionMode
 ): Promise<FredObservation[]> {
-  const params = new URLSearchParams({
-    series_id: series.source_series_code,
-    api_key: getFredApiKey(),
-    file_type: "json",
-    sort_order: "asc",
-    limit: "100000",
-    observation_start: getObservationStart(series.frequency, mode),
-  });
-
-  const response = await fetch(`${FRED_OBSERVATIONS_URL}?${params}`, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `FRED ${series.source_series_code} 요청 실패 (${response.status})`
-    );
-  }
-
-  const payload = (await response.json()) as FredResponse;
-
-  if (payload.error_message) {
-    throw new Error(
-      `FRED ${series.source_series_code}: ${payload.error_message}`
-    );
-  }
+  const payload = await fetchFredJson<FredObservationsResponse>(
+    "series/observations",
+    {
+      series_id: series.source_series_code,
+      sort_order: "asc",
+      limit: "100000",
+      observation_start: getObservationStart(series.frequency, mode),
+    }
+  );
 
   return (payload.observations ?? []).filter(
     (observation) =>
@@ -161,18 +325,188 @@ async function fetchFredObservations(
   );
 }
 
-async function collectSeries(
+function previousSeriesStates(
+  metadata: unknown
+): Map<string, PreviousSeriesState> {
+  const map = new Map<string, PreviousSeriesState>();
+  const results = jsonObject(metadata)?.series_results;
+  if (!Array.isArray(results)) return map;
+
+  for (const value of results) {
+    const row = jsonObject(value);
+    const code = stringValue(row?.code);
+    if (!row || !code) continue;
+    const mode = stringValue(row.mode);
+    const error = stringValue(row.error);
+    map.set(code, {
+      mode: mode === "daily" || mode === "backfill" ? mode : null,
+      error,
+      historyComplete:
+        row.history_complete === true || (mode === "backfill" && error === null),
+      latestObservationDate: stringValue(row.latest_observation_date),
+      sourceLastUpdatedAt: stringValue(row.source_last_updated_at),
+      releaseId: numberValue(row.release_id),
+      releaseName: stringValue(row.release_name),
+      nextReleaseDate: stringValue(row.next_release_date),
+    });
+  }
+
+  return map;
+}
+
+async function prepareSeries(
   series: MarketSeries,
-  requestedMode: FredCollectionRequestMode
-): Promise<SeriesResult> {
+  requestedMode: FredCollectionRequestMode,
+  previous: PreviousSeriesState | null
+): Promise<PreparedSeries> {
   let mode: FredCollectionMode =
     requestedMode === "backfill" ? "backfill" : "daily";
+  let historyComplete = previous?.historyComplete ?? false;
 
   try {
-    mode = await resolveSeriesMode(series, requestedMode);
+    const resolution = await resolveSeriesMode(
+      series,
+      requestedMode,
+      previous
+    );
+    mode = resolution.mode;
+    historyComplete = resolution.historyComplete;
+  } catch (error) {
+    return {
+      series,
+      mode,
+      historyComplete,
+      previous,
+      sourceLastUpdatedAt: null,
+      sourceObservationEnd: null,
+      releaseId: previous?.releaseId ?? null,
+      releaseName: previous?.releaseName ?? null,
+      metadataWarnings: [],
+      error: errorMessage(error),
+    };
+  }
+
+  const metadataWarnings: string[] = [];
+  let sourceLastUpdatedAt: string | null = null;
+  let sourceObservationEnd: string | null = null;
+  let releaseId = previous?.releaseId ?? null;
+  let releaseName = previous?.releaseName ?? null;
+
+  const [seriesInfoResult, releaseResult] = await Promise.allSettled([
+    fetchFredSeriesInfo(series.source_series_code),
+    releaseId === null &&
+    ["monthly", "quarterly"].includes(series.frequency.toLowerCase())
+      ? fetchFredRelease(series.source_series_code)
+      : Promise.resolve(null),
+  ]);
+
+  if (seriesInfoResult.status === "fulfilled") {
+    sourceLastUpdatedAt = normalizeFredTimestamp(
+      seriesInfoResult.value.last_updated
+    );
+    sourceObservationEnd = seriesInfoResult.value.observation_end ?? null;
+  } else {
+    metadataWarnings.push(
+      `원천 갱신시각 확인 실패: ${errorMessage(seriesInfoResult.reason)}`
+    );
+  }
+
+  if (releaseResult.status === "fulfilled" && releaseResult.value) {
+    releaseId = releaseResult.value.id;
+    releaseName = releaseResult.value.name;
+  } else if (releaseResult.status === "rejected") {
+    metadataWarnings.push(
+      `발표정보 확인 실패: ${errorMessage(releaseResult.reason)}`
+    );
+  }
+
+  return {
+    series,
+    mode,
+    historyComplete,
+    previous,
+    sourceLastUpdatedAt,
+    sourceObservationEnd,
+    releaseId,
+    releaseName,
+    metadataWarnings,
+  };
+}
+
+function shouldSkipUnchanged(prepared: PreparedSeries): boolean {
+  const previous = prepared.previous;
+  if (prepared.mode !== "daily" || !previous) return false;
+  if (!prepared.sourceLastUpdatedAt || !previous.sourceLastUpdatedAt) return false;
+
+  const currentObservationEnd = prepared.sourceObservationEnd;
+  const previousObservationEnd = previous.latestObservationDate;
+  if (!currentObservationEnd || !previousObservationEnd) return false;
+
+  return (
+    prepared.sourceLastUpdatedAt <= previous.sourceLastUpdatedAt &&
+    currentObservationEnd <= previousObservationEnd
+  );
+}
+
+async function collectPreparedSeries(
+  prepared: PreparedSeries,
+  nextReleaseDate: string | null,
+  checkedAt: string
+): Promise<SeriesResult> {
+  const { series, mode } = prepared;
+  const metadataWarning =
+    prepared.metadataWarnings.length > 0
+      ? prepared.metadataWarnings.join(" | ")
+      : undefined;
+
+  if (prepared.error) {
+    return {
+      code: series.source_series_code,
+      mode,
+      historyComplete: prepared.historyComplete,
+      fetched: 0,
+      saved: 0,
+      latestObservationDate:
+        prepared.sourceObservationEnd ??
+        prepared.previous?.latestObservationDate ??
+        null,
+      sourceLastUpdatedAt: prepared.sourceLastUpdatedAt,
+      sourceObservationEnd: prepared.sourceObservationEnd,
+      releaseId: prepared.releaseId,
+      releaseName: prepared.releaseName,
+      nextReleaseDate,
+      checkedAt,
+      unchanged: false,
+      metadataWarning,
+      error: prepared.error,
+    };
+  }
+
+  if (shouldSkipUnchanged(prepared)) {
+    return {
+      code: series.source_series_code,
+      mode,
+      historyComplete: prepared.historyComplete,
+      fetched: 0,
+      saved: 0,
+      latestObservationDate:
+        prepared.sourceObservationEnd ??
+        prepared.previous?.latestObservationDate ??
+        null,
+      sourceLastUpdatedAt: prepared.sourceLastUpdatedAt,
+      sourceObservationEnd: prepared.sourceObservationEnd,
+      releaseId: prepared.releaseId,
+      releaseName: prepared.releaseName,
+      nextReleaseDate,
+      checkedAt,
+      unchanged: true,
+      metadataWarning,
+    };
+  }
+
+  try {
     const observations = await fetchFredObservations(series, mode);
     const supabase = getJhSupabaseAdmin();
-    const collectedAt = new Date().toISOString();
     let saved = 0;
 
     for (let index = 0; index < observations.length; index += UPSERT_BATCH_SIZE) {
@@ -188,7 +522,11 @@ async function collectSeries(
             source_series_code: series.source_series_code,
             realtime_start: observation.realtime_start,
             realtime_end: observation.realtime_end,
-            collected_at: collectedAt,
+            collected_at: checkedAt,
+            source_last_updated_at: prepared.sourceLastUpdatedAt,
+            release_id: prepared.releaseId,
+            release_name: prepared.releaseName,
+            next_release_date: nextReleaseDate,
           },
         }));
 
@@ -208,20 +546,42 @@ async function collectSeries(
     return {
       code: series.source_series_code,
       mode,
+      historyComplete: mode === "backfill" || prepared.historyComplete,
       fetched: observations.length,
       saved,
       latestObservationDate:
-        observations.length > 0
-          ? observations[observations.length - 1].date
-          : null,
+        observations.at(-1)?.date ??
+        prepared.sourceObservationEnd ??
+        prepared.previous?.latestObservationDate ??
+        null,
+      sourceLastUpdatedAt: prepared.sourceLastUpdatedAt,
+      sourceObservationEnd: prepared.sourceObservationEnd,
+      releaseId: prepared.releaseId,
+      releaseName: prepared.releaseName,
+      nextReleaseDate,
+      checkedAt,
+      unchanged: false,
+      metadataWarning,
     };
   } catch (error) {
     return {
       code: series.source_series_code,
       mode,
+      historyComplete: prepared.historyComplete,
       fetched: 0,
       saved: 0,
-      latestObservationDate: null,
+      latestObservationDate:
+        prepared.sourceObservationEnd ??
+        prepared.previous?.latestObservationDate ??
+        null,
+      sourceLastUpdatedAt: prepared.sourceLastUpdatedAt,
+      sourceObservationEnd: prepared.sourceObservationEnd,
+      releaseId: prepared.releaseId,
+      releaseName: prepared.releaseName,
+      nextReleaseDate,
+      checkedAt,
+      unchanged: false,
+      metadataWarning,
       error: errorMessage(error),
     };
   }
@@ -252,11 +612,62 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+async function releaseCalendar(
+  preparedSeries: PreparedSeries[]
+): Promise<Map<number, { date: string | null; warning?: string }>> {
+  const releaseIds = Array.from(
+    new Set(
+      preparedSeries
+        .filter((item) =>
+          ["monthly", "quarterly"].includes(
+            item.series.frequency.toLowerCase()
+          )
+        )
+        .map((item) => item.releaseId)
+        .filter((value): value is number => value !== null)
+    )
+  );
+  const entries = await mapWithConcurrency(
+    releaseIds,
+    RELEASE_CONCURRENCY,
+    async (releaseId) => {
+      try {
+        return {
+          releaseId,
+          date: await fetchNextReleaseDate(releaseId),
+        };
+      } catch (error) {
+        return {
+          releaseId,
+          date: null,
+          warning: errorMessage(error),
+        };
+      }
+    }
+  );
+
+  return new Map(
+    entries.map((entry) => [
+      entry.releaseId,
+      { date: entry.date, warning: entry.warning },
+    ])
+  );
+}
+
 export async function collectFredData(
   requestedMode: FredCollectionRequestMode
 ): Promise<FredCollectionResult> {
   const supabase = getJhSupabaseAdmin();
   const startedAt = new Date().toISOString();
+  const previousRunResult = await supabase
+    .from("collection_runs")
+    .select("metadata")
+    .eq("source_code", "FRED")
+    .in("status", ["success", "partial"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const previousStates = previousSeriesStates(previousRunResult.data?.metadata);
 
   const { data: run, error: runError } = await supabase
     .from("collection_runs")
@@ -266,7 +677,10 @@ export async function collectFredData(
       status: "running",
       records_fetched: 0,
       records_saved: 0,
-      metadata: { requested_mode: requestedMode },
+      metadata: {
+        requested_mode: requestedMode,
+        source_checked_at: startedAt,
+      },
     })
     .select("id")
     .single();
@@ -310,10 +724,40 @@ export async function collectFredData(
       throw new Error("수집할 활성 FRED 지표가 없습니다.");
     }
 
-    const results = await mapWithConcurrency(
+    const prepared = await mapWithConcurrency(
       activeSeries,
       FETCH_CONCURRENCY,
-      (item) => collectSeries(item, requestedMode)
+      (item) =>
+        prepareSeries(
+          item,
+          requestedMode,
+          previousStates.get(item.source_series_code) ?? null
+        )
+    );
+    const calendar = await releaseCalendar(prepared);
+    const checkedAt = new Date().toISOString();
+    const results = await mapWithConcurrency(
+      prepared,
+      FETCH_CONCURRENCY,
+      (item) => {
+        const release =
+          item.releaseId === null ? undefined : calendar.get(item.releaseId);
+        if (release?.warning) {
+          item.metadataWarnings.push(
+            `다음 발표일 확인 실패: ${release.warning}`
+          );
+        }
+        const previousNextRelease = item.previous?.nextReleaseDate;
+        const fallbackNextRelease =
+          previousNextRelease && previousNextRelease >= dateInNewYork()
+            ? previousNextRelease
+            : null;
+        return collectPreparedSeries(
+          item,
+          release?.date ?? fallbackNextRelease,
+          checkedAt
+        );
+      }
     );
 
     const successfulModes = new Set(
@@ -337,6 +781,14 @@ export async function collectFredData(
     const failures = results
       .filter((result) => result.error)
       .map((result) => ({ code: result.code, error: result.error! }));
+    const successfulResults = results.filter((result) => !result.error);
+    const seriesUnchanged = successfulResults.filter(
+      (result) => result.unchanged
+    ).length;
+    const seriesUpdated = successfulResults.length - seriesUnchanged;
+    const metadataWarnings = results.filter(
+      (result) => result.metadataWarning
+    ).length;
     const status = failures.length === 0 ? "success" : "partial";
 
     const { error: finishError } = await supabase
@@ -353,16 +805,30 @@ export async function collectFredData(
         metadata: {
           requested_mode: requestedMode,
           mode,
+          source_checked_at: checkedAt,
+          previous_run_warning: previousRunResult.error?.message ?? null,
           series_count: activeSeries.length,
           series_succeeded: activeSeries.length - failures.length,
           series_failed: failures.length,
+          series_updated: seriesUpdated,
+          series_unchanged: seriesUnchanged,
+          metadata_warnings: metadataWarnings,
           failures,
           series_results: results.map((result) => ({
             code: result.code,
             mode: result.mode,
+            history_complete: result.historyComplete,
             fetched: result.fetched,
             saved: result.saved,
+            unchanged: result.unchanged,
             latest_observation_date: result.latestObservationDate,
+            source_last_updated_at: result.sourceLastUpdatedAt,
+            source_observation_end: result.sourceObservationEnd,
+            release_id: result.releaseId,
+            release_name: result.releaseName,
+            next_release_date: result.nextReleaseDate,
+            checked_at: result.checkedAt,
+            metadata_warning: result.metadataWarning ?? null,
             error: result.error ?? null,
           })),
         },
@@ -380,6 +846,9 @@ export async function collectFredData(
       seriesCount: activeSeries.length,
       seriesSucceeded: activeSeries.length - failures.length,
       seriesFailed: failures.length,
+      seriesUpdated,
+      seriesUnchanged,
+      metadataWarnings,
       recordsFetched,
       recordsSaved,
       failures,
@@ -393,7 +862,10 @@ export async function collectFredData(
         finished_at: new Date().toISOString(),
         status: "failed",
         error_message: message,
-        metadata: { requested_mode: requestedMode },
+        metadata: {
+          requested_mode: requestedMode,
+          source_checked_at: startedAt,
+        },
       })
       .eq("id", runId);
 

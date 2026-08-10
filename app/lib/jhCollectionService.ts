@@ -12,8 +12,8 @@ export async function collectFredDataWithArchive(
   const result = await collectFredData(mode);
 
   try {
-    await archiveJhMarketDashboard(result.runId);
-    return { ...result, archiveSaved: true as const };
+    const dashboard = await archiveJhMarketDashboard(result.runId);
+    return { ...result, archiveSaved: true as const, dashboard };
   } catch (error) {
     return {
       ...result,

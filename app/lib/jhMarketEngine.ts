@@ -5,6 +5,7 @@ import type {
   JhBiggestChange,
   JhCollectionRun,
   JhDashboardData,
+  JhFreshnessStatus,
   JhMarketMetric,
   JhMarketSignal,
   JhPeriodChange,
@@ -81,6 +82,21 @@ type FrequencyConfig = {
   trendWindow: number;
   trendWindowLabel: string;
   staleAfterDays: number;
+  sourceStaleAfterDays: number;
+};
+
+type SeriesCollectionState = {
+  checkedAt: string | null;
+  sourceUpdatedAt: string | null;
+  nextReleaseDate: string | null;
+  releaseName: string | null;
+};
+
+type FreshnessResult = {
+  status: JhFreshnessStatus;
+  label: string;
+  observationAgeDays: number;
+  sourceAgeDays: number | null;
 };
 
 type ComputedMetric = {
@@ -126,7 +142,8 @@ const FREQUENCY_CONFIG: Record<string, FrequencyConfig> = {
     historyLimit: 340,
     trendWindow: 20,
     trendWindowLabel: "20일",
-    staleAfterDays: 5,
+    staleAfterDays: 8,
+    sourceStaleAfterDays: 7,
   },
   weekly: {
     labels: ["1W", "4W", "13W", "52W"],
@@ -135,7 +152,8 @@ const FREQUENCY_CONFIG: Record<string, FrequencyConfig> = {
     historyLimit: 160,
     trendWindow: 13,
     trendWindowLabel: "13주",
-    staleAfterDays: 14,
+    staleAfterDays: 21,
+    sourceStaleAfterDays: 18,
   },
   monthly: {
     labels: ["1M", "3M", "6M", "12M"],
@@ -144,7 +162,8 @@ const FREQUENCY_CONFIG: Record<string, FrequencyConfig> = {
     historyLimit: 260,
     trendWindow: 12,
     trendWindowLabel: "12개월",
-    staleAfterDays: 55,
+    staleAfterDays: 80,
+    sourceStaleAfterDays: 50,
   },
   quarterly: {
     labels: ["1Q", "2Q", "4Q", "8Q"],
@@ -153,7 +172,8 @@ const FREQUENCY_CONFIG: Record<string, FrequencyConfig> = {
     historyLimit: 160,
     trendWindow: 8,
     trendWindowLabel: "8분기",
-    staleAfterDays: 145,
+    staleAfterDays: 180,
+    sourceStaleAfterDays: 125,
   },
 };
 
@@ -213,6 +233,57 @@ function daysBetween(from: string, to: string): number {
 
   if (Number.isNaN(fromTime) || Number.isNaN(toTime)) return 0;
   return Math.max(0, Math.floor((toTime - fromTime) / 86_400_000));
+}
+
+function shortKoreanDate(value: string): string {
+  const [, month, day] = dateOnly(value).split("-");
+  return `${Number(month)}월 ${Number(day)}일`;
+}
+
+function computeFreshness(
+  frequency: string,
+  observedAt: string,
+  asOfDate: string,
+  state?: SeriesCollectionState
+): FreshnessResult {
+  const config = frequencyConfig(frequency);
+  const observationAgeDays = daysBetween(observedAt, asOfDate);
+  const sourceAgeDays = state?.sourceUpdatedAt
+    ? daysBetween(state.sourceUpdatedAt, asOfDate)
+    : null;
+  const delayed =
+    sourceAgeDays === null
+      ? observationAgeDays > config.staleAfterDays
+      : sourceAgeDays > config.sourceStaleAfterDays &&
+        observationAgeDays > config.staleAfterDays;
+
+  if (delayed) {
+    return {
+      status: "delayed",
+      label: "업데이트 확인 필요",
+      observationAgeDays,
+      sourceAgeDays,
+    };
+  }
+
+  const normalized = frequency.toLowerCase();
+  if (normalized === "monthly" || normalized === "quarterly") {
+    return {
+      status: "awaiting_release",
+      label: state?.nextReleaseDate
+        ? `공식 최신 · ${shortKoreanDate(state.nextReleaseDate)} 발표 대기`
+        : "공식 최신 · 다음 발표 대기",
+      observationAgeDays,
+      sourceAgeDays,
+    };
+  }
+
+  return {
+    status: "fresh",
+    label: state?.sourceUpdatedAt ? "FRED 원천 최신" : "최신 유효값",
+    observationAgeDays,
+    sourceAgeDays,
+  };
 }
 
 function frequencyConfig(frequency: string): FrequencyConfig {
@@ -416,7 +487,8 @@ function initialImportanceScore(
 function emptyMetric(
   series: MarketSeriesRow,
   source: SourceRow | undefined,
-  error: string | null
+  error: string | null,
+  state?: SeriesCollectionState
 ): JhMarketMetric {
   const config = frequencyConfig(series.frequency);
 
@@ -456,6 +528,13 @@ function emptyMetric(
     importanceScore: 0,
     stale: true,
     staleDays: null,
+    sourceAgeDays: null,
+    sourceUpdatedAt: state?.sourceUpdatedAt ?? null,
+    checkedAt: state?.checkedAt ?? null,
+    nextReleaseDate: state?.nextReleaseDate ?? null,
+    releaseName: state?.releaseName ?? null,
+    freshnessStatus: "unavailable",
+    freshnessLabel: "데이터 없음",
     error,
   };
 }
@@ -463,12 +542,13 @@ function emptyMetric(
 function computeMetric(
   result: HistoryResult,
   source: SourceRow | undefined,
-  asOfDate: string
+  asOfDate: string,
+  state?: SeriesCollectionState
 ): ComputedMetric {
   const { series, rows, error } = result;
   if (error || rows.length === 0) {
     return {
-      metric: emptyMetric(series, source, error),
+      metric: emptyMetric(series, source, error, state),
       changeMode: stringRule(series.transform_rule, "change_mode", "pct"),
       riskDirection: stringRule(
         series.transform_rule,
@@ -491,7 +571,12 @@ function computeMetric(
 
   if (currentIndex < 0) {
     return {
-      metric: emptyMetric(series, source, "계산 가능한 관측값이 부족합니다."),
+      metric: emptyMetric(
+        series,
+        source,
+        "계산 가능한 관측값이 부족합니다.",
+        state
+      ),
       changeMode,
       riskDirection,
       crossedTrend: false,
@@ -574,7 +659,12 @@ function computeMetric(
     changeMode,
     config.percentileWindow
   );
-  const staleDays = daysBetween(currentPoint.observedAt, asOfDate);
+  const freshness = computeFreshness(
+    series.frequency,
+    currentPoint.observedAt,
+    asOfDate,
+    state
+  );
   const currentUnit =
     changeMode === "yoy_pct"
       ? "% YoY"
@@ -616,8 +706,15 @@ function computeMetric(
       crossedTrend,
       consecutive.count
     ),
-    stale: staleDays > config.staleAfterDays,
-    staleDays,
+    stale: freshness.status === "delayed",
+    staleDays: freshness.observationAgeDays,
+    sourceAgeDays: freshness.sourceAgeDays,
+    sourceUpdatedAt: state?.sourceUpdatedAt ?? null,
+    checkedAt: state?.checkedAt ?? null,
+    nextReleaseDate: state?.nextReleaseDate ?? null,
+    releaseName: state?.releaseName ?? null,
+    freshnessStatus: freshness.status,
+    freshnessLabel: freshness.label,
     error: null,
   };
 
@@ -718,7 +815,42 @@ function mapCollectionRun(row: CollectionRunRow | undefined): JhCollectionRun | 
     errorMessage: row.error_message,
     seriesSucceeded: metadataNumber(row.metadata, "series_succeeded"),
     seriesFailed: metadataNumber(row.metadata, "series_failed"),
+    seriesUpdated: metadataNumber(row.metadata, "series_updated"),
+    seriesUnchanged: metadataNumber(row.metadata, "series_unchanged"),
+    metadataWarnings: metadataNumber(row.metadata, "metadata_warnings"),
   };
+}
+
+function metadataString(metadata: JsonObject | null, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function latestSeriesCollectionStates(
+  row: CollectionRunRow | undefined
+): Map<string, SeriesCollectionState> {
+  const map = new Map<string, SeriesCollectionState>();
+  const value = row?.metadata?.series_results;
+  if (!Array.isArray(value)) return map;
+
+  for (const item of value) {
+    if (!isJsonObject(item)) continue;
+    const code = metadataString(item, "code");
+    if (!code) continue;
+    map.set(code, {
+      checkedAt:
+        metadataString(item, "checked_at") ??
+        metadataString(row?.metadata ?? null, "source_checked_at") ??
+        row?.finished_at ??
+        row?.started_at ??
+        null,
+      sourceUpdatedAt: metadataString(item, "source_last_updated_at"),
+      nextReleaseDate: metadataString(item, "next_release_date"),
+      releaseName: metadataString(item, "release_name"),
+    });
+  }
+
+  return map;
 }
 
 function latestDatesFromMetadata(row: CollectionRunRow | undefined): Map<string, string> {
@@ -982,7 +1114,12 @@ function buildBiggestChanges(
       const change = metric.changes[0];
       if (metric.currentValue === null || change?.value === null || metric.error) return false;
       if (metric.frequency === "monthly" || metric.frequency === "quarterly") {
-        return newReleaseSymbols.has(metric.sourceSeriesCode) || !metric.stale;
+        return (
+          newReleaseSymbols.has(metric.sourceSeriesCode) ||
+          (metric.sourceAgeDays !== null &&
+            metric.sourceAgeDays !== undefined &&
+            metric.sourceAgeDays <= 3)
+        );
       }
       return !metric.stale;
     })
@@ -1142,6 +1279,10 @@ function formatChange(change: JhPeriodChange | undefined): string {
 function buildCopyPack(
   data: Omit<JhDashboardData, "copyPack">
 ): string {
+  const freshSeries =
+    data.coverage.freshSeries ??
+    Math.max(0, data.coverage.seriesWithData - data.coverage.staleSeries);
+  const awaitingReleaseSeries = data.coverage.awaitingReleaseSeries ?? 0;
   const lines: string[] = [
     "JH FUND MORNING MEETING",
     "",
@@ -1149,7 +1290,10 @@ function buildCopyPack(
     `GENERATED_AT: ${data.generatedAt}`,
     `MARKET_STATUS: ${data.marketStatus}`,
     `LATEST_DATA_UPDATE: ${data.latestDataUpdate ?? "N/A"}`,
+    `SOURCE_CHECKED_AT: ${data.sourceCheckedAt ?? "N/A"}`,
     `DATA_COVERAGE: ${data.coverage.seriesWithData}/${data.coverage.totalSeries}`,
+    `DATA_FRESHNESS: FRESH ${freshSeries} | AWAITING_RELEASE ${awaitingReleaseSeries} | DELAYED ${data.coverage.staleSeries} | UNAVAILABLE ${data.coverage.unavailableSeries ?? 0}`,
+    "FRESHNESS_POLICY: 관측일은 그 수치가 대표하는 기간이며 수집일이 아니다. FRESH와 AWAITING_RELEASE는 FRED 원천 확인 기준 공식 최신값이고, DELAYED는 당일 방향 판단에서 제외한다.",
     `RULE_BASED_REGIME: ${data.regime} (Risk Score ${data.regimeScore}/100, Confidence ${data.regimeConfidence}/100)`,
     "",
     "### TOP CHANGES",
@@ -1188,7 +1332,7 @@ function buildCopyPack(
         .map((change) => `${change.label} ${formatChange(change)}`)
         .join(" | ");
       lines.push(
-        `- ${metric.nameKo} (${metric.symbol}): ${formatMetricValue(metric.currentValue, metric.currentUnit)} | ${changes} | Percentile ${metric.percentile ?? "N/A"} | Z ${metric.zScore ?? "N/A"} | Trend ${metric.trendLabel} | Data ${metric.observedAt ?? "N/A"} | Source ${metric.sourceCode}`
+        `- ${metric.nameKo} (${metric.symbol}): ${formatMetricValue(metric.currentValue, metric.currentUnit)} | ${changes} | Percentile ${metric.percentile ?? "N/A"} | Z ${metric.zScore ?? "N/A"} | Trend ${metric.trendLabel} | Observation ${metric.observedAt ?? "N/A"} | Freshness ${(metric.freshnessStatus ?? (metric.stale ? "delayed" : "fresh")).toUpperCase()} | SourceUpdated ${metric.sourceUpdatedAt ?? "N/A"} | NextRelease ${metric.nextReleaseDate ?? "N/A"} | Source ${metric.sourceCode}`
       );
     }
   }
@@ -1217,7 +1361,7 @@ function buildCopyPack(
     "당신은 JH Fund Investment Committee다.",
     "역할: CIO, Global Macro Strategist, Quant Strategist, Equity Strategist, Futures Trader, Technical Analyst, Volatility Strategist, Risk Manager.",
     "",
-    "위 데이터만 근거로 오늘 시장을 분석하라. 단순 데이터 나열을 금지하고 각 데이터가 서로 어떻게 연결되는지 설명하라. 데이터가 없거나 오래된 항목은 추정하지 말고 한계로 명시하라.",
+    "위 데이터만 근거로 오늘 시장을 분석하라. 단순 데이터 나열을 금지하고 각 데이터가 서로 어떻게 연결되는지 설명하라. FRESH와 AWAITING_RELEASE는 공식 최신값으로 사용하되 관측 기간을 명시하고, DELAYED와 UNAVAILABLE은 당일 방향성 근거에서 제외하며 추정하지 말라.",
     "",
     "특히 Market Regime, Macro, Liquidity, Rates, Equity Trend, Breadth, Volatility, Credit, Positioning, Cross Asset Confirmation, Divergence, Tail Risk를 종합한다.",
     "",
@@ -1308,7 +1452,7 @@ export async function getJhMarketDashboard(
       )
       .eq("source_code", "FRED")
       .order("started_at", { ascending: false })
-      .limit(2),
+      .limit(10),
     supabase
       .from("collection_runs")
       .select("id, started_at, archive_date:metadata->>archive_date")
@@ -1324,6 +1468,10 @@ export async function getJhMarketDashboard(
   const series = (seriesResult.data ?? []) as MarketSeriesRow[];
   const sources = sourcesResult.error ? [] : ((sourcesResult.data ?? []) as SourceRow[]);
   const runs = runsResult.error ? [] : ((runsResult.data ?? []) as CollectionRunRow[]);
+  const usableRuns = runs.filter(
+    (run) => run.status === "success" || run.status === "partial"
+  );
+  const latestUsableRun = usableRuns[0];
   const archiveIndex = archiveIndexResult.error
     ? []
     : ((archiveIndexResult.data ?? []) as unknown as ArchiveIndexRow[]);
@@ -1350,6 +1498,10 @@ export async function getJhMarketDashboard(
   }
 
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const seriesCollectionStates =
+    asOfDate === koreanToday()
+      ? latestSeriesCollectionStates(latestUsableRun)
+      : new Map<string, SeriesCollectionState>();
   const histories = await mapWithConcurrency(series, 8, (item) =>
     fetchHistory(item, asOfDate)
   );
@@ -1359,13 +1511,16 @@ export async function getJhMarketDashboard(
       history.series.source_id
         ? sourceById.get(history.series.source_id)
         : undefined,
-      asOfDate
+      asOfDate,
+      seriesCollectionStates.get(
+        history.series.source_series_code ?? history.series.symbol
+      )
     )
   );
   const metrics = applyCrossConfirmation(computed).sort(
     (left, right) => left.displayOrder - right.displayOrder
   );
-  const newReleaseSymbols = detectNewReleases(runs);
+  const newReleaseSymbols = detectNewReleases(usableRuns);
   const biggestChanges = buildBiggestChanges(metrics, newReleaseSymbols);
   const anomalies = buildSignals(metrics, newReleaseSymbols);
   const relativeStrength = buildRelativeStrength(metrics);
@@ -1388,19 +1543,31 @@ export async function getJhMarketDashboard(
         )
       : null;
   const seriesWithData = metrics.filter((metric) => metric.currentValue !== null).length;
+  const freshSeries = metrics.filter(
+    (metric) =>
+      metric.currentValue !== null && metric.freshnessStatus === "fresh"
+  ).length;
+  const awaitingReleaseSeries = metrics.filter(
+    (metric) =>
+      metric.currentValue !== null &&
+      metric.freshnessStatus === "awaiting_release"
+  ).length;
   const staleSeries = metrics.filter(
     (metric) => metric.currentValue !== null && metric.stale
   ).length;
+  const unavailableSeries = metrics.length - seriesWithData;
   const failedSeries = histories.filter((history) => history.error).length;
-  const dailyMetrics = metrics.filter(
-    (metric) => metric.frequency.toLowerCase() === "daily" && metric.currentValue !== null
-  );
   const marketStatus =
     seriesWithData === 0
       ? "아직 수집된 데이터 없음"
-      : dailyMetrics.some((metric) => metric.stale)
-        ? "일부 일간 데이터 업데이트 지연"
-        : "최신 장 마감 데이터 반영";
+      : staleSeries > 0
+        ? `공식 최신 ${freshSeries + awaitingReleaseSeries}개 · 업데이트 확인 필요 ${staleSeries}개`
+        : "FRED 원천 기준 공식 최신 데이터 확인";
+  const sourceCheckedAt =
+    metadataString(latestUsableRun?.metadata ?? null, "source_checked_at") ??
+    latestUsableRun?.finished_at ??
+    latestUsableRun?.started_at ??
+    null;
   const categoryOrder = CATEGORY_ORDER.filter((category) =>
     metrics.some((metric) => metric.category === category)
   );
@@ -1409,6 +1576,7 @@ export async function getJhMarketDashboard(
     asOfDate,
     generatedAt: new Date().toISOString(),
     latestDataUpdate,
+    sourceCheckedAt,
     marketStatus,
     regime: regime.regime,
     regimeScore: regime.score,
@@ -1418,6 +1586,9 @@ export async function getJhMarketDashboard(
       seriesWithData,
       staleSeries,
       failedSeries,
+      freshSeries,
+      awaitingReleaseSeries,
+      unavailableSeries,
     },
     categoryOrder,
     categoryLabels: CATEGORY_LABELS,
@@ -1435,7 +1606,9 @@ export async function getJhMarketDashboard(
   };
 }
 
-export async function archiveJhMarketDashboard(runId: number): Promise<void> {
+export async function archiveJhMarketDashboard(
+  runId: number
+): Promise<JhDashboardData> {
   const supabase = getJhSupabaseAdmin();
   const dashboard = await getJhMarketDashboard();
   const { data: run, error: runError } = await supabase
@@ -1467,4 +1640,6 @@ export async function archiveJhMarketDashboard(runId: number): Promise<void> {
   if (updateError) {
     throw new Error(`일별 Data Pack 보관 실패: ${updateError.message}`);
   }
+
+  return dashboard;
 }

@@ -8,6 +8,7 @@ import { supabase } from "@/app/lib/supabase";
 import type {
   JhCollectionApiResult,
   JhDashboardData,
+  JhFreshnessStatus,
   JhMarketMetric,
   JhMarketSignal,
   JhPeriodChange,
@@ -38,6 +39,8 @@ const categoryAccents: Record<string, string> = {
   crypto: "from-fuchsia-500/20 to-fuchsia-500/0 border-fuchsia-900/70",
 };
 
+const COPY_REFRESH_INTERVAL_MS = 30 * 60 * 1_000;
+
 function formatDate(value: string | null): string {
   if (!value) return "데이터 없음";
   const [year, month, day] = value.slice(0, 10).split("-");
@@ -54,6 +57,17 @@ function formatDateTime(value: string | null): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function koreanToday(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function formatCurrent(metric: JhMarketMetric): string {
@@ -110,6 +124,40 @@ function regimeClass(regime: JhDashboardData["regime"]): string {
   return "border-amber-500/40 bg-amber-950/30 text-amber-200";
 }
 
+function freshnessStatus(metric: JhMarketMetric): JhFreshnessStatus {
+  return metric.freshnessStatus ?? (metric.stale ? "delayed" : "fresh");
+}
+
+function freshnessBadge(metric: JhMarketMetric): {
+  label: string;
+  className: string;
+} {
+  const status = freshnessStatus(metric);
+  if (status === "fresh") {
+    return {
+      label: "원천 최신",
+      className:
+        "border-emerald-800 bg-emerald-950/40 text-emerald-300",
+    };
+  }
+  if (status === "awaiting_release") {
+    return {
+      label: "발표 대기",
+      className: "border-blue-800 bg-blue-950/40 text-blue-300",
+    };
+  }
+  if (status === "delayed") {
+    return {
+      label: "확인 필요",
+      className: "border-amber-800 bg-amber-950/40 text-amber-300",
+    };
+  }
+  return {
+    label: "데이터 없음",
+    className: "border-slate-700 bg-slate-900 text-slate-500",
+  };
+}
+
 async function copyText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -135,6 +183,7 @@ export default function JhMarketDashboardPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyRefreshing, setCopyRefreshing] = useState(false);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const {
@@ -152,7 +201,7 @@ export default function JhMarketDashboardPage() {
   const loadDashboard = useCallback(
     async (date?: string) => {
       const token = await getAccessToken();
-      if (!token) return;
+      if (!token) return null;
 
       setLoading(true);
       setErrorMessage("");
@@ -167,7 +216,7 @@ export default function JhMarketDashboardPage() {
 
         if (response.status === 401) {
           router.replace("/admin/login");
-          return;
+          return null;
         }
         if (!response.ok || !payload.ok) {
           throw new Error(payload.ok ? "데이터를 불러오지 못했습니다." : payload.error);
@@ -175,10 +224,12 @@ export default function JhMarketDashboardPage() {
 
         setDashboard(payload.dashboard);
         setSelectedDate(payload.dashboard.asOfDate);
+        return payload.dashboard;
       } catch (error) {
         setErrorMessage(
           error instanceof Error ? error.message : "투자 데이터를 불러오지 못했습니다."
         );
+        return null;
       } finally {
         setLoading(false);
       }
@@ -194,12 +245,18 @@ export default function JhMarketDashboardPage() {
     return () => window.clearTimeout(timeoutId);
   }, [loadDashboard]);
 
-  const runCollection = async () => {
+  const runCollection = async (
+    options: { forCopy?: boolean } = {}
+  ): Promise<JhDashboardData | null> => {
     const token = await getAccessToken();
-    if (!token || collecting) return;
+    if (!token || collecting) return null;
 
     setCollecting(true);
-    setNotice("FRED 40개 지표를 확인하고 있습니다. 최초 실행은 과거 데이터까지 채웁니다.");
+    setNotice(
+      options.forCopy
+        ? "GPT 복사 전 FRED 원천 갱신시각을 확인하고 있습니다. 바뀐 지표만 최신화합니다."
+        : "FRED 40개 원천 갱신시각을 확인하고 있습니다. 바뀐 지표만 최신화하며, 이력이 부족한 지표는 과거 데이터도 채웁니다."
+    );
     setErrorMessage("");
 
     try {
@@ -215,34 +272,65 @@ export default function JhMarketDashboardPage() {
 
       if (response.status === 401) {
         router.replace("/admin/login");
-        return;
+        return null;
       }
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error ?? "수집 실행에 실패했습니다.");
       }
 
       setNotice(
-        `${payload.seriesSucceeded ?? 0}/${payload.seriesCount ?? 0}개 지표 수집 완료 · ${new Intl.NumberFormat("ko-KR").format(payload.recordsSaved ?? 0)}개 관측값 반영${payload.archiveSaved === false ? " · 일별 아카이브는 다음 실행에서 재시도 필요" : " · 오늘 Data Pack 보관 완료"}`
+        `${payload.seriesSucceeded ?? 0}/${payload.seriesCount ?? 0}개 원천 확인 완료 · 갱신 ${payload.seriesUpdated ?? 0}개 · 변경 없음 ${payload.seriesUnchanged ?? 0}개${(payload.metadataWarnings ?? 0) > 0 ? ` · 발표정보 확인 경고 ${payload.metadataWarnings}개` : ""}${payload.archiveSaved === false ? " · 일별 아카이브는 다음 실행에서 재시도 필요" : " · 오늘 Data Pack 보관 완료"}`
       );
-      await loadDashboard();
+
+      if (payload.dashboard) {
+        setDashboard(payload.dashboard);
+        setSelectedDate(payload.dashboard.asOfDate);
+        return payload.dashboard;
+      }
+
+      return await loadDashboard();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "데이터 수집에 실패했습니다."
       );
       setNotice("");
+      return null;
     } finally {
       setCollecting(false);
     }
   };
 
   const handleCopy = async () => {
-    if (!dashboard) return;
+    if (!dashboard || collecting) return;
+    let copyDashboard = dashboard;
+
     try {
-      await copyText(dashboard.copyPack);
+      const checkedAt =
+        dashboard.sourceCheckedAt ??
+        dashboard.collectionRun?.finishedAt ??
+        dashboard.collectionRun?.startedAt ??
+        null;
+      const checkedTime = checkedAt ? new Date(checkedAt).getTime() : 0;
+      const needsRefresh =
+        dashboard.asOfDate === koreanToday() &&
+        (!Number.isFinite(checkedTime) ||
+          checkedTime === 0 ||
+          Date.now() - checkedTime > COPY_REFRESH_INTERVAL_MS);
+
+      if (needsRefresh) {
+        setCopyRefreshing(true);
+        const refreshed = await runCollection({ forCopy: true });
+        if (!refreshed) return;
+        copyDashboard = refreshed;
+      }
+
+      await copyText(copyDashboard.copyPack);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2_000);
     } catch {
       setErrorMessage("복사하지 못했습니다. 아래 미리보기에서 직접 복사해주세요.");
+    } finally {
+      setCopyRefreshing(false);
     }
   };
 
@@ -254,6 +342,19 @@ export default function JhMarketDashboardPage() {
       grouped.set(metric.category, current);
     }
     return grouped;
+  }, [dashboard]);
+
+  const freshnessCounts = useMemo(() => {
+    const awaiting = dashboard?.coverage.awaitingReleaseSeries ?? 0;
+    const delayed = dashboard?.coverage.staleSeries ?? 0;
+    const withData = dashboard?.coverage.seriesWithData ?? 0;
+    const fresh =
+      dashboard?.coverage.freshSeries ??
+      Math.max(0, withData - awaiting - delayed);
+    const unavailable =
+      dashboard?.coverage.unavailableSeries ??
+      Math.max(0, (dashboard?.coverage.totalSeries ?? 0) - withData);
+    return { fresh, awaiting, delayed, unavailable };
   }, [dashboard]);
 
   if (loading && !dashboard) {
@@ -324,10 +425,18 @@ export default function JhMarketDashboardPage() {
             <button
               type="button"
               onClick={() => void handleCopy()}
-              disabled={!dashboard || dashboard.coverage.seriesWithData === 0}
+              disabled={
+                !dashboard ||
+                dashboard.coverage.seriesWithData === 0 ||
+                collecting
+              }
               className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-cyan-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {copied ? "복사 완료 ✓" : "COPY FOR GPT"}
+              {copyRefreshing
+                ? "최신 확인 중..."
+                : copied
+                  ? "복사 완료 ✓"
+                  : "최신화 후 COPY"}
             </button>
           </div>
         </div>
@@ -346,8 +455,9 @@ export default function JhMarketDashboardPage() {
                 </span>
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400 sm:text-base">
-                공식 FRED 데이터 40개를 과거 흐름과 비교해 평소보다 큰 변화,
-                극단 구간, 교차자산 다이버전스를 규칙 기반으로 선별합니다.
+                공식 FRED 데이터 40개의 원천 갱신시각을 먼저 확인하고, 바뀐
+                지표만 최신화해 평소보다 큰 변화와 교차자산 다이버전스를
+                규칙 기반으로 선별합니다.
               </p>
             </div>
 
@@ -391,12 +501,12 @@ export default function JhMarketDashboardPage() {
                 <p className="mt-2 text-xs text-slate-500">{dashboard.marketStatus}</p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-                <p className="text-xs font-bold text-slate-500">데이터 커버리지</p>
+                <p className="text-xs font-bold text-slate-500">공식 최신 상태</p>
                 <p className="mt-2 text-2xl font-black text-cyan-300">
-                  {dashboard.coverage.seriesWithData} / {dashboard.coverage.totalSeries}
+                  {freshnessCounts.fresh + freshnessCounts.awaiting} / {dashboard.coverage.totalSeries}
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
-                  지연 {dashboard.coverage.staleSeries} · 조회 실패 {dashboard.coverage.failedSeries}
+                  원천 최신 {freshnessCounts.fresh} · 발표 대기 {freshnessCounts.awaiting} · 확인 필요 {freshnessCounts.delayed}
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
@@ -407,7 +517,7 @@ export default function JhMarketDashboardPage() {
                 <p className="mt-2 text-xs text-slate-500">각 지표의 실제 기준일은 표에 별도 표시</p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-                <p className="text-xs font-bold text-slate-500">최근 자동수집</p>
+                <p className="text-xs font-bold text-slate-500">최근 FRED 원천 확인</p>
                 <p className="mt-2 text-xl font-black text-white">
                   {dashboard.collectionRun
                     ? dashboard.collectionRun.status === "success"
@@ -417,7 +527,7 @@ export default function JhMarketDashboardPage() {
                 </p>
                 <p className="mt-2 text-xs text-slate-500">
                   {dashboard.collectionRun
-                    ? `${formatDateTime(dashboard.collectionRun.finishedAt ?? dashboard.collectionRun.startedAt)} · ${dashboard.collectionRun.seriesSucceeded ?? "—"}개 성공`
+                    ? `${formatDateTime(dashboard.sourceCheckedAt ?? dashboard.collectionRun.finishedAt ?? dashboard.collectionRun.startedAt)} · 갱신 ${dashboard.collectionRun.seriesUpdated ?? "—"} · 그대로 ${dashboard.collectionRun.seriesUnchanged ?? "—"}`
                     : "지금 데이터 수집을 눌러 최초 적재"}
                 </p>
               </div>
@@ -534,8 +644,30 @@ export default function JhMarketDashboardPage() {
                     <p className="text-xs font-black tracking-[0.18em] text-blue-400">MARKET DASHBOARD</p>
                     <h2 className="mt-1 text-2xl font-black text-white">40개 핵심 지표 전체 보기</h2>
                     <p className="mt-2 text-sm text-slate-500">
-                      일간·주간·월간 지표마다 기간 라벨이 다르며, 관측일을 그대로 표시해 오래된 값을 오늘 값처럼 보이지 않게 했습니다.
+                      관측일은 수치가 대표하는 기간입니다. FRED의 실제 원천
+                      갱신시각과 발표주기를 별도로 확인해 최신 여부를 판정합니다.
                     </p>
+                  </div>
+
+                  <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-xs sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-900/70 bg-emerald-950/20 p-3">
+                      <p className="font-black text-emerald-300">원천 최신</p>
+                      <p className="mt-1 leading-5 text-slate-500">
+                        FRED의 마지막 갱신시각까지 확인된 최신 유효값
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-blue-900/70 bg-blue-950/20 p-3">
+                      <p className="font-black text-blue-300">발표 대기</p>
+                      <p className="mt-1 leading-5 text-slate-500">
+                        월간·분기 지표의 공식 최신값이며 다음 발표를 기다리는 상태
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-900/70 bg-amber-950/20 p-3">
+                      <p className="font-black text-amber-300">확인 필요</p>
+                      <p className="mt-1 leading-5 text-slate-500">
+                        발표주기를 넘겨 원천 갱신과 관측일이 모두 오래된 상태
+                      </p>
+                    </div>
                   </div>
 
                   {dashboard.categoryOrder.map((category) => {
@@ -578,13 +710,29 @@ export default function JhMarketDashboardPage() {
                                           {metric.symbol} · {frequencyLabels[metric.frequency] ?? metric.frequency}
                                         </p>
                                       </div>
-                                      {metric.stale && metric.currentValue !== null ? (
-                                        <span className="rounded-full border border-amber-800 bg-amber-950/40 px-2 py-0.5 text-[9px] font-bold text-amber-300">지연</span>
+                                      {metric.currentValue !== null ? (
+                                        <span
+                                          className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${freshnessBadge(metric).className}`}
+                                        >
+                                          {freshnessBadge(metric).label}
+                                        </span>
                                       ) : null}
                                     </div>
                                   </td>
                                   <td className="whitespace-nowrap px-4 py-4 text-right font-black text-slate-100">{formatCurrent(metric)}</td>
-                                  <td className="whitespace-nowrap px-4 py-4 text-right text-xs text-slate-500">{formatDate(metric.observedAt)}</td>
+                                  <td className="whitespace-nowrap px-4 py-4 text-right text-xs text-slate-500">
+                                    <p>{formatDate(metric.observedAt)}</p>
+                                    {metric.sourceUpdatedAt ? (
+                                      <p className="mt-1 text-[10px] text-slate-600">
+                                        원천 갱신 {formatDate(metric.sourceUpdatedAt)}
+                                      </p>
+                                    ) : null}
+                                    {metric.nextReleaseDate ? (
+                                      <p className="mt-0.5 text-[10px] text-blue-400/70">
+                                        다음 발표 {formatDate(metric.nextReleaseDate)}
+                                      </p>
+                                    ) : null}
+                                  </td>
                                   {metric.changes.slice(0, 3).map((change) => (
                                     <td key={change.key} className={`whitespace-nowrap px-4 py-4 text-right font-bold ${changeTone(change.value)}`}>
                                       <span className="mr-1 text-[10px] font-normal text-slate-600">{change.label}</span>
@@ -610,6 +758,9 @@ export default function JhMarketDashboardPage() {
                                     <p className={metric.trend === "up" ? "text-emerald-400" : metric.trend === "down" ? "text-rose-400" : "text-slate-400"}>
                                       {metric.error ?? metric.trendLabel}
                                     </p>
+                                    <p className="mt-1 text-[10px] text-slate-500">
+                                      {metric.freshnessLabel ?? freshnessBadge(metric).label}
+                                    </p>
                                     <p className="mt-1 text-[10px] text-slate-600">중요도 {metric.importanceScore}</p>
                                   </td>
                                 </tr>
@@ -628,15 +779,22 @@ export default function JhMarketDashboardPage() {
                       <p className="text-xs font-black tracking-[0.18em] text-cyan-400">JH COPY PACK</p>
                       <h2 className="mt-2 text-2xl font-black text-white">이제 ChatGPT 분석은 버튼 한 번이면 됩니다</h2>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                        오늘 데이터, 이상신호, 상대강도, 분석 역할과 출력 형식까지 한 번에 복사됩니다. 유료 AI API는 호출하지 않습니다.
+                        마지막 원천 확인이 30분을 넘겼으면 바뀐 지표만 먼저
+                        최신화한 뒤, 관측일·원천 갱신시각·다음 발표일까지 함께
+                        복사합니다. 유료 AI API는 호출하지 않습니다.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => void handleCopy()}
-                      className="shrink-0 rounded-xl bg-cyan-400 px-6 py-3 font-black text-slate-950 transition hover:bg-cyan-300"
+                      disabled={collecting}
+                      className="shrink-0 rounded-xl bg-cyan-400 px-6 py-3 font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-50"
                     >
-                      {copied ? "복사 완료 ✓" : "COPY FOR GPT"}
+                      {copyRefreshing
+                        ? "최신 확인 중..."
+                        : copied
+                          ? "복사 완료 ✓"
+                          : "최신화 후 COPY"}
                     </button>
                   </div>
 
@@ -651,8 +809,10 @@ export default function JhMarketDashboardPage() {
             )}
 
             <footer className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/50 px-5 py-4 text-xs leading-5 text-slate-500">
-              데이터 출처: Federal Reserve Bank of St. Louis FRED · 자동 수집은 매일 한국시간 오전 8시 30분경 실행 ·
-              주말·휴장일·주간·월간 지표는 마지막 유효값과 실제 관측일을 함께 표시 · 이 화면은 투자 판단 보조용이며 투자 권유가 아닙니다.
+              데이터 출처: Federal Reserve Bank of St. Louis FRED · 매일 한국시간
+              오전 8시 30분경 자동 확인 · GPT 복사 전 30분 이상 지났으면 증분
+              최신화 · 월간·분기 관측일은 발표일이 아닌 해당 통계의 기준기간 · 이
+              화면은 투자 판단 보조용이며 투자 권유가 아닙니다.
             </footer>
           </>
         ) : null}

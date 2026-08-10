@@ -9,6 +9,12 @@ export type JhSignalSeverity = "low" | "medium" | "high" | "critical";
 
 export type JhRegime = "Risk-On" | "Neutral" | "Risk-Off";
 
+export type JhFreshnessStatus =
+  | "fresh"
+  | "awaiting_release"
+  | "delayed"
+  | "unavailable";
+
 export type JhPeriodChange = {
   key: "short" | "medium" | "long" | "extended";
   label: string;
@@ -47,6 +53,13 @@ export type JhMarketMetric = {
   importanceScore: number;
   stale: boolean;
   staleDays: number | null;
+  sourceAgeDays?: number | null;
+  sourceUpdatedAt?: string | null;
+  checkedAt?: string | null;
+  nextReleaseDate?: string | null;
+  releaseName?: string | null;
+  freshnessStatus?: JhFreshnessStatus;
+  freshnessLabel?: string;
   error: string | null;
 };
 
@@ -97,12 +110,16 @@ export type JhCollectionRun = {
   errorMessage: string | null;
   seriesSucceeded: number | null;
   seriesFailed: number | null;
+  seriesUpdated: number | null;
+  seriesUnchanged: number | null;
+  metadataWarnings: number | null;
 };
 
 export type JhDashboardData = {
   asOfDate: string;
   generatedAt: string;
   latestDataUpdate: string | null;
+  sourceCheckedAt: string | null;
   marketStatus: string;
   regime: JhRegime;
   regimeScore: number;
@@ -112,6 +129,9 @@ export type JhDashboardData = {
     seriesWithData: number;
     staleSeries: number;
     failedSeries: number;
+    freshSeries?: number;
+    awaitingReleaseSeries?: number;
+    unavailableSeries?: number;
   };
   categoryOrder: string[];
   categoryLabels: Record<string, string>;
@@ -132,9 +152,13 @@ export type JhCollectionApiResult = {
   seriesCount?: number;
   seriesSucceeded?: number;
   seriesFailed?: number;
+  seriesUpdated?: number;
+  seriesUnchanged?: number;
+  metadataWarnings?: number;
   recordsFetched?: number;
   recordsSaved?: number;
   archiveSaved?: boolean;
   archiveWarning?: string;
+  dashboard?: JhDashboardData;
   error?: string;
 };

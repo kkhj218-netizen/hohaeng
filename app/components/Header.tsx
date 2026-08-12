@@ -52,19 +52,6 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isIos =
-      /iphone|ipad|ipod/.test(userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-    if (isIos) {
-      setDevice("ios");
-    } else if (/android/.test(userAgent)) {
-      setDevice("android");
-    } else {
-      setDevice("pc");
-    }
-
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -95,6 +82,16 @@ export default function Header() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [isSaveOpen]);
+
+  const openSaveGuide = () => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isIos =
+      /iphone|ipad|ipod/.test(userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+    setDevice(isIos ? "ios" : /android/.test(userAgent) ? "android" : "pc");
+    setIsSaveOpen(true);
+  };
 
   const installApp = async () => {
     if (!installPrompt) return;
@@ -148,10 +145,17 @@ export default function Header() {
 
           <nav className="ml-2 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2 text-sm font-medium text-slate-700 sm:gap-3">
             <Link
-              href="/tools"
+              href="/money"
               className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
             >
               🧮 계산기
+            </Link>
+
+            <Link
+              href="/blog"
+              className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
+            >
+              📰 블로그
             </Link>
 
             {categories.map((category) => (
@@ -176,7 +180,7 @@ export default function Header() {
 
           <button
             type="button"
-            onClick={() => setIsSaveOpen(true)}
+            onClick={openSaveGuide}
             className="shrink-0 rounded-full bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             aria-haspopup="dialog"
           >

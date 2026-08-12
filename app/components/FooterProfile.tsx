@@ -94,7 +94,7 @@ export default function FooterProfile() {
           </div>
 
           <Link
-            href="/blog?cat=log"
+            href="/blog?category=log"
             className="hidden shrink-0 text-xs font-bold text-slate-400 transition hover:text-blue-300 sm:inline-flex"
           >
             전체 기록 보기 →
@@ -130,7 +130,7 @@ export default function FooterProfile() {
         </div>
 
         <Link
-          href="/blog?cat=log"
+          href="/blog?category=log"
           className="mt-5 inline-flex text-sm font-bold text-blue-400 transition hover:text-blue-300 sm:hidden"
         >
           호행의 기록 전체보기 →

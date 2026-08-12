@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import RelatedMoneyTools from '@/app/components/RelatedMoneyTools';
 import ShareButton from '@/app/components/ShareButton';
 import { POLICY_CONFIG } from '@/app/constants';
+import { getRelatedTools } from '@/app/money/relatedTools';
 
 export default function LoanCalcClient() {
+  const relatedTools = getRelatedTools('loan-calc');
   const [loanAmount, setLoanAmount] = useState<number>(10000);
   const [interestRate, setInterestRate] = useState<number>(4.5);
   const [loanPeriodYears, setLoanPeriodYears] = useState<number>(30);
@@ -50,9 +53,14 @@ export default function LoanCalcClient() {
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto">
-        <Link href="/" className="text-sm text-blue-600 font-medium mb-4 inline-block hover:underline">
-          ← 메인으로 돌아가기
-        </Link>
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: 'Money Hub', href: '/money' },
+            { name: '대출 상환 계산기', href: '/money/loan-calc' },
+          ]}
+          className="mb-5"
+        />
 
         <div className="mb-6 flex justify-between items-start">
           <div>
@@ -167,6 +175,7 @@ export default function LoanCalcClient() {
             </ul>
           </section>
         </article>
+        <RelatedMoneyTools tools={relatedTools} />
       </div>
     </main>
   );

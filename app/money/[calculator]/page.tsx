@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { SITE_NAME, absoluteUrl } from '@/app/lib/site';
 import {
   CALCULATORS,
   CALCULATOR_SLUGS,
@@ -8,8 +9,6 @@ import {
 } from '@/app/money/calculatorCatalog';
 
 import FinanceCalculatorClient from './FinanceCalculatorClient';
-
-const BASE_URL = 'https://hohaeng.vercel.app';
 
 type PageProps = {
   params: Promise<{
@@ -33,25 +32,47 @@ export async function generateMetadata({
   if (!isCalculatorSlug(calculator)) {
     return {
       title: '계산기를 찾을 수 없습니다 | 호행처럼',
+      robots: {
+        index: false,
+        follow: false,
+      },
     };
   }
 
   const definition =
     CALCULATORS[calculator];
-  const url = `${BASE_URL}/money/${definition.slug}`;
+  const path = `/money/${definition.slug}`;
+  const url = absoluteUrl(path);
 
   return {
     title: `${definition.title} | 호행처럼`,
     description: definition.description,
     alternates: {
-      canonical: url,
+      canonical: path,
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+        'max-video-preview': -1,
+      },
     },
     openGraph: {
       title: definition.title,
       description: definition.description,
       url,
-      siteName: '호행처럼',
+      siteName: SITE_NAME,
+      locale: 'ko_KR',
       type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title: definition.title,
+      description: definition.description,
     },
   };
 }
@@ -71,4 +92,3 @@ export default async function CalculatorPage({
     />
   );
 }
-

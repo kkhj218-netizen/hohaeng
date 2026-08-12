@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import RelatedMoneyTools from '@/app/components/RelatedMoneyTools';
 import ShareButton from '@/app/components/ShareButton';
 import RelatedArticles from '@/app/components/RelatedArticles';
+import { getRelatedTools } from '@/app/money/relatedTools';
 
 export default function IsaCalcPage() {
   const [amount, setAmount] = useState<number>(1000);
@@ -14,31 +16,37 @@ export default function IsaCalcPage() {
   const generalTax = Math.round(totalProfit * 0.154);
   const isaTax = totalProfit > 200 ? Math.round((totalProfit - 200) * 0.099) : 0;
   const savedTax = generalTax - isaTax;
+  const relatedTools = getRelatedTools('isa-calc');
 
   // 관련 정보글 더미 데이터 (클라이언트 컴포넌트 오류 방지용)
   const relatedArticlesData = [
     {
-      slug: 'isa-guide',
-      title: 'ISA 계좌 절세 혜택 완벽 가이드',
-      description: '서민형 vs 일반형 차이점과 비과세 한도 200% 활용하는 꿀팁',
-      date: '2026-03-01',
+      slug: 'prepared-monthly-100-five-years',
+      title: '매월 100만 원 투자하면 5년 뒤 얼마일까?',
+      description: '적립 원금과 복리 수익을 구분해 장기 투자 결과를 비교합니다.',
+      date: '2026-08-06',
       category: '각종 정보',
     },
     {
-      slug: '2026-03-dividend',
-      title: '2026년 3월 ISA 배당금 입금 일지',
-      description: 'ISA 계좌로 수령한 배당금 내역과 재투자 현황 공개',
-      date: '2026-03-31',
-      category: '호행의 일지',
+      slug: 'prepared-lump-sum-vs-dca',
+      title: '일시금 투자 vs 적립식 투자',
+      description: '내 자금 상황과 투자 기간에 맞는 납입 방식을 비교합니다.',
+      date: '2026-08-06',
+      category: '각종 정보',
     },
   ];
 
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto">
-        <Link href="/" className="text-sm text-blue-600 font-medium mb-4 inline-block hover:underline">
-          ← 메인으로 돌아가기
-        </Link>
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: 'Money Hub', href: '/money' },
+            { name: 'ISA 절세 계산기', href: '/money/isa-calc' },
+          ]}
+          className="mb-5"
+        />
 
         {/* 타이틀 및 공유 버튼 */}
         <div className="mb-6 flex justify-between items-start">
@@ -131,7 +139,7 @@ export default function IsaCalcPage() {
                 <strong className="text-slate-800">9.9% 분리과세:</strong> 비과세 한도를 초과한 수익에 대해서도 일반 배당소득세(15.4%)가 아닌 9.9% 저율 과세가 적용됩니다.
               </li>
               <li>
-                <strong className="text-slate-800">손익통산 혜택:</strong> 이익이 난 상품과 손실이 난 상품을 합산하여 '최종 순수익'에 대해서만 세금을 계산하므로 세금 부담이 획기적으로 줄어듭니다.
+                <strong className="text-slate-800">손익통산 혜택:</strong> 이익이 난 상품과 손실이 난 상품을 합산하여 ‘최종 순수익’에 대해서만 세금을 계산하므로 세금 부담이 획기적으로 줄어듭니다.
               </li>
             </ul>
           </section>
@@ -167,6 +175,7 @@ export default function IsaCalcPage() {
 
         {/* 💡 관련 아티클 추천 영역 (수정된 props 넘겨주기) */}
         <RelatedArticles articles={relatedArticlesData} />
+        <RelatedMoneyTools tools={relatedTools} />
       </div>
     </main>
   );

@@ -30,6 +30,28 @@ export const metadata: Metadata = {
   description:
     '돈과 시간을 아껴주는 스마트한 수치 가이드',
 
+  applicationName: '호행처럼',
+  creator: '호행처럼',
+  publisher: '호행처럼',
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
+
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+
   // RSS 자동발견
   alternates: {
     types: {

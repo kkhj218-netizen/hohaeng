@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import RelatedMoneyTools from '@/app/components/RelatedMoneyTools';
 import ShareButton from '@/app/components/ShareButton';
+import { getRelatedTools } from '@/app/money/relatedTools';
 
 export default function SeveranceCalcClient() {
+  const relatedTools = getRelatedTools('severance-calc');
   const [monthlyPay, setMonthlyPay] = useState<number>(300);
   const [bonus, setBonus] = useState<number>(0);
   const [workingMonths, setWorkingMonths] = useState<number>(36);
@@ -34,9 +37,14 @@ export default function SeveranceCalcClient() {
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto">
-        <Link href="/" className="text-sm text-blue-600 font-medium mb-4 inline-block hover:underline">
-          ← 메인으로 돌아가기
-        </Link>
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: 'Money Hub', href: '/money' },
+            { name: '퇴직금 계산기', href: '/money/severance-calc' },
+          ]}
+          className="mb-5"
+        />
 
         <div className="mb-6 flex justify-between items-start">
           <div>
@@ -95,7 +103,7 @@ export default function SeveranceCalcClient() {
           <section>
             <h2 className="font-extrabold text-lg text-slate-900 mb-2">💡 퇴직소득세는 어떻게 계산되나요?</h2>
             <p className="text-sm leading-relaxed text-slate-600">
-              퇴직금은 근로자가 수년에 걸쳐 형성한 소득이므로 일반 근로소득세와 달리 **'근속연수공제'** 및 **'12배 환산 과세'** 혜택을 제공합니다. 오래 일할수록 세금 공제 폭이 커져 실제 부담하는 세율(실효세율)은 보통 3~8% 수준으로 매우 낮습니다.
+              퇴직금은 근로자가 수년에 걸쳐 형성한 소득이므로 일반 근로소득세와 달리 **‘근속연수공제’** 및 **‘12배 환산 과세’** 혜택을 제공합니다. 오래 일할수록 세금 공제 폭이 커져 실제 부담하는 세율(실효세율)은 보통 3~8% 수준으로 매우 낮습니다.
             </p>
           </section>
 
@@ -112,12 +120,13 @@ export default function SeveranceCalcClient() {
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <h3 className="font-bold text-slate-800">Q. 퇴직금 세금도 연말정산에 포함되나요?</h3>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  아닙니다. 퇴직소득은 **'분리과세'** 대상이므로 다른 근로소득이나 종합소득과 합산되지 않고 별도로 세금이 정산되어 끝납니다.
+                  아닙니다. 퇴직소득은 **‘분리과세’** 대상이므로 다른 근로소득이나 종합소득과 합산되지 않고 별도로 세금이 정산되어 끝납니다.
                 </p>
               </div>
             </div>
           </section>
         </article>
+        <RelatedMoneyTools tools={relatedTools} />
       </div>
     </main>
   );

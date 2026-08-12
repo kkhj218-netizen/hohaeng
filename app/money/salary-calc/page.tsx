@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import RelatedMoneyTools from '@/app/components/RelatedMoneyTools';
 import ShareButton from '@/app/components/ShareButton';
+import { getRelatedTools } from '@/app/money/relatedTools';
 
 /*
  * 2026년 근로소득 간이세액표
@@ -37,6 +39,7 @@ function floorToTen(value: number) {
 
 export default function SalaryCalcPage() {
   const [annualSalary, setAnnualSalary] = useState<number>(4000);
+  const relatedTools = getRelatedTools('salary-calc');
 
   /* 연봉은 만 원 단위 */
   const monthlyGross = Math.round((annualSalary * 10000) / 12);
@@ -115,12 +118,14 @@ export default function SalaryCalcPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6">
       <div className="max-w-md mx-auto">
-        <Link
-          href="/"
-          className="text-sm text-blue-600 font-medium mb-4 inline-block hover:underline"
-        >
-          ← 메인으로 돌아가기
-        </Link>
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: 'Money Hub', href: '/money' },
+            { name: '연봉 실수령액 계산기', href: '/money/salary-calc' },
+          ]}
+          className="mb-5"
+        />
 
         {/* 타이틀 및 공유 버튼 */}
         <div className="mb-6 flex justify-between items-start gap-4">
@@ -386,6 +391,8 @@ export default function SalaryCalcPage() {
             </p>
           </section>
         </article>
+
+        <RelatedMoneyTools tools={relatedTools} />
       </div>
     </main>
   );

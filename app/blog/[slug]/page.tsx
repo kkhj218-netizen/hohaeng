@@ -3,7 +3,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
+import Breadcrumbs from "@/app/components/Breadcrumbs";
+import RelatedMoneyTools from "@/app/components/RelatedMoneyTools";
+import { SITE_URL } from "@/app/lib/site";
 import { supabase } from "@/app/lib/supabase";
+import { getRelatedToolsForPost } from "@/app/money/relatedTools";
 import ViewCounter from "./ViewCounter";
 import ShareButtons from "./ShareButtons";
 import EngagementTracker from "./EngagementTracker";
@@ -12,10 +16,6 @@ import SavedPosts from "./SavedPosts";
 import NewsletterSubscribe from "./NewsletterSubscribe";
 
 export const dynamic = "force-dynamic";
-
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "https://hohaeng.vercel.app"
-).replace(/\/$/, "");
 
 function toAbsoluteUrl(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -152,7 +152,7 @@ export async function generateMetadata({
     post.description?.trim() ||
     `${post.title}에 대한 호행처럼의 기록과 정보를 확인해보세요.`;
 
-  const canonicalUrl = `/blog/${slug}`;
+  const canonicalUrl = `/blog/${encodeURIComponent(slug)}`;
 
   const ogImage = post.og_image?.trim() || null;
 
@@ -411,6 +411,12 @@ export default async function BlogDetailPage({
 
   const categorySlug = post.category || "log";
 
+  const relatedMoneyTools = getRelatedToolsForPost({
+    title: post.title,
+    category: post.category,
+    subcategory: post.subcategory,
+  });
+
   // =========================================================
   // JSON-LD 구조화 데이터
   // BlogPosting + BreadcrumbList
@@ -419,8 +425,6 @@ export default async function BlogDetailPage({
   const canonicalUrl = `${SITE_URL}/blog/${encodeURIComponent(post.slug)}`;
 
   const blogUrl = `${SITE_URL}/blog`;
-
-  const categoryUrl = `${blogUrl}?category=${encodeURIComponent(categorySlug)}`;
 
   const structuredDescription =
     post.meta_description?.trim() ||
@@ -524,12 +528,6 @@ export default async function BlogDetailPage({
           {
             "@type": "ListItem",
             position: 3,
-            name: category?.name || post.category || "블로그",
-            item: categoryUrl,
-          },
-          {
-            "@type": "ListItem",
-            position: 4,
             name: post.title,
             item: canonicalUrl,
           },
@@ -554,15 +552,19 @@ export default async function BlogDetailPage({
       ===================================================== */}
 
       <article className="max-w-[860px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* 목록 이동 */}
-        <div className="mb-5">
-          <Link
-            href={`/blog?category=${categorySlug}`}
-            className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
-          >
-            ← 목록으로 돌아가기
-          </Link>
-        </div>
+        <Breadcrumbs
+          items={[
+            { name: "홈", href: "/" },
+            { name: "블로그", href: "/blog" },
+            {
+              name: category?.name || post.category || "블로그",
+              href: `/blog?category=${encodeURIComponent(categorySlug)}`,
+            },
+            { name: post.title, href: `/blog/${encodeURIComponent(post.slug)}` },
+          ]}
+          includeStructuredData={false}
+          className="mb-5"
+        />
 
         {/* ===================================================
             메인 글 카드
@@ -903,6 +905,15 @@ export default async function BlogDetailPage({
               image: post.og_image || null,
             }}
           />
+
+          {relatedMoneyTools.length > 0 && (
+            <div className="px-6 pb-8 sm:px-12">
+              <RelatedMoneyTools
+                tools={relatedMoneyTools}
+                title="이 글과 함께 계산해보세요"
+              />
+            </div>
+          )}
 
           {/* =================================================
               관련 글 자동 추천

@@ -1,10 +1,88 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import { SITE_NAME } from '@/app/lib/site';
 import { supabase } from '@/app/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 const POSTS_PER_PAGE = 12;
+
+type BlogSearchParams = {
+  cat?: string;
+  category?: string;
+  sub?: string;
+  year?: string;
+  q?: string;
+  page?: string;
+};
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<BlogSearchParams>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const isFiltered = Object.keys(params).length > 0;
+
+  const title = '호행처럼 블로그 | 돈·직장·투자·삶의 실제 기록';
+  const description =
+    '연봉과 직장생활, 투자, 돈 관리와 호행처럼의 실제 성장 기록을 주제별로 읽어보세요.';
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: '/blog',
+    },
+    robots: {
+      index: !isFiltered,
+      follow: true,
+      googleBot: {
+        index: !isFiltered,
+        follow: true,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+        'max-video-preview': -1,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url: '/blog',
+      siteName: SITE_NAME,
+      locale: 'ko_KR',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
+  };
+}
+
+const BLOG_START_GUIDES = [
+  {
+    href: '/blog/post-log-1785841740573',
+    label: '연봉 PILLAR',
+    title: '2026 연봉 실수령액 총정리',
+    description: '연봉 구간별 실제 월급을 비교하고 세금과 공제 구조를 이해합니다.',
+  },
+  {
+    href: '/blog/prepared-monthly-100-five-years',
+    label: '투자 PILLAR',
+    title: '매월 100만 원 투자하면 5년 뒤 얼마일까',
+    description: '적립식 투자 원금과 복리 수익의 차이를 숫자로 확인합니다.',
+  },
+  {
+    href: '/projects/site-growth',
+    label: '성장 기록',
+    title: '검색 유입 0명부터 사이트 키우기',
+    description: '사이트 제작부터 검색 노출과 개선 과정을 실제 데이터로 기록합니다.',
+  },
+];
 
 type Post = {
   id: string;
@@ -86,21 +164,14 @@ function getSafeSearchTerm(value: string) {
 export default async function BlogListPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    cat?: string;
-    category?: string;
-    sub?: string;
-    year?: string;
-    q?: string;
-    page?: string;
-  }>;
+  searchParams: Promise<BlogSearchParams>;
 }) {
   const params = await searchParams;
 
   const requestedCategory =
     params.category ||
     params.cat ||
-    'log';
+    'all';
 
   const sub =
     params.sub ||
@@ -158,10 +229,9 @@ export default async function BlogListPage({
   // =========================================================
 
   const requestedExists =
+    requestedCategory === 'all' ||
     categories.some(
-      (item) =>
-        item.slug ===
-        requestedCategory
+      (item) => item.slug === requestedCategory
     );
 
   const category =
@@ -206,11 +276,11 @@ export default async function BlogListPage({
     .eq(
       'status',
       'published'
-    )
-    .eq(
-      'category',
-      category
     );
+
+  if (category !== 'all') {
+    postQuery = postQuery.eq('category', category);
+  }
 
   if (
     sub !==
@@ -421,10 +491,9 @@ export default async function BlogListPage({
       const search =
         new URLSearchParams();
 
-      search.set(
-        'category',
-        category
-      );
+      if (category !== 'all') {
+        search.set('category', category);
+      }
 
       if (
         sub !==
@@ -464,9 +533,24 @@ export default async function BlogListPage({
       return `/blog?${search.toString()}`;
     };
 
+  const isBaseHub =
+    category === 'all' &&
+    sub === 'all' &&
+    year === 'all' &&
+    !query &&
+    currentPage === 1;
+
   return (
     <main className="min-h-screen bg-[#f6f7f9]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: '블로그', href: '/blog' },
+          ]}
+          className="mb-7"
+        />
+
         {/* =====================================================
             상단 제목
         ===================================================== */}
@@ -478,17 +562,14 @@ export default async function BlogListPage({
 
           <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-[-0.03em]">
             {currentCategory
-              ? `${
-                  currentCategory.emoji ||
-                  '📁'
-                } ${
-                  currentCategory.name
-                }`
-              : '📚 호행의 글'}
+              ? `${currentCategory.emoji || '📁'} ${currentCategory.name}`
+              : '호행처럼 블로그'}
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 mt-3">
-            호행처럼에서 직접 작성한 기록과 정보를 모았습니다.
+            {currentCategory
+              ? `${currentCategory.name} 주제의 공개 글을 모았습니다.`
+              : '돈·직장·투자·삶을 더 나은 방향으로 바꾸는 기록과 가이드를 모았습니다.'}
           </p>
 
           <p className="text-xs text-slate-400 mt-2">
@@ -500,6 +581,38 @@ export default async function BlogListPage({
           </p>
         </div>
 
+        {isBaseHub && (
+          <section className="mb-8 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-black tracking-[0.14em] text-emerald-600">
+                  START HERE
+                </p>
+                <h2 className="mt-2 text-xl font-black text-slate-950 sm:text-2xl">
+                  먼저 읽을 핵심 가이드
+                </h2>
+              </div>
+              <Link href="/money" className="text-sm font-bold text-blue-600 hover:underline">
+                계산기가 필요하다면 Money Hub →
+              </Link>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              {BLOG_START_GUIDES.map((guide) => (
+                <Link
+                  key={guide.href}
+                  href={guide.href}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  <span className="text-xs font-black text-emerald-700">{guide.label}</span>
+                  <h3 className="mt-2 font-black text-slate-950">{guide.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{guide.description}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* =====================================================
             검색
         ===================================================== */}
@@ -510,13 +623,9 @@ export default async function BlogListPage({
             method="GET"
             className="flex flex-col sm:flex-row gap-2"
           >
-            <input
-              type="hidden"
-              name="category"
-              value={
-                category
-              }
-            />
+            {category !== 'all' && (
+              <input type="hidden" name="category" value={category} />
+            )}
 
             {sub !==
               'all' && (
@@ -582,7 +691,7 @@ export default async function BlogListPage({
               </p>
 
               <Link
-                href={`/blog?category=${category}`}
+                href={category === 'all' ? '/blog' : `/blog?category=${category}`}
                 className="text-sm font-bold text-slate-500 hover:text-red-500"
               >
                 ✕ 검색 초기화
@@ -596,6 +705,17 @@ export default async function BlogListPage({
         ===================================================== */}
 
         <div className="flex flex-wrap gap-2 mb-6">
+          <Link
+            href="/blog"
+            className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              category === 'all'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:text-blue-600'
+            }`}
+          >
+            📚 전체 글
+          </Link>
+
           {categories.map(
             (item) => (
               <Link

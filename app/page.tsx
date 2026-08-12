@@ -1,9 +1,68 @@
-'use client';
-
-import { useState } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { TOOLS, CATEGORIES } from './tools';
+
+import CalculatorDirectory from '@/app/components/CalculatorDirectory';
 import FooterProfile from '@/app/components/FooterProfile';
+import { SITE_NAME, SITE_URL } from '@/app/lib/site';
+
+export const metadata: Metadata = {
+  title: '호행처럼 | 연봉·투자·대출 계산기와 생활 금융 가이드',
+  description:
+    '연봉 실수령액, 퇴직금, 대출 이자, 복리와 적립식 투자 계산기를 사용하고 돈과 삶을 개선하는 실제 기록을 함께 읽어보세요.',
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
+  openGraph: {
+    title: '호행처럼 | 계산하고 기록하며 더 나은 방향으로',
+    description:
+      '직장·금융·투자 계산기와 직접 실행한 돈·삶의 기록을 한곳에서 확인하세요.',
+    url: '/',
+    siteName: SITE_NAME,
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: '호행처럼 | 연봉·투자·대출 계산기',
+    description: '돈과 삶의 중요한 숫자를 계산하고 다음 행동까지 연결합니다.',
+  },
+};
+
+const homeJsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: SITE_NAME,
+      alternateName: 'HOHAENG',
+      description: '돈과 삶의 중요한 숫자를 계산하고 실제 개선 과정을 기록하는 웹사이트',
+      inLanguage: 'ko-KR',
+      publisher: {
+        '@id': `${SITE_URL}/#organization`,
+      },
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      alternateName: 'HOHAENG',
+      url: SITE_URL,
+    },
+  ],
+};
 
 const PROJECTS = [
   {
@@ -102,15 +161,14 @@ const START_POSTS = [
 ];
 
 export default function Home() {
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-
-  const filteredTools =
-    activeCategory === 'all'
-      ? TOOLS
-      : TOOLS.filter((tool) => tool.category === activeCategory);
-
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-blue-500 selection:text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(homeJsonLd).replace(/</g, '\\u003c'),
+        }}
+      />
       {/* 1. 메인 히어로 */}
       <section className="relative overflow-hidden border-b border-slate-900">
         <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[680px] -translate-x-1/2 rounded-full bg-blue-700/10 blur-3xl" />
@@ -143,12 +201,19 @@ export default function Home() {
               <span className="ml-2">↓</span>
             </a>
 
-            <a
-              href="#tools"
+            <Link
+              href="/money"
               className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-bold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800"
             >
-              필요한 계산기 찾기
-            </a>
+              Money Hub에서 계산하기
+            </Link>
+
+            <Link
+              href="/blog"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-bold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800"
+            >
+              Blog 전체 글 보기
+            </Link>
           </div>
 
           <p className="mt-5 text-xs text-slate-600">
@@ -246,92 +311,7 @@ export default function Home() {
       </section>
 
       {/* 4. 많이 찾는 계산기 */}
-      <section
-        id="tools"
-        className="scroll-mt-20 border-b border-slate-900 bg-slate-950"
-      >
-        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-8 sm:py-16">
-          <div className="mb-7">
-            <p className="text-xs font-bold tracking-[0.18em] text-emerald-400">
-              SMART TOOLS
-            </p>
-
-            <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
-              많이 찾는 계산기
-            </h2>
-
-            <p className="mt-3 text-sm leading-6 text-slate-400">
-              복잡한 숫자를 직접 계산하지 않아도 필요한 결과를 빠르게
-              확인할 수 있습니다.
-            </p>
-          </div>
-
-          <div className="mb-6 flex items-center space-x-2 overflow-x-auto border-b border-slate-800/60 pb-3 scrollbar-none">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                aria-pressed={activeCategory === cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all duration-200 sm:text-sm ${
-                  activeCategory === cat.id
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                    : 'border border-slate-800 bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {filteredTools.map((tool) => {
-              const categoryName =
-                CATEGORIES.find((category) => category.id === tool.category)
-                  ?.name ?? tool.category;
-
-              return (
-                <Link
-                  key={tool.id}
-                  href={tool.href}
-                  className={`group relative rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-slate-900 ${tool.hoverColor}`}
-                >
-                  <div className="mb-3 flex items-start justify-between">
-                    <span className="rounded-md border border-blue-900/50 bg-blue-950/80 px-2.5 py-1 text-[11px] font-bold tracking-wider text-blue-400">
-                      {categoryName}
-                    </span>
-
-                    {tool.badge && (
-                      <span className="rounded border border-amber-800/40 bg-amber-950/60 px-2 py-0.5 text-[10px] font-extrabold text-amber-300">
-                        {tool.badge}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="flex items-center justify-between text-lg font-bold text-white transition-colors group-hover:text-blue-300">
-                    <span>{tool.title}</span>
-                    <span className="text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-blue-400">
-                      →
-                    </span>
-                  </h3>
-
-                  <p className="mt-2 text-xs font-normal leading-relaxed text-slate-400 sm:text-sm">
-                    {tool.description}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-
-          {filteredTools.length === 0 && (
-            <div className="rounded-2xl border border-slate-800/50 bg-slate-900/30 py-16 text-center">
-              <p className="text-sm text-slate-400">
-                해당 카테고리의 새로운 도구를 준비하고 있습니다.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+      <CalculatorDirectory />
 
       {/* 5. 검색형 돈·직장 가이드 */}
       <section className="border-b border-slate-900 bg-slate-950">
@@ -374,6 +354,15 @@ export default function Home() {
                 </p>
               </Link>
             ))}
+          </div>
+
+          <div className="mt-6 text-right">
+            <Link
+              href="/blog"
+              className="inline-flex text-sm font-bold text-indigo-300 hover:text-indigo-200"
+            >
+              Blog에서 모든 가이드 보기 →
+            </Link>
           </div>
         </div>
       </section>

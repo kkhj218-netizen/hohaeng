@@ -1,13 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
+import Breadcrumbs from '@/app/components/Breadcrumbs';
+import RelatedMoneyTools from '@/app/components/RelatedMoneyTools';
 import ShareButton from '@/app/components/ShareButton';
 import {
   CALCULATORS,
   type CalculatorSlug,
 } from '@/app/money/calculatorCatalog';
+import { CALCULATOR_GUIDES } from '@/app/money/calculatorGuides';
+import { getRelatedTools } from '@/app/money/relatedTools';
 
 const accentClasses = {
   blue: {
@@ -193,6 +196,8 @@ export default function FinanceCalculatorClient({
 }) {
   const definition = CALCULATORS[calculator];
   const colors = accentClasses[definition.accent];
+  const guide = CALCULATOR_GUIDES[calculator];
+  const relatedTools = getRelatedTools(calculator);
 
   const [initialAmount, setInitialAmount] =
     useState(1000);
@@ -580,12 +585,14 @@ export default function FinanceCalculatorClient({
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-xl">
-        <Link
-          href="/#tools"
-          className="mb-4 inline-block text-sm font-bold text-blue-600 hover:underline"
-        >
-          ← 계산기 목록으로 돌아가기
-        </Link>
+        <Breadcrumbs
+          items={[
+            { name: '홈', href: '/' },
+            { name: 'Money Hub', href: '/money' },
+            { name: definition.shortTitle, href: `/money/${definition.slug}` },
+          ]}
+          className="mb-5"
+        />
 
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
@@ -760,6 +767,26 @@ export default function FinanceCalculatorClient({
         </section>
 
         <article className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 text-sm leading-7 text-slate-600">
+          {guide && (
+            <section>
+              <h2 className="text-lg font-black text-slate-900">
+                {definition.shortTitle}는 언제 사용하나요?
+              </h2>
+              <p className="mt-2">{guide.summary}</p>
+              <ul className="mt-3 list-disc space-y-2 pl-5">
+                {guide.useCases.map((useCase) => (
+                  <li key={useCase}>{useCase}</li>
+                ))}
+              </ul>
+              <div className={`mt-4 rounded-2xl border p-4 ${colors.soft}`}>
+                <h3 className="font-black">간단한 계산 예시</h3>
+                <p className="mt-2 text-xs leading-6">{guide.example}</p>
+              </div>
+              <h3 className="mt-5 font-black text-slate-900">결과 해석 방법</h3>
+              <p className="mt-2">{guide.interpretation}</p>
+            </section>
+          )}
+
           <section className={`rounded-2xl border p-4 ${colors.soft}`}>
             <h2 className="font-black">
               계산 결과를 볼 때 꼭 확인하세요
@@ -792,6 +819,8 @@ export default function FinanceCalculatorClient({
             </ul>
           </section>
         </article>
+
+        <RelatedMoneyTools tools={relatedTools} />
       </div>
     </main>
   );

@@ -145,6 +145,11 @@ export default function EditorToolbar({
     );
   }
 
+  const imageSelected =
+    editor.isActive(
+      'image'
+    );
+
   // =========================================================
   // 링크
   // =========================================================
@@ -1010,7 +1015,9 @@ export default function EditorToolbar({
         >
           {uploading
             ? '업로드 중...'
-            : '📷 사진 첨부'}
+            : imageSelected
+              ? '📷 선택 사진 교체'
+              : '📷 사진 첨부'}
 
           <input
             type="file"

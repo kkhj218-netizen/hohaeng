@@ -62,6 +62,7 @@ const MEANINGFUL_EMPTY_TAGS = new Set([
  * 완전한 클래스명만 사용합니다.
  */
 export const EDITOR_CONTENT_CLASS = [
+  'rich-editor-content',
   'text-[16px]',
   'sm:text-[17px]',
   'text-slate-800',
@@ -136,6 +137,12 @@ export const EDITOR_CONTENT_CLASS = [
   '[&_blockquote]:text-slate-600',
   '[&_blockquote]:leading-8',
   '[&_blockquote_p]:my-0',
+  '[&_blockquote_blockquote]:my-0',
+  '[&_blockquote_blockquote]:rounded-none',
+  '[&_blockquote_blockquote]:border-l-0',
+  '[&_blockquote_blockquote]:bg-transparent',
+  '[&_blockquote_blockquote]:px-0',
+  '[&_blockquote_blockquote]:py-0',
 
   '[&_a]:font-semibold',
   '[&_a]:text-blue-600',
@@ -176,6 +183,41 @@ export const EDITOR_CONTENT_CLASS = [
 
   '[&_s]:text-slate-500',
 ].join(' ');
+
+/** 관리자 글쓰기·수정 화면의 편집 영역 전용 외곽 스타일 */
+export const ADMIN_EDITOR_CONTENT_CLASS = [
+  'max-w-none',
+  'focus:outline-none',
+  'min-h-[520px]',
+  'px-6',
+  'sm:px-12',
+  'py-8',
+  'sm:py-10',
+  'bg-white',
+  'rounded-b-2xl',
+  'border',
+  'border-t-0',
+  'border-slate-800',
+  EDITOR_CONTENT_CLASS,
+].join(' ');
+
+/**
+ * 예전 에디터가 저장한 `<p><img></p>`를 새 블록 이미지로 읽기 전에
+ * 사진을 감싼 빈 문단만 제거합니다. 글자나 다른 요소가 있는 문단은
+ * 바꾸지 않으므로 기존 본문 내용에는 영향을 주지 않습니다.
+ */
+export function prepareEditorHtmlForEditing(
+  html: string | null | undefined
+) {
+  if (!html) {
+    return '';
+  }
+
+  return html.replace(
+    /<p\b[^>]*>\s*(<img\b[^>]*>)\s*(?:<br\s*\/?>\s*)?<\/p>/gi,
+    '$1'
+  );
+}
 
 function parseHtmlFragment(
   html: string

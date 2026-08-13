@@ -18,22 +18,17 @@ import {
   EditorContent,
 } from '@tiptap/react';
 
-import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
-
-import {
-  TextStyleKit,
-} from '@tiptap/extension-text-style';
-
-import {
-  TextAlign,
-} from '@tiptap/extension-text-align';
-
-import Highlight from '@tiptap/extension-highlight';
-
 import { supabase } from '@/app/lib/supabase';
 
+import EditorBlockControls from '@/app/components/EditorBlockControls';
 import EditorToolbar from '@/app/components/EditorToolbar';
+import {
+  ADMIN_EDITOR_CONTENT_CLASS,
+  prepareEditorHtmlForEditing,
+} from '@/app/lib/editorContent';
+import {
+  createEditorExtensions,
+} from '@/app/lib/editorExtensions';
 
 type Category = {
   id: number;
@@ -77,54 +72,6 @@ type PublishedEditBackup =
     postId: string;
     savedAt: string;
   };
-
-const EDITOR_CONTENT_CLASS = `
-  max-w-none focus:outline-none min-h-[520px]
-  px-6 sm:px-12 py-8 sm:py-10
-  bg-white text-slate-800
-  rounded-b-2xl border border-t-0 border-slate-800
-  text-[16px] sm:text-[17px] leading-[1.9] break-words
-  [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
-  [&_p]:my-4 [&_p:empty]:min-h-[1.6em]
-  [&_h2]:text-[28px] [&_h2]:sm:text-[32px] [&_h2]:font-black
-  [&_h2]:tracking-[-0.025em] [&_h2]:leading-[1.35]
-  [&_h2]:text-slate-950 [&_h2]:mt-14 [&_h2]:mb-6
-  [&_h3]:text-[23px] [&_h3]:sm:text-[26px] [&_h3]:font-extrabold
-  [&_h3]:tracking-[-0.02em] [&_h3]:leading-[1.4]
-  [&_h3]:text-slate-900 [&_h3]:mt-11 [&_h3]:mb-5
-  [&_h4]:text-[19px] [&_h4]:sm:text-[21px] [&_h4]:font-extrabold
-  [&_h4]:text-slate-900 [&_h4]:mt-9 [&_h4]:mb-4
-  [&_strong]:font-black [&_em]:italic
-  [&_u]:underline [&_u]:underline-offset-4
-  [&_img]:block [&_img]:max-w-full [&_img]:h-auto
-  [&_img]:mx-auto [&_img]:my-8 [&_img]:rounded-2xl
-  [&_ul]:list-disc [&_ul]:pl-7 [&_ul]:my-6 [&_ul_ul]:my-2
-  [&_ol]:list-decimal [&_ol]:pl-7 [&_ol]:my-6 [&_ol_ol]:my-2
-  [&_li]:my-2 [&_li]:pl-1 [&_li_p]:my-0
-  [&_blockquote]:my-8 [&_blockquote]:rounded-r-2xl
-  [&_blockquote]:border-l-4 [&_blockquote]:border-blue-500
-  [&_blockquote]:bg-blue-50/70 [&_blockquote]:px-6 [&_blockquote]:py-5
-  [&_blockquote]:text-slate-600 [&_blockquote]:leading-8
-  [&_blockquote_p]:my-0
-  [&_blockquote_blockquote]:my-0 [&_blockquote_blockquote]:rounded-none
-  [&_blockquote_blockquote]:border-l-0 [&_blockquote_blockquote]:bg-transparent
-  [&_blockquote_blockquote]:px-0 [&_blockquote_blockquote]:py-0
-  [&_a]:font-semibold [&_a]:text-blue-600 [&_a]:underline
-  [&_a]:decoration-blue-300 [&_a]:underline-offset-4
-  hover:[&_a]:text-blue-500
-  [&_hr]:my-12 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-slate-200
-  [&_mark]:rounded [&_mark]:px-1 [&_mark]:py-0.5
-  [&_code]:rounded-md [&_code]:bg-slate-100
-  [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.9em]
-  [&_code]:font-mono [&_code]:text-pink-600
-  [&_pre]:my-8 [&_pre]:overflow-x-auto [&_pre]:rounded-2xl
-  [&_pre]:bg-slate-950 [&_pre]:p-5 [&_pre]:text-sm
-  [&_pre]:leading-7 [&_pre]:text-slate-100
-  [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit
-  [&_s]:text-slate-500
-`
-  .trim()
-  .replace(/\s+/g, ' ');
 
 const createEditSnapshot =
   (data: EditData) =>
@@ -513,30 +460,8 @@ export default function AdminEditPage() {
   const editor = useEditor({
     immediatelyRender: false,
 
-    extensions: [
-      StarterKit,
-
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-      }),
-
-      // 글꼴 / 글자 크기 / 글자색 / 줄간격
-      TextStyleKit,
-
-      // 정렬
-      TextAlign.configure({
-        types: [
-          'heading',
-          'paragraph',
-        ],
-      }),
-
-      // 다중 색상 형광펜
-      Highlight.configure({
-        multicolor: true,
-      }),
-    ],
+    extensions:
+      createEditorExtensions(),
 
     content:
       '<p>글을 불러오는 중...</p>',
@@ -544,7 +469,7 @@ export default function AdminEditPage() {
     editorProps: {
       attributes: {
         class:
-          EDITOR_CONTENT_CLASS,
+          ADMIN_EDITOR_CONTENT_CLASS,
       },
     },
 
@@ -1024,7 +949,9 @@ export default function AdminEditPage() {
 
         // 기존 HTML 본문 또는 복구한 임시 수정본 불러오기
         editor.commands.setContent(
-          dataToShow.content,
+          prepareEditorHtmlForEditing(
+            dataToShow.content
+          ),
           { emitUpdate: false }
         );
 
@@ -1175,6 +1102,21 @@ export default function AdminEditPage() {
         return;
       }
 
+      const selectedImageSnapshot =
+        editor.isActive(
+          'image'
+        )
+          ? {
+              position:
+                editor.state
+                  .selection.from,
+              src:
+                editor.getAttributes(
+                  'image'
+                ).src,
+            }
+          : null;
+
       if (
         !file.type.startsWith(
           'image/'
@@ -1246,17 +1188,49 @@ export default function AdminEditPage() {
         if (
           data.publicUrl
         ) {
-          editor
-            .chain()
-            .focus()
-            .setImage({
-              src:
-                data.publicUrl,
+          const selectedImage =
+            selectedImageSnapshot
+              ? editor.state.doc.nodeAt(
+                  selectedImageSnapshot.position
+                )
+              : null;
 
-              alt:
-                file.name,
-            })
-            .run();
+          if (
+            selectedImageSnapshot &&
+            selectedImage?.type
+              .name === 'image' &&
+            selectedImage.attrs
+              .src ===
+              selectedImageSnapshot.src
+          ) {
+            editor
+              .chain()
+              .focus()
+              .setNodeSelection(
+                selectedImageSnapshot.position
+              )
+              .updateAttributes(
+                'image',
+                {
+                  src:
+                    data.publicUrl,
+                  alt:
+                    file.name,
+                }
+              )
+              .run();
+          } else {
+            editor
+              .chain()
+              .focus()
+              .setImage({
+                src:
+                  data.publicUrl,
+                alt:
+                  file.name,
+              })
+              .run();
+          }
         }
 
       } catch (
@@ -3467,7 +3441,7 @@ export default function AdminEditPage() {
         </h2>
 
         <p className="text-xs text-slate-500 mt-1">
-          글자를 드래그한 뒤 크기·글꼴·색상·형광펜·정렬 등을 자유롭게 수정하세요.
+          글·사진 왼쪽의 ⠿를 끌어 순서를 바꾸고, 사진을 누르면 위치·크기·설명을 수정할 수 있습니다.
         </p>
 
       </div>
@@ -3480,6 +3454,14 @@ export default function AdminEditPage() {
         uploading={
           uploading
         }
+        onImageUpload={
+          handleImageUpload
+        }
+      />
+
+      <EditorBlockControls
+        editor={editor}
+        uploading={uploading}
         onImageUpload={
           handleImageUpload
         }

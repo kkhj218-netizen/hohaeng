@@ -638,6 +638,7 @@ export default async function BlogDetailPage({
 
           <div
             className="
+              rich-editor-content
               px-6
               sm:px-12
               pt-9

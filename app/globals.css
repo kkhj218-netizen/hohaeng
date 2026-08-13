@@ -24,3 +24,52 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * 작성 화면과 공개 게시글이 함께 사용하는 사진 블록입니다.
+ * 기존 단순 img는 기존 스타일을 유지하고, 새 figure 블록에만 적용합니다.
+ */
+.rich-editor-content figure[data-editor-image] {
+  display: block;
+  max-width: 100%;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.rich-editor-content figure[data-editor-image][data-align="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.rich-editor-content figure[data-editor-image][data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.rich-editor-content figure[data-editor-image][data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.rich-editor-content figure[data-editor-image] img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 1rem;
+}
+
+.rich-editor-content figure[data-editor-image] figcaption {
+  margin-top: 0.75rem;
+  color: #64748b;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .rich-editor-content figure[data-editor-image] {
+    width: 100% !important;
+  }
+}

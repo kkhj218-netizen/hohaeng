@@ -61,6 +61,7 @@ export default function AdminCategoriesPage() {
   const [editingSubcategoryId, setEditingSubcategoryId] = useState<
     number | null
   >(null);
+  const [editSubcategorySlug, setEditSubcategorySlug] = useState('');
   const [editSubcategoryName, setEditSubcategoryName] = useState('');
   const [editSubcategoryEmoji, setEditSubcategoryEmoji] = useState('');
   const [editSubcategorySortOrder, setEditSubcategorySortOrder] =
@@ -367,6 +368,7 @@ export default function AdminCategoriesPage() {
 
   const startEditSubcategory = (subcategory: Subcategory) => {
     setEditingSubcategoryId(subcategory.id);
+    setEditSubcategorySlug(subcategory.slug);
     setEditSubcategoryName(subcategory.name);
     setEditSubcategoryEmoji(subcategory.emoji || '');
     setEditSubcategorySortOrder(subcategory.sort_order);
@@ -374,34 +376,195 @@ export default function AdminCategoriesPage() {
 
   const cancelEditSubcategory = () => {
     setEditingSubcategoryId(null);
+    setEditSubcategorySlug('');
   };
 
   const handleUpdateSubcategory = async (subcategory: Subcategory) => {
+    if (!editSubcategorySlug.trim()) {
+      alert('세부주제 slug를 입력해주세요.');
+      return;
+    }
+
     if (!editSubcategoryName.trim()) {
       alert('세부주제 이름을 입력해주세요.');
       return;
     }
 
+    const cleanSlug = editSubcategorySlug
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-');
+
+    const slugChanged = cleanSlug !== subcategory.slug;
+
     try {
       setSaving(true);
 
-      const { error } = await supabase
-        .from('subcategories')
-        .update({
-          name: editSubcategoryName.trim(),
-          emoji: editSubcategoryEmoji.trim() || null,
-          sort_order: editSubcategorySortOrder,
-        })
-        .eq('id', subcategory.id);
+      if (slugChanged) {
+        const [duplicateResult, usageResult, targetUsageResult] =
+          await Promise.all([
+            supabase
+              .from('subcategories')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq('category_slug', subcategory.category_slug)
+              .eq('slug', cleanSlug)
+              .neq('id', subcategory.id),
+            supabase
+              .from('posts')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq('category', subcategory.category_slug)
+              .eq('subcategory', subcategory.slug),
+            supabase
+              .from('posts')
+              .select('id', {
+                count: 'exact',
+                head: true,
+              })
+              .eq('category', subcategory.category_slug)
+              .eq('subcategory', cleanSlug),
+          ]);
 
-      if (error) {
-        throw error;
+        if (duplicateResult.error) {
+          throw duplicateResult.error;
+        }
+
+        if (usageResult.error) {
+          throw usageResult.error;
+        }
+
+        if (targetUsageResult.error) {
+          throw targetUsageResult.error;
+        }
+
+        if ((duplicateResult.count || 0) > 0) {
+          alert(
+            `같은 상위 카테고리에 slug “${cleanSlug}”을 사용하는 세부주제가 이미 있습니다.`
+          );
+          return;
+        }
+
+        if ((targetUsageResult.count || 0) > 0) {
+          alert(
+            `새 slug “${cleanSlug}”을 이미 사용 중인 글이 있습니다. 다른 slug를 입력해주세요.`
+          );
+          return;
+        }
+
+        const usageCount = usageResult.count || 0;
+
+        if (usageCount > 0) {
+          const confirmed = window.confirm(
+            `slug를 “${subcategory.slug}”에서 “${cleanSlug}”(으)로 변경할까요?\n\n연결된 글 ${usageCount.toLocaleString()}개의 세부 카테고리 값도 함께 변경됩니다.`
+          );
+
+          if (!confirmed) {
+            return;
+          }
+        }
+
+        // 새 slug 행을 먼저 만든 뒤 글을 옮기고 기존 행을 삭제한다.
+        // 외래키가 설정된 DB에서도 연결이 끊기지 않도록 하는 순서다.
+        const {
+          data: replacementSubcategory,
+          error: replacementError,
+        } = await supabase
+          .from('subcategories')
+          .insert([
+            {
+              category_slug: subcategory.category_slug,
+              slug: cleanSlug,
+              name: editSubcategoryName.trim(),
+              emoji: editSubcategoryEmoji.trim() || null,
+              sort_order: editSubcategorySortOrder,
+              is_active: subcategory.is_active,
+            },
+          ])
+          .select('id')
+          .single();
+
+        if (replacementError) {
+          throw replacementError;
+        }
+
+        const { error: postUpdateError } = await supabase
+          .from('posts')
+          .update({
+            subcategory: cleanSlug,
+          })
+          .eq('category', subcategory.category_slug)
+          .eq('subcategory', subcategory.slug);
+
+        if (postUpdateError) {
+          await supabase
+            .from('subcategories')
+            .delete()
+            .eq('id', replacementSubcategory.id);
+
+          throw postUpdateError;
+        }
+
+        const { error: oldSubcategoryDeleteError } = await supabase
+          .from('subcategories')
+          .delete()
+          .eq('id', subcategory.id);
+
+        if (oldSubcategoryDeleteError) {
+          const { error: postRollbackError } = await supabase
+            .from('posts')
+            .update({
+              subcategory: subcategory.slug,
+            })
+            .eq('category', subcategory.category_slug)
+            .eq('subcategory', cleanSlug);
+
+          const { error: replacementDeleteError } = await supabase
+            .from('subcategories')
+            .delete()
+            .eq('id', replacementSubcategory.id);
+
+          const rollbackMessages = [
+            postRollbackError?.message,
+            replacementDeleteError?.message,
+          ].filter(Boolean);
+
+          throw new Error(
+            `${oldSubcategoryDeleteError.message}${
+              rollbackMessages.length > 0
+                ? ` / 되돌리기 확인 필요: ${rollbackMessages.join(' / ')}`
+                : ''
+            }`
+          );
+        }
+      } else {
+        const { error } = await supabase
+          .from('subcategories')
+          .update({
+            name: editSubcategoryName.trim(),
+            emoji: editSubcategoryEmoji.trim() || null,
+            sort_order: editSubcategorySortOrder,
+          })
+          .eq('id', subcategory.id);
+
+        if (error) {
+          throw error;
+        }
       }
 
       setEditingSubcategoryId(null);
+      setEditSubcategorySlug('');
       await loadSubcategories();
 
-      alert('세부주제가 수정되었습니다. ✅');
+      alert(
+        slugChanged
+          ? '세부주제 slug와 연결된 글이 함께 수정되었습니다. ✅'
+          : '세부주제가 수정되었습니다. ✅'
+      );
     } catch (error: any) {
       alert('세부주제 수정 실패: ' + error.message);
     } finally {
@@ -1011,13 +1174,27 @@ export default function AdminCategoriesPage() {
                                       <span className="font-bold text-slate-300">
                                         {category.name}
                                       </span>{' '}
-                                      · slug:{' '}
+                                      · 기존 slug:{' '}
                                       <span className="font-bold text-slate-300">
                                         {subcategory.slug}
                                       </span>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                      <input
+                                        type="text"
+                                        value={editSubcategorySlug}
+                                        onChange={(event) =>
+                                          setEditSubcategorySlug(
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="slug"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
+                                        className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3"
+                                      />
+
                                       <input
                                         type="text"
                                         value={editSubcategoryEmoji}
@@ -1054,6 +1231,11 @@ export default function AdminCategoriesPage() {
                                         className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3"
                                       />
                                     </div>
+
+                                    <p className="text-xs leading-5 text-amber-300/90">
+                                      slug를 변경하면 이 세부주제에 연결된 기존
+                                      글도 새 slug로 함께 변경됩니다.
+                                    </p>
 
                                     <div className="flex gap-2">
                                       <button

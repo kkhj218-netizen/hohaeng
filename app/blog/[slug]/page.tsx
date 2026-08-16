@@ -62,6 +62,14 @@ type Category = {
   is_active: boolean;
 };
 
+type Subcategory = {
+  category_slug: string;
+  slug: string;
+  name: string;
+  emoji: string | null;
+  is_active: boolean;
+};
+
 type AdjacentPost = {
   id: string;
   title: string;
@@ -281,6 +289,28 @@ export default async function BlogDetailPage({
   }
 
   // =========================================================
+  // DB에서 실제 세부주제 정보 불러오기
+  // 관리자에서 이름이나 이모지를 바꾸면 글 화면에도 반영한다.
+  // =========================================================
+
+  let subcategory: Subcategory | null = null;
+
+  if (post.category && post.subcategory) {
+    const { data: subcategoryData, error: subcategoryError } = await supabase
+      .from("subcategories")
+      .select("category_slug, slug, name, emoji, is_active")
+      .eq("category_slug", post.category)
+      .eq("slug", post.subcategory)
+      .maybeSingle();
+
+    if (subcategoryError) {
+      console.error("세부주제 불러오기 오류:", subcategoryError);
+    }
+
+    subcategory = subcategoryData as Subcategory | null;
+  }
+
+  // =========================================================
   // 이전 글 / 다음 글 불러오기
   // 공개된 글만 작성일 순서로 연결한다.
   // =========================================================
@@ -411,6 +441,12 @@ export default async function BlogDetailPage({
 
   const categorySlug = post.category || "log";
 
+  const subcategoryName = subcategory?.name || post.subcategory;
+
+  const subcategoryLabel = subcategoryName
+    ? `${subcategory?.emoji ? `${subcategory.emoji} ` : ""}${subcategoryName}`
+    : null;
+
   const relatedMoneyTools = getRelatedToolsForPost({
     title: post.title,
     category: post.category,
@@ -495,11 +531,11 @@ export default async function BlogDetailPage({
 
         articleSection: category?.name || post.category || "블로그",
 
-        ...(post.subcategory
+        ...(subcategoryName
           ? {
               keywords: [
                 category?.name || post.category || "블로그",
-                post.subcategory,
+                subcategoryName,
               ],
             }
           : {}),
@@ -585,10 +621,13 @@ export default async function BlogDetailPage({
                 {categoryLabel}
               </Link>
 
-              {post.subcategory && (
-                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-                  {post.subcategory}
-                </span>
+              {post.subcategory && subcategoryLabel && (
+                <Link
+                  href={`/blog?category=${encodeURIComponent(categorySlug)}&sub=${encodeURIComponent(post.subcategory)}`}
+                  className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors"
+                >
+                  {subcategoryLabel}
+                </Link>
               )}
             </div>
 

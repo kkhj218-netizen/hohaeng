@@ -106,6 +106,16 @@ type Category = {
   is_active: boolean;
 };
 
+type Subcategory = {
+  id: number;
+  category_slug: string;
+  slug: string;
+  name: string;
+  emoji: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
 function getPostTimestamp(post: Post) {
   if (post.created_at) {
     const time = new Date(post.created_at).getTime();
@@ -173,7 +183,7 @@ export default async function BlogListPage({
     params.cat ||
     'all';
 
-  const sub =
+  const requestedSub =
     params.sub ||
     'all';
 
@@ -191,27 +201,68 @@ export default async function BlogListPage({
     );
 
   // =========================================================
-  // 활성 카테고리 불러오기
+  // 활성 카테고리와 세부주제 불러오기
   // =========================================================
 
-  const {
-    data: categoryData,
-    error: categoryError,
-  } = await supabase
-    .from('categories')
-    .select(
-      'id, slug, name, emoji, sort_order, is_active'
-    )
-    .eq(
-      'is_active',
-      true
-    )
-    .order(
-      'sort_order',
-      {
-        ascending: true,
-      }
-    );
+  const [
+    {
+      data: categoryData,
+      error: categoryError,
+    },
+    {
+      data: subcategoryData,
+      error: subcategoryError,
+    },
+  ] = await Promise.all([
+    supabase
+      .from('categories')
+      .select(
+        'id, slug, name, emoji, sort_order, is_active'
+      )
+      .eq(
+        'is_active',
+        true
+      )
+      .order(
+        'sort_order',
+        {
+          ascending: true,
+        }
+      )
+      .order(
+        'id',
+        {
+          ascending: true,
+        }
+      ),
+    supabase
+      .from('subcategories')
+      .select(
+        'id, category_slug, slug, name, emoji, sort_order, is_active'
+      )
+      .eq(
+        'is_active',
+        true
+      )
+      .order(
+        'category_slug',
+        {
+          ascending: true,
+        }
+      )
+      .order(
+        'sort_order',
+        {
+          ascending: true,
+        }
+      )
+      .order(
+        'id',
+        {
+          ascending: true,
+        }
+      ),
+  ]);
 
   if (categoryError) {
     console.error(
@@ -220,9 +271,20 @@ export default async function BlogListPage({
     );
   }
 
+  if (subcategoryError) {
+    console.error(
+      '세부주제 불러오기 오류:',
+      subcategoryError
+    );
+  }
+
   const categories =
     (categoryData ||
       []) as Category[];
+
+  const activeSubcategories =
+    (subcategoryData ||
+      []) as Subcategory[];
 
   // =========================================================
   // 선택 카테고리 확인
@@ -251,6 +313,25 @@ export default async function BlogListPage({
         item.slug ===
         category
     );
+
+  const currentSubcategories =
+    category === 'all'
+      ? []
+      : activeSubcategories.filter(
+          (item) =>
+            item.category_slug ===
+            category
+        );
+
+  const sub =
+    requestedSub === 'all' ||
+    currentSubcategories.some(
+      (item) =>
+        item.slug ===
+        requestedSub
+    )
+      ? requestedSub
+      : 'all';
 
   const isInvestmentJournal =
     category === 'log' &&
@@ -416,6 +497,23 @@ export default async function BlogListPage({
       string
     >;
 
+  const subcategoryLabelMap =
+    Object.fromEntries(
+      activeSubcategories.map(
+        (item) => [
+          `${item.category_slug}:${item.slug}`,
+          `${
+            item.emoji
+              ? `${item.emoji} `
+              : ''
+          }${item.name}`,
+        ]
+      )
+    ) as Record<
+      string,
+      string
+    >;
+
   // =========================================================
   // URL 생성 함수
   // =========================================================
@@ -453,7 +551,7 @@ export default async function BlogListPage({
 
       search.set(
         'category',
-        'log'
+        category
       );
 
       if (
@@ -743,11 +841,10 @@ export default async function BlogListPage({
         </div>
 
         {/* =====================================================
-            일지 세부 주제
+            DB 세부 주제
         ===================================================== */}
 
-        {category ===
-          'log' && (
+        {currentSubcategories.length > 0 && (
           <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-8 shadow-sm">
             <p className="text-xs font-bold text-slate-400 mb-3">
               세부 주제
@@ -770,53 +867,33 @@ export default async function BlogListPage({
                 전체 보기
               </Link>
 
-              <Link
-                href={
-                  makeSubHref(
-                    'invest'
-                  )
-                }
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sub ===
-                  'invest'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                📈 투자일지
-              </Link>
-
-              <Link
-                href={
-                  makeSubHref(
-                    'dividend'
-                  )
-                }
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sub ===
-                  'dividend'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                💰 배당일지
-              </Link>
-
-              <Link
-                href={
-                  makeSubHref(
-                    'routine'
-                  )
-                }
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sub ===
-                  'routine'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                🏃 일상/루틴
-              </Link>
+              {currentSubcategories.map(
+                (item) => (
+                  <Link
+                    key={
+                      item.id
+                    }
+                    href={
+                      makeSubHref(
+                        item.slug
+                      )
+                    }
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      sub ===
+                      item.slug
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {item.emoji && (
+                      <>
+                        {item.emoji}{' '}
+                      </>
+                    )}
+                    {item.name}
+                  </Link>
+                )
+              )}
             </div>
           </div>
         )}
@@ -863,6 +940,14 @@ export default async function BlogListPage({
                         ''
                     ] ||
                     '📚';
+
+                  const subcategoryLabel =
+                    post.subcategory
+                      ? subcategoryLabelMap[
+                          `${post.category || ''}:${post.subcategory}`
+                        ] ||
+                        post.subcategory
+                      : null;
 
                   return (
                     <Link
@@ -956,12 +1041,11 @@ export default async function BlogListPage({
 
                       {/* 글 정보 */}
                       <div className="flex flex-col flex-1 p-5 sm:p-6">
-                        {post.subcategory && (
+                        {subcategoryLabel && (
                           <div className="mb-3">
                             <span className="inline-flex text-[11px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
-                              #
                               {
-                                post.subcategory
+                                subcategoryLabel
                               }
                             </span>
                           </div>

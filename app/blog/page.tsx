@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import Breadcrumbs from '@/app/components/Breadcrumbs';
+import { buildVisibleCategories } from '@/app/lib/categoryNavigation';
 import { SITE_NAME } from '@/app/lib/site';
 import { supabase } from '@/app/lib/supabase';
 
@@ -278,9 +279,9 @@ export default async function BlogListPage({
     );
   }
 
-  const categories =
-    (categoryData ||
-      []) as Category[];
+  const categories = buildVisibleCategories(
+    (categoryData || []) as Category[]
+  );
 
   const activeSubcategories =
     (subcategoryData ||

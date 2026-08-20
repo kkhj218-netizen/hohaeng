@@ -5,6 +5,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import {
+  buildVisibleCategories,
+  isHealthCategory,
+  REQUIRED_INVESTMENT_CATEGORIES,
+} from "@/app/lib/categoryNavigation";
 
 type Category = {
   id: number;
@@ -45,7 +50,89 @@ export default function Header() {
         return;
       }
 
-      setCategories((data || []) as Category[]);
+      const activeCategories = (data || []) as Category[];
+      setCategories(buildVisibleCategories(activeCategories));
+
+      // 관리자 로그인 상태에서만 실제 DB 카테고리도 새 구조로 맞춘다.
+      // 공개 방문자에게는 쓰기 요청을 하지 않으므로 사이트 로딩과 분리되어 안전하다.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      try {
+        const { data: allData, error: allError } = await supabase
+          .from("categories")
+          .select("id, slug, name, emoji, sort_order, is_active")
+          .order("sort_order", { ascending: true });
+
+        if (allError) {
+          console.warn("카테고리 구조 확인 실패:", allError);
+          return;
+        }
+
+        const allCategories = (allData || []) as Category[];
+
+        for (const healthCategory of allCategories.filter(isHealthCategory)) {
+          if (!healthCategory.is_active) continue;
+
+          const { error: hideError } = await supabase
+            .from("categories")
+            .update({ is_active: false })
+            .eq("id", healthCategory.id);
+
+          if (hideError) {
+            console.warn("건강 정보 카테고리 비활성화 실패:", hideError);
+          }
+        }
+
+        for (const required of REQUIRED_INVESTMENT_CATEGORIES) {
+          const existing = allCategories.find(
+            (item) => item.slug === required.slug || item.name === required.name,
+          );
+
+          if (existing) {
+            const { error: updateError } = await supabase
+              .from("categories")
+              .update({
+                slug: required.slug,
+                name: required.name,
+                emoji: required.emoji,
+                sort_order: required.sort_order,
+                is_active: true,
+              })
+              .eq("id", existing.id);
+
+            if (updateError) {
+              console.warn(`${required.name} 카테고리 수정 실패:`, updateError);
+            }
+          } else {
+            const { id: _virtualId, ...newCategory } = required;
+            const { error: insertError } = await supabase
+              .from("categories")
+              .insert(newCategory);
+
+            if (insertError) {
+              console.warn(`${required.name} 카테고리 추가 실패:`, insertError);
+            }
+          }
+        }
+
+        const { data: refreshedData, error: refreshedError } = await supabase
+          .from("categories")
+          .select("id, slug, name, emoji, sort_order, is_active")
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true });
+
+        if (!refreshedError) {
+          setCategories(
+            buildVisibleCategories((refreshedData || []) as Category[]),
+          );
+        }
+      } catch (syncError) {
+        console.warn("카테고리 구조 자동 정리 실패:", syncError);
+      }
     };
 
     loadCategories();

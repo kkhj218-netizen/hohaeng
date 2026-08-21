@@ -58,9 +58,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await collectFredDataWithArchive(mode);
-    const dashboard = result.dashboard
-      ? await applyLiveMarketOverlay(result.dashboard)
-      : await applyLiveMarketOverlay(await getJhMarketDashboard());
+    const archivedDashboard =
+      "dashboard" in result && result.dashboard ? result.dashboard : null;
+    const dashboard = await applyLiveMarketOverlay(
+      archivedDashboard ?? (await getJhMarketDashboard())
+    );
 
     return NextResponse.json(
       { ok: true, ...result, dashboard },

@@ -136,11 +136,7 @@ function parseStooqQuote(text: string): StooqQuote | null {
 }
 
 async function fetchStooqQuote(symbol: string): Promise<StooqQuote | null> {
-  const url = new URL("https://stooq.com/q/l/");
-  url.searchParams.set("s", symbol);
-  url.searchParams.set("f", "sd2t2ohlcvp");
-  url.searchParams.set("h", "");
-  url.searchParams.set("e", "csv");
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2ohlcvp&h&e=csv`;
 
   try {
     const response = await fetch(url, {
@@ -208,7 +204,11 @@ function overlayMetric(
   config: LiveOverlayConfig,
   quote: StooqQuote,
   asOfDate: string
-): JhMarketMetric {
+): JhMarketMetric | null {
+  if (metric.observedAt && quote.date < metric.observedAt) {
+    return null;
+  }
+
   const transform = config.transform ?? ((value: number) => value);
   const current = transform(quote.close);
   const previous = quote.previous === null ? null : transform(quote.previous);
@@ -217,18 +217,10 @@ function overlayMetric(
     index === 0 && shortChange ? shortChange : change
   );
   const ageDays = daysBetween(quote.date, asOfDate);
-  const observedAt =
-    !metric.observedAt || quote.date >= metric.observedAt
-      ? quote.date
-      : metric.observedAt;
-
-  if (observedAt !== quote.date) {
-    return metric;
-  }
 
   return {
     ...metric,
-    observedAt,
+    observedAt: quote.date,
     currentValue: roundCurrent(current),
     changes,
     sourceCode: "STOOQ+FRED",
@@ -308,15 +300,15 @@ export async function applyLiveMarketOverlay(
 
   for (const result of quoteResults) {
     if (!result.quote) continue;
-    overlayById.set(
-      result.metric.id,
-      overlayMetric(
-        result.metric,
-        result.config,
-        result.quote,
-        dashboard.asOfDate
-      )
+    const overlaid = overlayMetric(
+      result.metric,
+      result.config,
+      result.quote,
+      dashboard.asOfDate
     );
+    if (overlaid) {
+      overlayById.set(result.metric.id, overlaid);
+    }
   }
 
   if (overlayById.size === 0) return dashboard;

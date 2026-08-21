@@ -42,6 +42,26 @@ const CHECK_SYMBOLS = [
   "DCOILWTICO",
   "GOLDAMGBD228NLBM",
 ];
+const POSITION_SYMBOLS = [
+  "NASDAQCOM",
+  "SP500",
+  "DJIA",
+  "VIXCLS",
+  "DGS10",
+  "GOLDAMGBD228NLBM",
+  "DCOILWTICO",
+  "DTWEXBGS",
+  "CBBTCUSD",
+];
+const POSITION_CATEGORIES = new Set([
+  "equities",
+  "volatility",
+  "rates",
+  "credit",
+  "commodities",
+  "fx",
+  "crypto",
+]);
 
 function releaseDateLabel(date: string) {
   const parsed = new Date(`${date}T12:00:00+09:00`);
@@ -72,6 +92,176 @@ function daysUntil(date: string, baseDate: string) {
   if (diff <= 0) return "오늘";
   if (diff === 1) return "내일";
   return `D-${diff}`;
+}
+
+function clampPercentile(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function percentilePosition(value: number) {
+  const percentile = clampPercentile(value);
+
+  if (percentile >= 95) {
+    return {
+      rank: `상위 ${Math.max(1, Math.round(100 - percentile))}%`,
+      zone: "극단 고점권",
+      className: "text-rose-300",
+    };
+  }
+  if (percentile >= 90) {
+    return {
+      rank: `상위 ${Math.max(1, Math.round(100 - percentile))}%`,
+      zone: "고점권",
+      className: "text-rose-300",
+    };
+  }
+  if (percentile >= 75) {
+    return {
+      rank: `상위 ${Math.max(1, Math.round(100 - percentile))}%`,
+      zone: "높은 구간",
+      className: "text-amber-300",
+    };
+  }
+  if (percentile <= 5) {
+    return {
+      rank: `하위 ${Math.max(1, Math.round(percentile))}%`,
+      zone: "극단 저점권",
+      className: "text-sky-300",
+    };
+  }
+  if (percentile <= 10) {
+    return {
+      rank: `하위 ${Math.max(1, Math.round(percentile))}%`,
+      zone: "저점권",
+      className: "text-sky-300",
+    };
+  }
+  if (percentile <= 25) {
+    return {
+      rank: `하위 ${Math.max(1, Math.round(percentile))}%`,
+      zone: "낮은 구간",
+      className: "text-blue-300",
+    };
+  }
+
+  return {
+    rank: `${Math.round(percentile)}백분위`,
+    zone: "중립 구간",
+    className: "text-slate-200",
+  };
+}
+
+function distanceFromHighLabel(metric: JhMarketMetric) {
+  if (metric.distanceFromHigh === null) return null;
+  if (metric.distanceFromHigh >= -0.05) return "비교구간 최고점 부근";
+  return `최고점 대비 ${metric.distanceFromHigh.toFixed(1)}%`;
+}
+
+function buildPositionMetrics(metrics: JhMarketMetric[]) {
+  const preferred = POSITION_SYMBOLS.map((symbol) =>
+    metrics.find((metric) => metric.symbol === symbol),
+  ).filter((metric): metric is JhMarketMetric => Boolean(metric));
+
+  const fallback = metrics.filter(
+    (metric) =>
+      POSITION_CATEGORIES.has(metric.category) &&
+      metric.currentValue !== null &&
+      metric.percentile !== null &&
+      !metric.stale,
+  );
+
+  const seen = new Set<string>();
+  return [...preferred, ...fallback]
+    .filter((metric) => {
+      if (
+        seen.has(metric.symbol) ||
+        metric.currentValue === null ||
+        metric.percentile === null ||
+        metric.stale
+      ) {
+        return false;
+      }
+      seen.add(metric.symbol);
+      return true;
+    })
+    .sort((left, right) => {
+      const leftExtreme = Math.abs((left.percentile ?? 50) - 50);
+      const rightExtreme = Math.abs((right.percentile ?? 50) - 50);
+      if (rightExtreme !== leftExtreme) return rightExtreme - leftExtreme;
+      return right.importanceScore - left.importanceScore;
+    })
+    .slice(0, 7);
+}
+
+function MarketPositionRow({ metric }: { metric: JhMarketMetric }) {
+  const percentile = clampPercentile(metric.percentile ?? 50);
+  const position = percentilePosition(percentile);
+  const change = firstChange(metric);
+  const highDistance = distanceFromHighLabel(metric);
+
+  return (
+    <Link
+      href={`/data/${encodeURIComponent(metric.symbol)}`}
+      className="block rounded-2xl border border-white/10 bg-white/[0.06] p-4 transition hover:border-blue-400/40 hover:bg-white/[0.09]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate font-black text-white">{metric.nameKo}</h3>
+            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-400">
+              {metric.symbol}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-400">
+            <span>{formatObservedDate(metric.observedAt)} 기준</span>
+            <span>{metric.trendLabel}</span>
+          </div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="font-black tabular-nums text-white">
+            {formatMetricValue(metric)}
+          </p>
+          <p className={`mt-1 text-xs font-black ${changeTone(change)}`}>
+            {change?.label ?? "변화"} {formatChange(change)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div>
+          <p className={`text-sm font-black ${position.className}`}>
+            {Math.round(percentile)}백분위 · {position.rank}
+          </p>
+          <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+            {position.zone}
+            {highDistance ? ` · ${highDistance}` : ""}
+          </p>
+        </div>
+        {metric.zScore !== null && (
+          <span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] font-bold text-slate-400">
+            Z {metric.zScore > 0 ? "+" : ""}
+            {metric.zScore.toFixed(2)}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <div className="relative h-2 overflow-visible rounded-full bg-gradient-to-r from-sky-500 via-slate-500 to-rose-500 opacity-90">
+          <span
+            className="absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-white shadow-lg"
+            style={{ left: `${percentile}%` }}
+            aria-hidden="true"
+          />
+        </div>
+        <div className="mt-1.5 flex justify-between text-[10px] font-medium text-slate-500">
+          <span>저점</span>
+          <span>50</span>
+          <span>고점</span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 function MarketCard({ metric }: { metric: JhMarketMetric }) {
@@ -139,10 +329,24 @@ export default async function TodayPage() {
     categoryMetric(dashboard, "liquidity"),
   ].filter((metric): metric is JhMarketMetric => metric !== null);
 
-  const checkpoints = [
-    ...(dashboard?.anomalies.slice(0, 2).map((item) => item.description) ?? []),
-    ...(dashboard?.biggestChanges.slice(0, 2).map((item) => item.explanation) ?? []),
-  ].slice(0, 3);
+  const positionMetrics = dashboard ? buildPositionMetrics(dashboard.metrics) : [];
+  const narrativeChecks = [
+    ...(dashboard?.anomalies.slice(0, 3).map((item) => ({
+      key: item.id,
+      title: item.title,
+      description: item.description,
+      symbols: item.relatedSymbols,
+    })) ?? []),
+    ...(dashboard?.biggestChanges.slice(0, 2).map((item) => ({
+      key: `change-${item.symbol}`,
+      title: `${item.name} 주요 변화`,
+      description: `${item.changeLabel} 변화가 ${item.explanation}`,
+      symbols: [item.symbol],
+    })) ?? []),
+  ].filter(
+    (item, index, all) =>
+      all.findIndex((candidate) => candidate.key === item.key) === index,
+  ).slice(0, 3);
 
   return (
     <main className="min-h-screen bg-[#f6f7f9] pb-24 text-slate-900 md:pb-12">
@@ -322,32 +526,74 @@ export default async function TodayPage() {
           </p>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-6">
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
-              03 · TODAY CHECK
-            </p>
-            <h2 className="mt-1 text-xl font-black">오늘 체크포인트</h2>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                  03 · TODAY CHECK
+                </p>
+                <h2 className="mt-1 text-xl font-black">오늘 시장 위치</h2>
+              </div>
+              <Link
+                href="/data"
+                className="shrink-0 text-xs font-bold text-blue-300 hover:text-blue-200"
+              >
+                전체 지표 →
+              </Link>
+            </div>
 
-            {checkpoints.length > 0 ? (
-              <ol className="mt-5 space-y-3">
-                {checkpoints.map((checkpoint, index) => (
-                  <li
-                    key={`${checkpoint}-${index}`}
-                    className="flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-xs font-black text-blue-200">
-                      {index + 1}
-                    </span>
-                    <p className="text-sm leading-6 text-slate-200">{checkpoint}</p>
-                  </li>
+            <p className="mt-3 text-xs leading-5 text-slate-400">
+              지표별 과거 비교구간에서 현재 값이 어디에 있는지 백분위로 표시합니다.
+              오른쪽에 가까울수록 상대적으로 높은 구간입니다.
+            </p>
+
+            {positionMetrics.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                {positionMetrics.map((metric) => (
+                  <MarketPositionRow key={metric.symbol} metric={metric} />
                 ))}
-              </ol>
+              </div>
             ) : (
-              <p className="mt-5 text-sm leading-6 text-slate-300">
-                뚜렷한 이상신호가 감지되지 않았습니다. 아래 최신 투자 데이터와
-                시황 글을 함께 확인해보세요.
+              <p className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                현재 위치를 계산할 수 있는 시장 지표가 아직 부족합니다.
               </p>
+            )}
+
+            {narrativeChecks.length > 0 && (
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <h3 className="text-sm font-black text-white">왜 체크해야 하나</h3>
+                <div className="mt-3 space-y-2">
+                  {narrativeChecks.map((item, index) => (
+                    <div
+                      key={item.key}
+                      className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-[10px] font-black text-blue-200">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-black text-white">{item.title}</p>
+                            {item.symbols.slice(0, 2).map((symbol) => (
+                              <span
+                                key={symbol}
+                                className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-slate-400"
+                              >
+                                {symbol}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-slate-300">
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             <div className="mt-5 flex flex-wrap gap-2">

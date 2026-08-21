@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import MarketDataBadge from "@/app/components/MarketDataBadge";
 import {
   changeTone,
   firstChange,
@@ -63,9 +64,12 @@ export default async function MarketMetricPage({ params }: PageProps) {
         <div className="mx-auto max-w-4xl px-4 py-9 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-                {metric.category} · {metric.symbol}
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
+                  {metric.category} · {metric.symbol}
+                </p>
+                <MarketDataBadge metric={metric} />
+              </div>
               <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
                 {metric.nameKo}
               </h1>
@@ -74,9 +78,12 @@ export default async function MarketMetricPage({ params }: PageProps) {
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
               <p className="text-xs text-slate-400">데이터 상태</p>
-              <p className="mt-1 text-sm font-black text-slate-800">
-                {freshnessLabel(metric)}
-              </p>
+              <div className="mt-1 flex items-center justify-end gap-2">
+                <MarketDataBadge metric={metric} compact />
+                <p className="text-sm font-black text-slate-800">
+                  {freshnessLabel(metric)}
+                </p>
+              </div>
             </div>
           </div>
 

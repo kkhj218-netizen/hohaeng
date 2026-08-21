@@ -4,6 +4,7 @@ import { verifyAdminRequest } from "@/app/lib/adminAuth";
 import { collectFredDataWithArchive } from "@/app/lib/jhCollectionService";
 import type { FredCollectionRequestMode } from "@/app/lib/fredCollector";
 import { getJhMarketDashboard } from "@/app/lib/jhMarketEngine";
+import { applyLiveMarketOverlay } from "@/app/lib/jhMarketLiveOverlay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const asOfDate = request.nextUrl.searchParams.get("date");
-    const dashboard = await getJhMarketDashboard(asOfDate);
+    const baseDashboard = await getJhMarketDashboard(asOfDate);
+    const dashboard = await applyLiveMarketOverlay(baseDashboard);
+
     return NextResponse.json(
       { ok: true, dashboard },
       { headers: { "Cache-Control": "private, no-store, max-age=0" } }
@@ -55,8 +58,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await collectFredDataWithArchive(mode);
+    const dashboard = result.dashboard
+      ? await applyLiveMarketOverlay(result.dashboard)
+      : await applyLiveMarketOverlay(await getJhMarketDashboard());
+
     return NextResponse.json(
-      { ok: true, ...result },
+      { ok: true, ...result, dashboard },
       { headers: { "Cache-Control": "private, no-store, max-age=0" } }
     );
   } catch (error) {

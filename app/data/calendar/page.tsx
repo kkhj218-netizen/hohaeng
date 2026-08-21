@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "미국 경제지표 발표 일정 | 투자 캘린더 | 호행처럼",
   description:
-    "CPI, PCE, 고용, 경기, 금리 등 호행처럼 데이터팩에서 확인되는 다음 경제지표 발표일을 한눈에 확인합니다.",
+    "CPI, PCE, 고용, GDP, 주택, M2 등 주요 미국 경제지표의 다음 발표일과 한국시간 발표시각을 한눈에 확인합니다.",
   alternates: {
     canonical: "/data/calendar",
   },
@@ -32,6 +32,15 @@ function stars(score: number) {
   if (score >= 75) return "★★★";
   if (score >= 50) return "★★☆";
   return "★☆☆";
+}
+
+function daysUntil(date: string, baseDate: string) {
+  const target = Date.parse(`${date}T00:00:00Z`);
+  const base = Date.parse(`${baseDate}T00:00:00Z`);
+  const diff = Math.round((target - base) / 86_400_000);
+  if (diff <= 0) return "오늘";
+  if (diff === 1) return "내일";
+  return `D-${diff}`;
 }
 
 export default async function InvestmentCalendarPage() {
@@ -55,12 +64,12 @@ export default async function InvestmentCalendarPage() {
             INVESTMENT CALENDAR
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
-            경제지표 발표 일정
+            주요 경제지표 발표 일정
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            호행처럼의 공식 데이터팩에 연결된 지표 중 다음 발표일이 확인되는
-            일정을 모았습니다. 발표 전에는 일정을 확인하고, 발표 후에는 각
-            지표 상세 페이지에서 최신값과 변화를 이어서 확인할 수 있습니다.
+            CPI, PCE, 고용, GDP, 주택, 통화량 등 시장에 영향을 줄 수 있는 주요
+            발표를 한국시간 기준으로 정리합니다. 발표 후에는 각 지표 페이지에서
+            최신값과 변화를 이어서 확인할 수 있습니다.
           </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -81,11 +90,10 @@ export default async function InvestmentCalendarPage() {
       </section>
 
       <div className="mx-auto max-w-5xl px-4 py-7 sm:px-6">
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          <strong>V1 안내:</strong> 현재는 FRED 원천에서 확인되는
-          <strong> 다음 발표일</strong>을 제공합니다. 발표 시각은 지표별 공식
-          발표기관 공지가 최종 기준이며, 시각 자동화는 다음 단계에서 별도
-          캘린더 데이터로 확장합니다.
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs font-medium text-blue-900">
+          <span className="font-black">한국시간 기준</span>
+          <span className="text-blue-300">•</span>
+          <span>공식 일정이 확인되는 핵심 지표는 발표시각까지 표시</span>
         </div>
 
         {Object.keys(grouped).length > 0 ? (
@@ -95,32 +103,55 @@ export default async function InvestmentCalendarPage() {
                 key={date}
                 className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
               >
-                <div className="border-b border-slate-100 bg-slate-50 px-5 py-4 sm:px-6">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 sm:px-6">
                   <h2 className="font-black text-slate-900">{dateHeading(date)}</h2>
+                  {dashboard && (
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500 shadow-sm">
+                      {daysUntil(date, dashboard.asOfDate)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="divide-y divide-slate-100 px-5 sm:px-6">
                   {items.map((release) => (
                     <div
                       key={`${release.date}-${release.title}`}
-                      className="grid gap-3 py-5 sm:grid-cols-[90px_1fr_auto] sm:items-center"
+                      className="grid gap-3 py-5 sm:grid-cols-[110px_1fr_auto] sm:items-center"
                     >
                       <div>
-                        <p className="text-xs font-black tracking-wider text-amber-500">
+                        {release.timeKst ? (
+                          <p className="text-lg font-black tabular-nums text-blue-600">
+                            {release.timeKst}
+                          </p>
+                        ) : (
+                          <p className="text-sm font-black text-slate-500">시간 미정</p>
+                        )}
+                        <p className="mt-1 text-xs font-black tracking-wider text-amber-500">
                           {stars(release.importanceScore)}
-                        </p>
-                        <p className="mt-1 text-[11px] uppercase text-slate-400">
-                          {release.category}
                         </p>
                       </div>
 
                       <div>
-                        <h3 className="font-black text-slate-900">
-                          {release.title}
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {release.symbols.join(" · ")}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-black text-slate-900">{release.title}</h3>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                            {release.categoryLabel}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-400">
+                          {release.sourceAgency && <span>{release.sourceAgency}</span>}
+                          <span>{release.symbols.join(" · ")}</span>
+                        </div>
+                        {release.sourceUrl && (
+                          <a
+                            href={release.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex text-xs font-bold text-slate-500 hover:text-blue-600"
+                          >
+                            공식 일정 확인 ↗
+                          </a>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -144,8 +175,7 @@ export default async function InvestmentCalendarPage() {
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-black">확인되는 다음 발표 일정이 없습니다.</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              데이터팩의 다음 수집에서 원천 발표 정보가 확인되면 자동으로
-              반영됩니다.
+              다음 일정이 확인되면 자동으로 반영됩니다.
             </p>
           </div>
         )}

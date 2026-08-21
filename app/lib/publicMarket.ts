@@ -1,5 +1,7 @@
 import "server-only";
 
+import { applyDxyMarketMetric } from "@/app/lib/jhDxyOverlay";
+import { applyLiveMarketOverlay } from "@/app/lib/jhMarketLiveOverlay";
 import { getJhMarketDashboard } from "@/app/lib/jhMarketEngine";
 import type {
   JhDashboardData,
@@ -325,7 +327,9 @@ export function publicCategoryLabel(category: string): string {
 
 export async function getPublicMarketDashboard(): Promise<JhDashboardData | null> {
   try {
-    return await getJhMarketDashboard();
+    const fredDashboard = await getJhMarketDashboard();
+    const withLiveFxAndCommodities = await applyLiveMarketOverlay(fredDashboard);
+    return await applyDxyMarketMetric(withLiveFxAndCommodities);
   } catch (error) {
     console.error("공개 투자 데이터 불러오기 오류:", error);
     return null;

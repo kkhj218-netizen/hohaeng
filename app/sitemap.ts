@@ -1,12 +1,12 @@
-import type { MetadataRoute } from 'next';
+import type { MetadataRoute } from "next";
 
-import { SITE_URL, absoluteUrl } from '@/app/lib/site';
-import { supabase } from '@/app/lib/supabase';
-import { TOOLS } from '@/app/tools';
+import { SITE_URL, absoluteUrl } from "@/app/lib/site";
+import { supabase } from "@/app/lib/supabase";
+import { TOOLS } from "@/app/tools";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-const STATIC_LAST_MODIFIED = '2026-08-13T00:00:00+09:00';
+const STATIC_LAST_MODIFIED = "2026-08-21T22:53:00+09:00";
 
 type SitemapPost = {
   slug: string | null;
@@ -28,34 +28,47 @@ function getValidDate(...values: Array<string | null | undefined>) {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { data: posts, error } = await supabase
-    .from('posts')
-    .select('slug, created_at, published_at, updated_at')
-    .eq('status', 'published')
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: false });
+    .from("posts")
+    .select("slug, created_at, published_at, updated_at")
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error('Sitemap 글 불러오기 오류:', error);
+    console.error("Sitemap 글 불러오기 오류:", error);
   }
 
   const publicPaths = Array.from(
     new Set([
-      '/',
-      '/blog',
-      '/money',
-      '/projects/trading',
-      '/projects/site-growth',
+      "/",
+      "/today",
+      "/blog",
+      "/data",
+      "/data/calendar",
+      "/money",
+      "/projects/trading",
+      "/projects/site-growth",
       ...TOOLS.map((tool) => tool.href),
-    ])
+    ]),
   );
 
   const staticPages: MetadataRoute.Sitemap = publicPaths.map((path) => ({
-    url: path === '/' ? `${SITE_URL}/` : absoluteUrl(path),
+    url: path === "/" ? `${SITE_URL}/` : absoluteUrl(path),
     lastModified: STATIC_LAST_MODIFIED,
     changeFrequency:
-      path === '/blog' ? 'daily' : path === '/' || path === '/money' ? 'weekly' : 'monthly',
+      path === "/today" || path === "/data/calendar" || path === "/blog"
+        ? "daily"
+        : path === "/" || path === "/data" || path === "/money"
+          ? "weekly"
+          : "monthly",
     priority:
-      path === '/' ? 1 : path === '/blog' || path === '/money' ? 0.9 : 0.8,
+      path === "/"
+        ? 1
+        : path === "/today"
+          ? 0.95
+          : path === "/blog" || path === "/data" || path === "/money"
+            ? 0.9
+            : 0.8,
   }));
 
   const seenPostUrls = new Set<string>();
@@ -71,8 +84,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     seenPostUrls.add(url);
     postPages.push({
       url,
-      lastModified: getValidDate(post.updated_at, post.published_at, post.created_at),
-      changeFrequency: 'monthly',
+      lastModified: getValidDate(
+        post.updated_at,
+        post.published_at,
+        post.created_at,
+      ),
+      changeFrequency: "monthly",
       priority: 0.8,
     });
   }

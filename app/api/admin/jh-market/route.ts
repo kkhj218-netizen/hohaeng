@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminRequest } from "@/app/lib/adminAuth";
 import { collectFredDataWithArchive } from "@/app/lib/jhCollectionService";
 import type { FredCollectionRequestMode } from "@/app/lib/fredCollector";
+import { applyDxyMarketMetric } from "@/app/lib/jhDxyOverlay";
 import { getJhMarketDashboard } from "@/app/lib/jhMarketEngine";
 import { applyLiveMarketOverlay } from "@/app/lib/jhMarketLiveOverlay";
 
@@ -25,13 +26,18 @@ function serverError(error: unknown) {
   );
 }
 
+async function withLiveMarketData(dashboard: Awaited<ReturnType<typeof getJhMarketDashboard>>) {
+  const liveDashboard = await applyLiveMarketOverlay(dashboard);
+  return applyDxyMarketMetric(liveDashboard);
+}
+
 export async function GET(request: NextRequest) {
   if (!(await verifyAdminRequest(request))) return unauthorized();
 
   try {
     const asOfDate = request.nextUrl.searchParams.get("date");
     const baseDashboard = await getJhMarketDashboard(asOfDate);
-    const dashboard = await applyLiveMarketOverlay(baseDashboard);
+    const dashboard = await withLiveMarketData(baseDashboard);
 
     return NextResponse.json(
       { ok: true, dashboard },
@@ -60,7 +66,7 @@ export async function POST(request: NextRequest) {
     const result = await collectFredDataWithArchive(mode);
     const archivedDashboard =
       "dashboard" in result && result.dashboard ? result.dashboard : null;
-    const dashboard = await applyLiveMarketOverlay(
+    const dashboard = await withLiveMarketData(
       archivedDashboard ?? (await getJhMarketDashboard())
     );
 

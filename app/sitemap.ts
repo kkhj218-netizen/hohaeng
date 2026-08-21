@@ -6,7 +6,7 @@ import { TOOLS } from "@/app/tools";
 
 export const dynamic = "force-dynamic";
 
-const STATIC_LAST_MODIFIED = "2026-08-21T22:53:00+09:00";
+const STATIC_LAST_MODIFIED = "2026-08-22T01:15:00+09:00";
 
 type SitemapPost = {
   slug: string | null;
@@ -42,6 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     new Set([
       "/",
       "/today",
+      "/today/korea",
       "/blog",
       "/data",
       "/data/calendar",
@@ -56,7 +57,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url: path === "/" ? `${SITE_URL}/` : absoluteUrl(path),
     lastModified: STATIC_LAST_MODIFIED,
     changeFrequency:
-      path === "/today" || path === "/data/calendar" || path === "/blog"
+      path === "/today" ||
+      path === "/today/korea" ||
+      path === "/data/calendar" ||
+      path === "/blog"
         ? "daily"
         : path === "/" || path === "/data" || path === "/money"
           ? "weekly"
@@ -64,7 +68,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority:
       path === "/"
         ? 1
-        : path === "/today"
+        : path === "/today" || path === "/today/korea"
           ? 0.95
           : path === "/blog" || path === "/data" || path === "/money"
             ? 0.9

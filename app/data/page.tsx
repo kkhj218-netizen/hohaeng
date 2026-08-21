@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import MarketDataBadge from "@/app/components/MarketDataBadge";
 import {
   changeTone,
   firstChange,
@@ -37,9 +38,9 @@ export default async function DataHubPage() {
                 투자 데이터
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                실시간 매매 시세가 아니라 FRED 등 공식 원천의 최근 관측값과
-                변화·추세를 정리한 투자 데이터 허브입니다. 각 지표를 누르면
-                관측일, 변화 구간, 다음 발표일과 출처를 확인할 수 있습니다.
+                시장시세와 공식 경제 데이터를 한곳에 모아 최근 관측값과 변화·추세를
+                정리합니다. 각 지표를 누르면 관측일, 변화 구간, 다음 발표일과 출처를
+                함께 확인할 수 있습니다.
               </p>
             </div>
 
@@ -60,17 +61,39 @@ export default async function DataHubPage() {
           </div>
 
           {dashboard && (
-            <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-500">
-              <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                총 {dashboard.coverage.totalSeries}개 지표
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                데이터 보유 {dashboard.coverage.seriesWithData}개
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                {dashboard.marketStatus}
-              </span>
-            </div>
+            <>
+              <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-500">
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">
+                  총 {dashboard.coverage.totalSeries}개 지표
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">
+                  데이터 보유 {dashboard.coverage.seriesWithData}개
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">
+                  {dashboard.marketStatus}
+                </span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-500">
+                <span className="font-bold text-slate-600">데이터 상태</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-black text-emerald-700">LIVE</span>
+                  최근 시장시세
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-black text-blue-700">FRED</span>
+                  공식 최신 관측값
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-black text-amber-700">발표 대기</span>
+                  다음 공식 발표 대기
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 font-black text-rose-700">확인 필요</span>
+                  갱신 상태 확인
+                </span>
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -130,9 +153,12 @@ export default async function DataHubPage() {
                             className="grid grid-cols-[1fr_auto] gap-4 rounded-xl px-2 py-4 transition hover:bg-slate-50 sm:grid-cols-[1.3fr_0.7fr_0.5fr]"
                           >
                             <div className="min-w-0">
-                              <p className="truncate font-bold text-slate-900">
-                                {metric.nameKo}
-                              </p>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <p className="truncate font-bold text-slate-900">
+                                  {metric.nameKo}
+                                </p>
+                                <MarketDataBadge metric={metric} compact />
+                              </div>
                               <p className="mt-1 text-xs text-slate-400">
                                 {metric.symbol} · {formatObservedDate(metric.observedAt)}
                               </p>

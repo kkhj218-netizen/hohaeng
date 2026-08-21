@@ -59,6 +59,21 @@ function importanceStars(score: number) {
   return "★☆☆";
 }
 
+function regimeLabel(regime: "Risk-On" | "Neutral" | "Risk-Off") {
+  if (regime === "Risk-On") return "위험선호";
+  if (regime === "Risk-Off") return "위험회피";
+  return "중립";
+}
+
+function daysUntil(date: string, baseDate: string) {
+  const target = Date.parse(`${date}T00:00:00Z`);
+  const base = Date.parse(`${baseDate}T00:00:00Z`);
+  const diff = Math.round((target - base) / 86_400_000);
+  if (diff <= 0) return "오늘";
+  if (diff === 1) return "내일";
+  return `D-${diff}`;
+}
+
 function MarketCard({ metric }: { metric: JhMarketMetric }) {
   const change = firstChange(metric);
 
@@ -76,9 +91,7 @@ function MarketCard({ metric }: { metric: JhMarketMetric }) {
             {metric.nameKo}
           </h3>
         </div>
-        <span
-          className={`text-sm font-black tabular-nums ${changeTone(change)}`}
-        >
+        <span className={`text-sm font-black tabular-nums ${changeTone(change)}`}>
           {formatChange(change)}
         </span>
       </div>
@@ -112,7 +125,7 @@ export default async function TodayPage() {
     5,
   );
 
-  const releases = buildUpcomingReleases(dashboard, 12);
+  const releases = buildUpcomingReleases(dashboard, 16);
   const todayReleases = dashboard
     ? releases.filter((release) => release.date === dashboard.asOfDate).slice(0, 4)
     : [];
@@ -148,7 +161,7 @@ export default async function TodayPage() {
 
             {dashboard && (
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right">
-                <p className="text-xs text-slate-400">Market Regime</p>
+                <p className="text-xs text-slate-400">시장 국면</p>
                 <p
                   className={`mt-1 text-lg font-black ${
                     dashboard.regime === "Risk-On"
@@ -158,29 +171,19 @@ export default async function TodayPage() {
                         : "text-amber-200"
                   }`}
                 >
-                  {dashboard.regime}
+                  {regimeLabel(dashboard.regime)}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  Confidence {dashboard.regimeConfidence}
+                  신뢰도 {dashboard.regimeConfidence}
                 </p>
               </div>
             )}
           </div>
 
-          <p className="mt-5 max-w-2xl text-sm leading-6 text-slate-300">
-            실시간 매매용 시세가 아니라, 무료 공식 데이터와 최근 마감 데이터를
-            바탕으로 오늘 확인할 시장 변수와 다음 발표 일정을 빠르게 정리합니다.
-          </p>
-
-          {dashboard && (
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
-                최근 데이터 {formatObservedDate(dashboard.latestDataUpdate)}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
-                {dashboard.marketStatus}
-              </span>
-            </div>
+          {dashboard?.latestDataUpdate && (
+            <p className="mt-5 text-xs text-slate-400">
+              최근 데이터 기준 {formatObservedDate(dashboard.latestDataUpdate)}
+            </p>
           )}
         </div>
       </section>
@@ -210,8 +213,7 @@ export default async function TodayPage() {
             </div>
           ) : (
             <p className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-              시장 데이터 수집 결과를 불러오는 중입니다. 관리자 JH 투자 레이더의
-              다음 수집부터 자동 반영됩니다.
+              시장 데이터를 불러오는 중입니다.
             </p>
           )}
 
@@ -264,9 +266,9 @@ export default async function TodayPage() {
               {displayedReleases.map((release) => (
                 <div
                   key={`${release.date}-${release.title}`}
-                  className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
+                  className="grid grid-cols-[76px_1fr] gap-4 py-4 first:pt-0 last:pb-0 sm:grid-cols-[90px_1fr_auto] sm:items-center"
                 >
-                  <div className="w-20 shrink-0">
+                  <div className="shrink-0">
                     <p className="text-sm font-black text-slate-900">
                       {releaseDateLabel(release.date)}
                     </p>
@@ -274,25 +276,49 @@ export default async function TodayPage() {
                       {importanceStars(release.importanceScore)}
                     </p>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-900">{release.title}</p>
-                    <p className="mt-1 truncate text-xs text-slate-400">
-                      {release.symbols.join(" · ")}
-                    </p>
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-black text-slate-900">{release.title}</p>
+                      {dashboard && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                          {daysUntil(release.date, dashboard.asOfDate)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+                      {release.timeKst && (
+                        <span className="font-bold text-blue-600">
+                          한국시간 {release.timeKst}
+                        </span>
+                      )}
+                      <span>{release.categoryLabel}</span>
+                      {release.sourceAgency && <span>{release.sourceAgency}</span>}
+                    </div>
+                  </div>
+
+                  <div className="col-start-2 flex flex-wrap gap-1 sm:col-start-auto sm:justify-end">
+                    {release.symbols.slice(0, 2).map((symbol) => (
+                      <Link
+                        key={symbol}
+                        href={`/data/${encodeURIComponent(symbol)}`}
+                        className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                      >
+                        {symbol}
+                      </Link>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <p className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-              현재 데이터팩에서 확인되는 다음 발표 일정이 없습니다.
+              확인되는 다음 주요 발표 일정이 없습니다.
             </p>
           )}
 
           <p className="mt-4 text-xs leading-5 text-slate-400">
-            현재 V1은 FRED 원천의 다음 발표일을 우선 표시합니다. 정확한 발표 시각은
-            각 공식 원천 공지 기준이며, 시간 데이터는 다음 단계에서 별도 캘린더로
-            확장합니다.
+            한국시간 기준 · 공식 일정이 확인되는 핵심 지표는 발표시각까지 표시합니다.
           </p>
         </section>
 

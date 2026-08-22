@@ -1,4 +1,5 @@
 import { getUsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/usMarketClose";
+import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
 
 const PAIRS = [
   { cash: "NASDAQ", future: "NQ", label: "나스닥 ↔ NQ" },
@@ -243,6 +244,8 @@ export default async function UsMarketClosePanel() {
           </p>
         </div>
       )}
+
+      <IndexTradingCheckPanel />
     </>
   );
 }

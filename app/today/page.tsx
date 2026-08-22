@@ -15,33 +15,32 @@ import {
   getPublicMarketDashboard,
   pickMetrics,
 } from "@/app/lib/publicMarket";
+import UsMarketClosePanel from "@/app/today/UsMarketClosePanel";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "오늘의 투자 대시보드 | 호행처럼",
   description:
-    "오늘 확인할 경제 일정, 최근 미국시장 마감, 금리·물가·고용·유동성 데이터와 호행처럼의 최신 투자 글을 한 화면에서 확인합니다.",
-  alternates: {
-    canonical: "/today",
-  },
+    "미국 현물 정규장 마감, 같은 시점의 주요 지수선물, 경제 일정과 핵심 투자 데이터를 한 화면에서 확인합니다.",
+  alternates: { canonical: "/today" },
   openGraph: {
     title: "오늘의 투자 대시보드 | 호행처럼",
     description:
-      "오늘 투자자가 확인할 일정과 최근 시장·경제 데이터를 한 화면에서 확인하세요.",
+      "미국 현물 장마감과 NQ·ES·YM·RTY 선물의 장마감 동시점 데이터를 함께 확인하세요.",
     url: "/today",
     type: "website",
   },
 };
 
-const MARKET_SYMBOLS = ["NASDAQCOM", "SP500", "DJIA"];
 const CHECK_SYMBOLS = [
   "DGS10",
   "VIXCLS",
-  "DTWEXBGS",
+  "DXY",
   "DCOILWTICO",
   "GOLDAMGBD228NLBM",
 ];
+
 const POSITION_SYMBOLS = [
   "NASDAQCOM",
   "SP500",
@@ -50,9 +49,10 @@ const POSITION_SYMBOLS = [
   "DGS10",
   "GOLDAMGBD228NLBM",
   "DCOILWTICO",
-  "DTWEXBGS",
+  "DXY",
   "CBBTCUSD",
 ];
+
 const POSITION_CATEGORIES = new Set([
   "equities",
   "volatility",
@@ -100,7 +100,6 @@ function clampPercentile(value: number) {
 
 function percentilePosition(value: number) {
   const percentile = clampPercentile(value);
-
   if (percentile >= 95) {
     return {
       rank: `상위 ${Math.max(1, Math.round(100 - percentile))}%`,
@@ -143,7 +142,6 @@ function percentilePosition(value: number) {
       className: "text-blue-300",
     };
   }
-
   return {
     rank: `${Math.round(percentile)}백분위`,
     zone: "중립 구간",
@@ -217,7 +215,6 @@ function MarketPositionRow({ metric }: { metric: JhMarketMetric }) {
             <span>{metric.trendLabel}</span>
           </div>
         </div>
-
         <div className="shrink-0 text-right">
           <p className="font-black tabular-nums text-white">
             {formatMetricValue(metric)}
@@ -264,57 +261,13 @@ function MarketPositionRow({ metric }: { metric: JhMarketMetric }) {
   );
 }
 
-function MarketCard({ metric }: { metric: JhMarketMetric }) {
-  const change = firstChange(metric);
-
-  return (
-    <Link
-      href={`/data/${encodeURIComponent(metric.symbol)}`}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            {metric.symbol}
-          </p>
-          <h3 className="mt-1 line-clamp-1 text-sm font-bold text-slate-900">
-            {metric.nameKo}
-          </h3>
-        </div>
-        <span className={`text-sm font-black tabular-nums ${changeTone(change)}`}>
-          {formatChange(change)}
-        </span>
-      </div>
-
-      <p className="mt-4 text-xl font-black tracking-tight text-slate-950 tabular-nums">
-        {formatMetricValue(metric)}
-      </p>
-      <p className="mt-1 text-[11px] text-slate-400">
-        {formatObservedDate(metric.observedAt)} 기준 · {change?.label ?? "변화"}
-      </p>
-    </Link>
-  );
-}
-
 export default async function TodayPage() {
   const [dashboard, posts] = await Promise.all([
     getPublicMarketDashboard(),
     getLatestInvestmentPosts(5),
   ]);
 
-  const marketMetrics = pickMetrics(
-    dashboard,
-    MARKET_SYMBOLS,
-    "equities",
-    3,
-  );
-  const checkMetrics = pickMetrics(
-    dashboard,
-    CHECK_SYMBOLS,
-    undefined,
-    5,
-  );
-
+  const checkMetrics = pickMetrics(dashboard, CHECK_SYMBOLS, undefined, 5);
   const releases = buildUpcomingReleases(dashboard, 16);
   const todayReleases = dashboard
     ? releases.filter((release) => release.date === dashboard.asOfDate).slice(0, 4)
@@ -343,10 +296,12 @@ export default async function TodayPage() {
       description: `${item.changeLabel} 변화가 ${item.explanation}`,
       symbols: [item.symbol],
     })) ?? []),
-  ].filter(
-    (item, index, all) =>
-      all.findIndex((candidate) => candidate.key === item.key) === index,
-  ).slice(0, 3);
+  ]
+    .filter(
+      (item, index, all) =>
+        all.findIndex((candidate) => candidate.key === item.key) === index,
+    )
+    .slice(0, 3);
 
   return (
     <main className="min-h-screen bg-[#f6f7f9] pb-24 text-slate-900 md:pb-12">
@@ -383,12 +338,6 @@ export default async function TodayPage() {
               </div>
             )}
           </div>
-
-          {dashboard?.latestDataUpdate && (
-            <p className="mt-5 text-xs text-slate-400">
-              최근 데이터 기준 {formatObservedDate(dashboard.latestDataUpdate)}
-            </p>
-          )}
         </div>
       </section>
 
@@ -400,6 +349,9 @@ export default async function TodayPage() {
                 01 · MARKET CLOSE
               </p>
               <h2 className="mt-1 text-xl font-black">최근 미국시장 마감</h2>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                현물은 미국 정규장 종가, 선물은 같은 날 16:00 ET 동시점 가격으로 비교합니다.
+              </p>
             </div>
             <Link
               href="/data"
@@ -409,40 +361,36 @@ export default async function TodayPage() {
             </Link>
           </div>
 
-          {marketMetrics.length > 0 ? (
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
-              {marketMetrics.map((metric) => (
-                <MarketCard key={metric.symbol} metric={metric} />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-              시장 데이터를 불러오는 중입니다.
-            </p>
-          )}
+          <UsMarketClosePanel />
 
           {checkMetrics.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {checkMetrics.map((metric) => {
-                const change = firstChange(metric);
-                return (
-                  <Link
-                    key={metric.symbol}
-                    href={`/data/${encodeURIComponent(metric.symbol)}`}
-                    className="rounded-xl bg-slate-50 px-3 py-3 transition hover:bg-slate-100"
-                  >
-                    <p className="line-clamp-1 text-xs font-semibold text-slate-500">
-                      {metric.nameKo}
-                    </p>
-                    <p className="mt-1 font-black tabular-nums text-slate-900">
-                      {formatMetricValue(metric)}
-                    </p>
-                    <p className={`mt-1 text-xs font-bold ${changeTone(change)}`}>
-                      {formatChange(change)}
-                    </p>
-                  </Link>
-                );
-              })}
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <p className="mb-3 text-xs font-bold text-slate-500">같이 볼 시장 지표</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                {checkMetrics.map((metric) => {
+                  const change = firstChange(metric);
+                  return (
+                    <Link
+                      key={metric.symbol}
+                      href={`/data/${encodeURIComponent(metric.symbol)}`}
+                      className="rounded-xl bg-slate-50 px-3 py-3 transition hover:bg-slate-100"
+                    >
+                      <p className="line-clamp-1 text-xs font-semibold text-slate-500">
+                        {metric.nameKo}
+                      </p>
+                      <p className="mt-1 font-black tabular-nums text-slate-900">
+                        {formatMetricValue(metric)}
+                      </p>
+                      <p className={`mt-1 text-xs font-bold ${changeTone(change)}`}>
+                        {formatChange(change)}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        {formatObservedDate(metric.observedAt)}
+                      </p>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           )}
         </section>
@@ -480,7 +428,6 @@ export default async function TodayPage() {
                       {importanceStars(release.importanceScore)}
                     </p>
                   </div>
-
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-black text-slate-900">{release.title}</p>
@@ -500,7 +447,6 @@ export default async function TodayPage() {
                       {release.sourceAgency && <span>{release.sourceAgency}</span>}
                     </div>
                   </div>
-
                   <div className="col-start-2 flex flex-wrap gap-1 sm:col-start-auto sm:justify-end">
                     {release.symbols.slice(0, 2).map((symbol) => (
                       <Link
@@ -700,7 +646,6 @@ export default async function TodayPage() {
             QUICK ACCESS
           </p>
           <h2 className="mt-1 text-xl font-black">빠른 실행</h2>
-
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
               { href: "/data/calendar", icon: "📅", label: "투자 캘린더" },

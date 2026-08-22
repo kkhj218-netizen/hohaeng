@@ -10,6 +10,9 @@ export type UsMarketCloseQuote = {
   current: number;
   previousClose: number | null;
   changePercent: number | null;
+  sessionHigh: number | null;
+  sessionLow: number | null;
+  rangePercent: number | null;
   source: "Yahoo Finance";
   note: string;
 };
@@ -30,6 +33,8 @@ type YahooChartResponse = {
       indicators?: {
         quote?: Array<{
           close?: Array<number | null>;
+          high?: Array<number | null>;
+          low?: Array<number | null>;
         }>;
       };
     }>;
@@ -64,6 +69,11 @@ function round(value: number, digits = 2): number {
 function percentChange(current: number, previous: number | null): number | null {
   if (previous === null || previous === 0) return null;
   return round(((current / previous) - 1) * 100, 2);
+}
+
+function sessionRangePercent(high: number | null, low: number | null, close: number) {
+  if (high === null || low === null || close === 0 || high < low) return null;
+  return round(((high - low) / close) * 100, 2);
 }
 
 function newYorkParts(value: Date) {
@@ -129,25 +139,42 @@ async function fetchCashClose(definition: Definition): Promise<UsMarketCloseQuot
 
   const timeZone = result.meta?.exchangeTimezoneName || "America/New_York";
   const timestamps = result.timestamp ?? [];
-  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  const quote = result.indicators?.quote?.[0];
+  const closes = quote?.close ?? [];
+  const highs = quote?.high ?? [];
+  const lows = quote?.low ?? [];
+
   const rows = timestamps
     .map((timestamp, index) => {
       const close = closes[index];
       if (typeof close !== "number" || !Number.isFinite(close)) return null;
+      const highRaw = highs[index];
+      const lowRaw = lows[index];
+      const high = typeof highRaw === "number" && Number.isFinite(highRaw) ? highRaw : null;
+      const low = typeof lowRaw === "number" && Number.isFinite(lowRaw) ? lowRaw : null;
       return {
         timestamp,
         date: dateFromUnix(timestamp, timeZone),
         close,
+        high,
+        low,
       };
     })
-    .filter((row): row is { timestamp: number; date: string; close: number } => row !== null)
+    .filter(
+      (row): row is {
+        timestamp: number;
+        date: string;
+        close: number;
+        high: number | null;
+        low: number | null;
+      } => row !== null,
+    )
     .sort((a, b) => b.timestamp - a.timestamp);
 
   if (rows.length === 0) return null;
 
   const nowNy = newYorkParts(new Date());
-  const beforeRegularClose =
-    nowNy.hour < 16 || (nowNy.hour === 16 && nowNy.minute < 5);
+  const beforeRegularClose = nowNy.hour < 16 || (nowNy.hour === 16 && nowNy.minute < 5);
 
   let latest = rows[0];
   if (beforeRegularClose && latest.date === nowNy.date && rows[1]) {
@@ -163,6 +190,9 @@ async function fetchCashClose(definition: Definition): Promise<UsMarketCloseQuot
     current: round(latest.close, latest.close >= 10_000 ? 1 : 2),
     previousClose: previous,
     changePercent: percentChange(latest.close, previous),
+    sessionHigh: latest.high,
+    sessionLow: latest.low,
+    rangePercent: sessionRangePercent(latest.high, latest.low, latest.close),
     source: "Yahoo Finance",
     note: "미국 정규장 종가",
   };
@@ -251,6 +281,9 @@ async function fetchFutureCashCloseSnapshot(
     current: round(latest.close, latest.close >= 10_000 ? 1 : 2),
     previousClose: previous,
     changePercent: percentChange(latest.close, previous),
+    sessionHigh: null,
+    sessionLow: null,
+    rangePercent: null,
     source: "Yahoo Finance",
     note: "미국 현물 정규장 마감 16:00 ET 동시점 · 선물 공식 정산가 아님",
   };

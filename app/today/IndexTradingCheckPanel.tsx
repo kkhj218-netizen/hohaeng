@@ -1,25 +1,20 @@
 import type { JhMarketMetric } from "@/app/lib/jhMarketTypes";
 import {
+  buildUpcomingReleases,
   changeTone,
   firstChange,
   formatChange,
   formatMetricValue,
   formatObservedDate,
+  getPublicMarketDashboard,
   type PublicRelease,
 } from "@/app/lib/publicMarket";
-
-type Props = {
-  metrics: JhMarketMetric[];
-  regime: "Risk-On" | "Neutral" | "Risk-Off" | null;
-  regimeConfidence: number | null;
-  releases: PublicRelease[];
-};
 
 function metric(metrics: JhMarketMetric[], symbol: string) {
   return metrics.find((item) => item.symbol.toUpperCase() === symbol.toUpperCase()) ?? null;
 }
 
-function regimeKo(regime: Props["regime"]) {
+function regimeKo(regime: "Risk-On" | "Neutral" | "Risk-Off" | null) {
   if (regime === "Risk-On") return "위험선호";
   if (regime === "Risk-Off") return "위험회피";
   if (regime === "Neutral") return "중립";
@@ -83,38 +78,41 @@ function MetricBox({ title, item, description }: { title: string; item: JhMarket
   );
 }
 
-export default function IndexTradingCheckPanel({ metrics, regime, regimeConfidence, releases }: Props) {
+export default async function IndexTradingCheckPanel() {
+  const dashboard = await getPublicMarketDashboard();
+  const metrics = dashboard?.metrics ?? [];
   const vix = metric(metrics, "VIXCLS");
   const us10y = metric(metrics, "DGS10");
   const dxy = metric(metrics, "DXY");
   const vixInfo = vixState(vix?.currentValue ?? null);
+  const releases = buildUpcomingReleases(dashboard, 12);
   const importantReleases = releases.filter((item) => item.importanceScore >= 50).slice(0, 2);
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="mt-5 rounded-2xl border border-slate-200 bg-cyan-50/40 p-4 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-cyan-600">02 · INDEX TRADING CHECK</p>
-          <h2 className="mt-1 text-xl font-black">주가지수·선물 거래 체크보드</h2>
+          <p className="text-xs font-bold uppercase tracking-wider text-cyan-700">INDEX TRADING CHECK</p>
+          <h3 className="mt-1 text-base font-black text-slate-950">주가지수·선물 거래 체크보드</h3>
           <p className="mt-2 text-xs leading-5 text-slate-500">
             방향 하나만 보지 않고 변동성·금리·달러·이벤트 리스크를 같이 확인하는 참고판입니다.
           </p>
         </div>
         <div className="rounded-xl bg-slate-950 px-3 py-2 text-right text-white">
           <p className="text-[10px] font-bold text-slate-400">시장 국면</p>
-          <p className="mt-0.5 text-sm font-black">{regimeKo(regime)}</p>
-          {regimeConfidence !== null && <p className="text-[10px] text-slate-400">신뢰도 {regimeConfidence}</p>}
+          <p className="mt-0.5 text-sm font-black">{regimeKo(dashboard?.regime ?? null)}</p>
+          {dashboard && <p className="text-[10px] text-slate-400">신뢰도 {dashboard.regimeConfidence}</p>}
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
         <MetricBox title={`VIX · ${vixInfo.label}`} item={vix} description={vixInfo.text} />
         <MetricBox title="미국 10년물 금리" item={us10y} description={rateText(us10y)} />
         <MetricBox title="달러 인덱스 DXY" item={dxy} description={dollarText(dxy)} />
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-2xl bg-white p-4">
           <p className="text-xs font-black text-slate-700">매매 전 빠른 체크 순서</p>
           <ol className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
             <li><strong className="text-slate-900">1.</strong> 현물과 NQ·ES·YM·RTY 방향이 같은지 확인</li>
@@ -145,7 +143,7 @@ export default function IndexTradingCheckPanel({ metrics, regime, regimeConfiden
       </div>
 
       <p className="mt-4 text-[10px] leading-4 text-slate-400">
-        이 체크보드는 방향성과 시장환경을 정리하기 위한 참고 정보입니다. 특정 지표 하나를 매수·매도 신호로 사용하지 않고, 가격 구조와 리스크 관리와 함께 보는 용도로 설계했습니다.
+        특정 지표 하나를 매수·매도 신호로 쓰기보다 가격 구조와 리스크 관리와 함께 보는 참고용으로 설계했습니다.
       </p>
     </section>
   );

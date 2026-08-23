@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import MarketDataBadge from "@/app/components/MarketDataBadge";
 import {
@@ -10,6 +11,7 @@ import {
   formatObservedDate,
   getPublicMarketDashboard,
 } from "@/app/lib/publicMarket";
+import MajorFuturesSection from "@/app/data/MajorFuturesSection";
 
 export const dynamic = "force-dynamic";
 
@@ -185,6 +187,18 @@ export default async function DataHubPage() {
                         );
                       })}
                     </div>
+
+                    {category === "equities" && (
+                      <Suspense
+                        fallback={
+                          <div className="mt-3 rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-400">
+                            주요 선물 장마감 데이터를 불러오는 중입니다.
+                          </div>
+                        }
+                      >
+                        <MajorFuturesSection />
+                      </Suspense>
+                    )}
                   </div>
                 </details>
               );

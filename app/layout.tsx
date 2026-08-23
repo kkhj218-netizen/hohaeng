@@ -99,12 +99,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-slate-950 text-slate-100 flex flex-col`}
       >
-        {/* Google AdSense */}
+        {/* Google AdSense: 핵심 UI와 데이터가 먼저 그려진 뒤 로드 */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1531409891320331"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
 
         {/* Google Analytics 4 */}

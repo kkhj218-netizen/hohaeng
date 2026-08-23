@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getDailyDisclosureFeed } from "@/app/lib/disclosureHub";
+import { archiveDailyDisclosures } from "@/app/lib/disclosureArchive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,21 +18,17 @@ export async function GET(request: Request) {
   }
 
   try {
-    const feed = await getDailyDisclosureFeed();
+    const result = await archiveDailyDisclosures();
     return NextResponse.json({
-      ok: true,
-      generatedAt: feed.generatedAt,
-      korea: {
-        configured: feed.korea.configured,
-        sourceDate: feed.korea.sourceDate,
-        count: feed.korea.items.length,
-        error: feed.korea.error,
-      },
-      us: {
-        sourceDate: feed.us.sourceDate,
-        count: feed.us.items.length,
-        error: feed.us.error,
-      },
+      ok: result.error === null,
+      archiveConfigured: result.configured,
+      sourceDateUs: result.sourceDateUs,
+      sourceDateKr: result.sourceDateKr,
+      fetched: result.fetched,
+      archived: result.archived,
+      skipped: result.skipped,
+      factsSaved: result.factsSaved,
+      error: result.error,
     });
   } catch (error) {
     return NextResponse.json(

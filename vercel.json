@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/cron/disclosures",
-      "schedule": "30 0 * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }

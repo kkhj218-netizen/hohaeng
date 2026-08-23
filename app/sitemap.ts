@@ -6,7 +6,7 @@ import { TOOLS } from "@/app/tools";
 
 export const dynamic = "force-dynamic";
 
-const STATIC_LAST_MODIFIED = "2026-08-22T01:15:00+09:00";
+const STATIC_LAST_MODIFIED = "2026-08-23T22:00:00+09:00";
 
 type SitemapPost = {
   slug: string | null;
@@ -46,6 +46,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       "/blog",
       "/data",
       "/data/calendar",
+      "/data/disclosures",
       "/money",
       "/projects/trading",
       "/projects/site-growth",
@@ -60,6 +61,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       path === "/today" ||
       path === "/today/korea" ||
       path === "/data/calendar" ||
+      path === "/data/disclosures" ||
       path === "/blog"
         ? "daily"
         : path === "/" || path === "/data" || path === "/money"
@@ -70,7 +72,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? 1
         : path === "/today" || path === "/today/korea"
           ? 0.95
-          : path === "/blog" || path === "/data" || path === "/money"
+          : path === "/blog" || path === "/data" || path === "/data/disclosures" || path === "/money"
             ? 0.9
             : 0.8,
   }));

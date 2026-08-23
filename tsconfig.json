@@ -19,6 +19,8 @@
       }
     ],
     "paths": {
+      "@/app/lib/publicMarket": ["./app/lib/publicMarketCached.ts"],
+      "@/app/lib/usMarketClose": ["./app/lib/usMarketCloseCached.ts"],
       "@/*": ["./*"]
     }
   },

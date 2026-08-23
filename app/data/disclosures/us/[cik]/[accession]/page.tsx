@@ -13,6 +13,8 @@ type PageProps = {
   }>;
 };
 
+const DISCLOSURE_LIST_HREF = "/data/disclosures?market=us";
+
 function formatUsd(value: number) {
   const absolute = Math.abs(value);
   const sign = value < 0 ? "-" : "";
@@ -60,14 +62,25 @@ export default async function SecDisclosureDetailPage({ params }: PageProps) {
   const isEarnings8K = detail.form.toUpperCase().startsWith("8-K") && detail.items.includes("2.02");
 
   return (
-    <main className="min-h-screen bg-[#f6f7f9] pb-20 text-slate-900">
+    <main className="min-h-screen bg-[#f6f7f9] pb-32 text-slate-900 sm:pb-20">
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
-          <Link href="/data/disclosures?market=us" className="text-xs font-black text-blue-600">
-            ← 미국 SEC 공시
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Link
+              href={DISCLOSURE_LIST_HREF}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-600"
+            >
+              ← 공시 목록으로
+            </Link>
+            <Link
+              href="/data"
+              className="text-xs font-black text-slate-400 transition hover:text-blue-600"
+            >
+              투자 데이터 →
+            </Link>
+          </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-slate-950 px-2.5 py-1 text-[10px] font-black text-white">SEC</span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black text-slate-600">
               {detail.form}
@@ -165,10 +178,29 @@ export default async function SecDisclosureDetailPage({ params }: PageProps) {
           <p className="mt-3 text-sm leading-6 text-slate-300">
             공식 수치와 원문을 먼저 확인하고, 시장 기대·주가 반응·가이던스의 의미는 시황 및 시장 글에서 별도로 해석합니다.
           </p>
-          <Link href="/blog?category=market" className="mt-5 inline-flex rounded-full bg-blue-600 px-4 py-2 text-sm font-black">
-            시황 및 시장 →
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              href={DISCLOSURE_LIST_HREF}
+              className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950"
+            >
+              ← 공시 목록으로
+            </Link>
+            <Link href="/blog?category=market" className="inline-flex rounded-full bg-blue-600 px-4 py-2 text-sm font-black">
+              시황 및 시장 →
+            </Link>
+          </div>
         </section>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-20 z-40 px-4 sm:hidden">
+        <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+          <Link
+            href={DISCLOSURE_LIST_HREF}
+            className="flex min-h-12 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-black text-white"
+          >
+            ← 공시 목록으로 돌아가기
+          </Link>
+        </div>
       </div>
     </main>
   );

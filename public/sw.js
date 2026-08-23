@@ -1,10 +1,10 @@
-const CACHE_NAME = "hohaeng-shell-v3";
-const SHELL_ASSETS = [
+const CACHE_NAME = "hohaeng-shell-v4";
+const STATIC_ASSETS = [
   "/",
-  "/today",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
+  "/favicon.ico",
 ];
 
 self.addEventListener("install", (event) => {
@@ -12,7 +12,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       Promise.allSettled(
-        SHELL_ASSETS.map((url) =>
+        STATIC_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: "reload" })),
         ),
       ),
@@ -37,31 +37,51 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-async function fastNavigation(request) {
+async function updateNavigationCache(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return null;
+  }
+}
+
+async function cachedNavigation(request, networkPromise) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request, { ignoreSearch: true });
 
-  const networkPromise = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone()).catch(() => undefined);
-      }
-      return response;
-    })
-    .catch(() => null);
+  // PWA 재실행에서는 캐시가 있으면 네트워크를 전혀 기다리지 않는다.
+  if (cached) return cached;
 
-  if (!cached) {
-    return (await networkPromise) || Response.error();
+  const network = await networkPromise;
+  return network || Response.error();
+}
+
+async function warmToday() {
+  const request = new Request("/today", { cache: "reload" });
+  await updateNavigationCache(request);
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "WARM_TODAY") {
+    event.waitUntil(warmToday());
   }
+});
 
-  const fastCachedResponse = new Promise((resolve) => {
-    setTimeout(() => resolve(cached), 450);
-  });
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
 
-  return Promise.race([
-    networkPromise.then((response) => response || cached),
-    fastCachedResponse,
-  ]);
+  const response = await fetch(request);
+  if (response.ok) {
+    cache.put(request, response.clone()).catch(() => undefined);
+  }
+  return response;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -73,7 +93,9 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     if (url.pathname === "/" || url.pathname.startsWith("/today")) {
-      event.respondWith(fastNavigation(request));
+      const refresh = updateNavigationCache(request);
+      event.waitUntil(refresh.then(() => undefined));
+      event.respondWith(cachedNavigation(request, refresh));
       return;
     }
 
@@ -82,20 +104,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/_next/image") ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.startsWith("/icon-") ||
     url.pathname === "/favicon.ico"
   ) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          }
-          return response;
-        });
-      }),
-    );
+    event.respondWith(cacheFirst(request));
   }
 });

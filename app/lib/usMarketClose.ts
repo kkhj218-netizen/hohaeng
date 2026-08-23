@@ -61,6 +61,9 @@ const FUTURE_DEFINITIONS: Definition[] = [
   { symbol: "RTY", yahooSymbol: "RTY=F", name: "러셀2000 선물" },
 ];
 
+const MARKET_CACHE_SECONDS = 900;
+const MARKET_FETCH_TIMEOUT_MS = 5_000;
+
 function round(value: number, digits = 2): number {
   const factor = 10 ** digits;
   return Math.round((value + Number.EPSILON) * factor) / factor;
@@ -111,13 +114,13 @@ async function fetchYahoo(symbol: string, query: string): Promise<YahooChartResp
       const response = await fetch(
         `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?${query}`,
         {
-          next: { revalidate: 300 },
+          next: { revalidate: MARKET_CACHE_SECONDS },
           headers: {
             Accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
             "User-Agent":
               "Mozilla/5.0 (compatible; HOHAENG-OS/1.0; +https://hohaeng.vercel.app)",
           },
-          signal: AbortSignal.timeout(10_000),
+          signal: AbortSignal.timeout(MARKET_FETCH_TIMEOUT_MS),
         },
       );
       if (!response.ok) continue;

@@ -1,10 +1,10 @@
-const CACHE_NAME = "hohaeng-shell-v3";
-const SHELL_ASSETS = [
+const CACHE_NAME = "hohaeng-shell-v4";
+const STATIC_ASSETS = [
   "/",
-  "/today",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
+  "/favicon.ico",
 ];
 
 self.addEventListener("install", (event) => {
@@ -12,7 +12,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       Promise.allSettled(
-        SHELL_ASSETS.map((url) =>
+        STATIC_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: "reload" })),
         ),
       ),
@@ -37,31 +37,61 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-async function fastNavigation(request) {
+async function warmToday() {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch("/today", {
+      headers: { "x-hohaeng-warmup": "1" },
+    });
+    if (response.ok) {
+      await cache.put("/today", response.clone());
+    }
+  } catch {
+    // warmup 실패는 실제 탐색에 영향을 주지 않는다.
+  }
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "WARM_TODAY") {
+    event.waitUntil(warmToday());
+  }
+});
+
+async function staleWhileRevalidateNavigation(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request, { ignoreSearch: true });
 
-  const networkPromise = fetch(request)
+  const refresh = fetch(request)
     .then((response) => {
       if (response.ok) {
-        cache.put(request, response.clone()).catch(() => undefined);
+        return cache
+          .put(request, response.clone())
+          .catch(() => undefined)
+          .then(() => response);
       }
       return response;
     })
     .catch(() => null);
 
-  if (!cached) {
-    return (await networkPromise) || Response.error();
+  if (cached) {
+    // PWA 재실행에서는 네트워크를 기다리지 않고 즉시 이전 화면을 보여준다.
+    return { response: cached, refresh };
   }
 
-  const fastCachedResponse = new Promise((resolve) => {
-    setTimeout(() => resolve(cached), 450);
-  });
+  const network = await refresh;
+  return { response: network || Response.error(), refresh: Promise.resolve(null) };
+}
 
-  return Promise.race([
-    networkPromise.then((response) => response || cached),
-    fastCachedResponse,
-  ]);
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (response.ok) {
+    cache.put(request, response.clone()).catch(() => undefined);
+  }
+  return response;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -73,7 +103,12 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     if (url.pathname === "/" || url.pathname.startsWith("/today")) {
-      event.respondWith(fastNavigation(request));
+      event.respondWith(
+        staleWhileRevalidateNavigation(request).then(({ response, refresh }) => {
+          event.waitUntil(refresh);
+          return response;
+        }),
+      );
       return;
     }
 
@@ -82,20 +117,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/_next/image") ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.startsWith("/icon-") ||
     url.pathname === "/favicon.ico"
   ) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          }
-          return response;
-        });
-      }),
-    );
+    event.respondWith(cacheFirst(request));
   }
 });

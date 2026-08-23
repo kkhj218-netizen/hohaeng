@@ -37,18 +37,33 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-async function warmToday() {
+async function updateNavigationCache(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch("/today", {
-      headers: { "x-hohaeng-warmup": "1" },
-    });
+    const response = await fetch(request);
     if (response.ok) {
-      await cache.put("/today", response.clone());
+      await cache.put(request, response.clone());
     }
+    return response;
   } catch {
-    // warmup 실패는 실제 탐색에 영향을 주지 않는다.
+    return null;
   }
+}
+
+async function cachedNavigation(request, networkPromise) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request, { ignoreSearch: true });
+
+  // PWA 재실행에서는 캐시가 있으면 네트워크를 전혀 기다리지 않는다.
+  if (cached) return cached;
+
+  const network = await networkPromise;
+  return network || Response.error();
+}
+
+async function warmToday() {
+  const request = new Request("/today", { cache: "reload" });
+  await updateNavigationCache(request);
 }
 
 self.addEventListener("message", (event) => {
@@ -56,31 +71,6 @@ self.addEventListener("message", (event) => {
     event.waitUntil(warmToday());
   }
 });
-
-async function staleWhileRevalidateNavigation(request) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request, { ignoreSearch: true });
-
-  const refresh = fetch(request)
-    .then((response) => {
-      if (response.ok) {
-        return cache
-          .put(request, response.clone())
-          .catch(() => undefined)
-          .then(() => response);
-      }
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) {
-    // PWA 재실행에서는 네트워크를 기다리지 않고 즉시 이전 화면을 보여준다.
-    return { response: cached, refresh };
-  }
-
-  const network = await refresh;
-  return { response: network || Response.error(), refresh: Promise.resolve(null) };
-}
 
 async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
@@ -103,12 +93,9 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     if (url.pathname === "/" || url.pathname.startsWith("/today")) {
-      event.respondWith(
-        staleWhileRevalidateNavigation(request).then(({ response, refresh }) => {
-          event.waitUntil(refresh);
-          return response;
-        }),
-      );
+      const refresh = updateNavigationCache(request);
+      event.waitUntil(refresh.then(() => undefined));
+      event.respondWith(cachedNavigation(request, refresh));
       return;
     }
 

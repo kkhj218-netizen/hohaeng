@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getMajorFuturesSnapshot, type MajorFutureQuote } from "@/app/lib/majorFutures";
 
 function tone(value: number | null) {
@@ -70,6 +72,22 @@ function FutureRow({ quote }: { quote: MajorFutureQuote }) {
   );
 }
 
+function DisclosureLink() {
+  return (
+    <Link
+      href="/data/disclosures"
+      className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 transition hover:border-blue-300"
+    >
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600">OFFICIAL FILINGS</p>
+        <p className="mt-1 text-sm font-black text-slate-950">오늘의 공시·실적 데이터</p>
+        <p className="mt-1 text-[11px] text-slate-500">미국 SEC · 한국 DART 공식 원문 기준</p>
+      </div>
+      <span className="shrink-0 text-sm font-black text-blue-600">보기 →</span>
+    </Link>
+  );
+}
+
 function FuturesShell({ unavailable = false }: { unavailable?: boolean }) {
   return (
     <div className="mt-2 border-t border-slate-200 pt-4">
@@ -90,6 +108,7 @@ function FuturesShell({ unavailable = false }: { unavailable?: boolean }) {
             ? "외부 선물 시세가 잠시 응답하지 않아 최신값을 다시 확인 중입니다. 섹션은 유지되며 다음 요청에서 자동 복구합니다."
             : "주요 선물 데이터를 확인 중입니다."}
         </p>
+        <DisclosureLink />
       </div>
     </div>
   );
@@ -155,6 +174,8 @@ export default async function MajorFuturesSection() {
         <p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] leading-4 text-slate-400">
           NQ·ES·YM·RTY·CL·GC·SI·NG·HG는 CME 공식 정산가(settlement)가 아닙니다. 기본값은 미국 현물 정규장 마감 16:00 ET 부근 비교용 스냅샷이며, ‘대체값’ 표시는 해당 분봉 확보 실패 시 보조 데이터가 사용됐다는 뜻입니다.
         </p>
+
+        <DisclosureLink />
       </div>
     </div>
   );

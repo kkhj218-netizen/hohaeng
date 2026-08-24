@@ -58,10 +58,10 @@ function groupCompanies(items: DisclosureItem[]): DiscoveryCompanyGroup[] {
 }
 
 export default async function InvestmentDiscoveries() {
-  const [dashboard, feed] = await Promise.all([
-    getInvestmentDiscoveryDashboard(),
-    getDailyDisclosureFeed(),
-  ]);
+  // discovery dashboard가 내부에서 공시 피드를 먼저 사용하므로, 완료 후 같은 피드를 다시 읽어
+  // 캐시 미스 순간에 동일한 OpenDART 수집이 중복 실행되는 상황을 피한다.
+  const dashboard = await getInvestmentDiscoveryDashboard();
+  const feed = await getDailyDisclosureFeed();
 
   if (!dashboard.configured) {
     return (

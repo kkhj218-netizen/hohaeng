@@ -8,7 +8,7 @@ import {
   type DisclosureItem,
   type DisclosureMarket,
 } from "@/app/lib/disclosureHub";
-import { detectDartAnalysisKind } from "@/app/lib/dartDisclosureDetail";
+import { detectDartAnalysisKind } from "@/app/lib/dartDisclosureDetailV2";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +80,21 @@ function hrefFor(
 
 function count(items: DisclosureItem[], category: DisclosureCategory) {
   return items.filter((item) => item.category === category).length;
+}
+
+function normalizeInvestmentItem(item: DisclosureItem): DisclosureItem {
+  if (item.source !== "DART") return item;
+  const title = item.title.replace(/\s+/g, "");
+
+  if (title.includes("주식소각결정")) {
+    return {
+      ...item,
+      category: "shareholder",
+      importance: Math.max(item.importance, 94),
+    };
+  }
+
+  return item;
 }
 
 function DisclosureCard({ item }: { item: DisclosureItem }) {
@@ -171,7 +186,7 @@ export default async function DisclosureHubPage({ searchParams }: PageProps) {
   const scope = query.scope === "all" ? "all" : "important";
 
   const feed = await getDailyDisclosureFeed();
-  const allItems = [...feed.us.items, ...feed.korea.items];
+  const allItems = [...feed.us.items, ...feed.korea.items].map(normalizeInvestmentItem);
   const marketItems = allItems.filter((item) => {
     if (market === "kr") return item.market === "KR";
     if (market === "us") return item.market === "US";
@@ -216,7 +231,7 @@ export default async function DisclosureHubPage({ searchParams }: PageProps) {
           </p>
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
-            한국 공시는 목록에서 전체 원문을 추가 수집하지 않습니다. 구조화 분석이 가능한 공시만 표시하고,
+            한국 공시는 목록에서 전체 원문을 추가 수집하지 않습니다. 구조화 분석 또는 원문 수치 분석이 가능한 공시만 표시하고,
             사용자가 <strong>공시 분석 보기</strong>를 열 때 추가 데이터를 조회해 캐시하는 방식으로 API 사용량을 줄입니다.
           </div>
 

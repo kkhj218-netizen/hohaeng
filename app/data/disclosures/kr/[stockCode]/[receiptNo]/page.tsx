@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import {
   getDartDisclosureAnalysis,
   isDartAnalysisKind,
-} from "@/app/lib/dartDisclosureDetail";
+} from "@/app/lib/dartDisclosureDetailV2";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -76,7 +76,7 @@ export default async function DartDisclosureDetailPage({ params, searchParams }:
               {detail.kindLabel}
             </span>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
-              공식 구조화 데이터
+              {detail.dataMode === "document" ? "공식 공시 원문 수치" : "공식 구조화 데이터"}
             </span>
           </div>
 

@@ -8,6 +8,7 @@ import {
   type DisclosureItem,
   type DisclosureMarket,
 } from "@/app/lib/disclosureHub";
+import { detectDartAnalysisKind } from "@/app/lib/dartDisclosureDetail";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,13 @@ function count(items: DisclosureItem[], category: DisclosureCategory) {
 }
 
 function DisclosureCard({ item }: { item: DisclosureItem }) {
+  const dartKind = item.source === "DART" ? detectDartAnalysisKind(item.title) : null;
+  const localDetailUrl =
+    item.detailUrl ??
+    (dartKind && item.ticker
+      ? `/data/disclosures/kr/${encodeURIComponent(item.ticker)}/${encodeURIComponent(item.sourceId)}?kind=${encodeURIComponent(dartKind)}`
+      : null);
+
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex items-start justify-between gap-3">
@@ -96,6 +104,11 @@ function DisclosureCard({ item }: { item: DisclosureItem }) {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black text-slate-500">
               {item.exchange}
             </span>
+            {dartKind && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black text-emerald-700">
+                수치 분석 가능
+              </span>
+            )}
             {item.amendment && (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">
                 정정
@@ -122,12 +135,16 @@ function DisclosureCard({ item }: { item: DisclosureItem }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {item.detailUrl && (
+        {localDetailUrl && (
           <Link
-            href={item.detailUrl}
+            href={localDetailUrl}
             className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white hover:bg-blue-500"
           >
-            {item.structuredEarnings ? "공식 수치 보기 →" : "상세 데이터 →"}
+            {item.source === "DART"
+              ? "공시 분석 보기 →"
+              : item.structuredEarnings
+                ? "공식 수치 보기 →"
+                : "상세 데이터 →"}
           </Link>
         )}
         <a
@@ -197,6 +214,11 @@ export default async function DisclosureHubPage({ searchParams }: PageProps) {
             한국 OpenDART와 미국 SEC EDGAR에서 확인되는 최근 완료 영업일 자료를 같은 형식으로 정리합니다.
             자동 문장보다 회사명·종목·공시 종류·공식 수치를 우선하고, 확인되지 않은 값은 추정하지 않습니다.
           </p>
+
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+            한국 공시는 목록에서 전체 원문을 추가 수집하지 않습니다. 구조화 분석이 가능한 공시만 표시하고,
+            사용자가 <strong>공시 분석 보기</strong>를 열 때 추가 데이터를 조회해 캐시하는 방식으로 API 사용량을 줄입니다.
+          </div>
 
           <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-2xl bg-slate-950 p-4 text-white">

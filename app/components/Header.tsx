@@ -239,6 +239,13 @@ export default function Header() {
             </Link>
 
             <Link
+              href="/data"
+              className="whitespace-nowrap px-2 py-1 font-bold text-blue-600 hover:text-blue-700"
+            >
+              📊 투자데이터
+            </Link>
+
+            <Link
               href="/blog"
               className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
             >

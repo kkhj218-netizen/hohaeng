@@ -7,8 +7,10 @@ import {
   type UsMarketCloseQuote,
 } from "@/app/lib/usMarketClose";
 
+export type MajorFutureGroup = "index" | "commodity" | "volatility" | "rates";
+
 export type MajorFutureQuote = UsMarketCloseQuote & {
-  group: "index" | "commodity";
+  group: MajorFutureGroup;
   unitLabel: string;
   snapshotMode: "16et" | "near-16et" | "daily-fallback";
   basisLabel: string;
@@ -19,7 +21,8 @@ type Definition = {
   yahooSymbol: string;
   name: string;
   unitLabel: string;
-  group: "index" | "commodity";
+  group: MajorFutureGroup;
+  kind: "cash" | "future";
 };
 
 type YahooChartResponse = {
@@ -45,15 +48,19 @@ type Snapshot = {
 };
 
 const DEFINITIONS: Definition[] = [
-  { symbol: "NQ", yahooSymbol: "NQ=F", name: "나스닥100 선물", unitLabel: "Index", group: "index" },
-  { symbol: "ES", yahooSymbol: "ES=F", name: "S&P500 선물", unitLabel: "Index", group: "index" },
-  { symbol: "YM", yahooSymbol: "YM=F", name: "다우 선물", unitLabel: "Index", group: "index" },
-  { symbol: "RTY", yahooSymbol: "RTY=F", name: "러셀2000 선물", unitLabel: "Index", group: "index" },
-  { symbol: "CL", yahooSymbol: "CL=F", name: "WTI 원유 선물", unitLabel: "USD/bbl", group: "commodity" },
-  { symbol: "GC", yahooSymbol: "GC=F", name: "금 선물", unitLabel: "USD/oz", group: "commodity" },
-  { symbol: "SI", yahooSymbol: "SI=F", name: "은 선물", unitLabel: "USD/oz", group: "commodity" },
-  { symbol: "NG", yahooSymbol: "NG=F", name: "천연가스 선물", unitLabel: "USD/MMBtu", group: "commodity" },
-  { symbol: "HG", yahooSymbol: "HG=F", name: "구리 선물", unitLabel: "USD/lb", group: "commodity" },
+  { symbol: "NQ", yahooSymbol: "NQ=F", name: "나스닥100 선물", unitLabel: "Index", group: "index", kind: "future" },
+  { symbol: "ES", yahooSymbol: "ES=F", name: "S&P500 선물", unitLabel: "Index", group: "index", kind: "future" },
+  { symbol: "YM", yahooSymbol: "YM=F", name: "다우 선물", unitLabel: "Index", group: "index", kind: "future" },
+  { symbol: "RTY", yahooSymbol: "RTY=F", name: "러셀2000 선물", unitLabel: "Index", group: "index", kind: "future" },
+  { symbol: "CL", yahooSymbol: "CL=F", name: "WTI 원유 선물", unitLabel: "USD/bbl", group: "commodity", kind: "future" },
+  { symbol: "GC", yahooSymbol: "GC=F", name: "금 선물", unitLabel: "USD/oz", group: "commodity", kind: "future" },
+  { symbol: "SI", yahooSymbol: "SI=F", name: "은 선물", unitLabel: "USD/oz", group: "commodity", kind: "future" },
+  { symbol: "NG", yahooSymbol: "NG=F", name: "천연가스 선물", unitLabel: "USD/MMBtu", group: "commodity", kind: "future" },
+  { symbol: "HG", yahooSymbol: "HG=F", name: "구리 선물", unitLabel: "USD/lb", group: "commodity", kind: "future" },
+  { symbol: "VIX", yahooSymbol: "^VIX", name: "VIX 공포지수", unitLabel: "Index", group: "volatility", kind: "cash" },
+  { symbol: "ZT", yahooSymbol: "ZT=F", name: "미국 2년물 국채선물", unitLabel: "Price", group: "rates", kind: "future" },
+  { symbol: "ZN", yahooSymbol: "ZN=F", name: "미국 10년물 국채선물", unitLabel: "Price", group: "rates", kind: "future" },
+  { symbol: "ZB", yahooSymbol: "ZB=F", name: "미국 30년물 국채선물", unitLabel: "Price", group: "rates", kind: "future" },
 ];
 
 const CACHE_SECONDS = 900;
@@ -278,7 +285,7 @@ async function resilientSnapshot(
     symbol: definition.symbol,
     yahooSymbol: definition.yahooSymbol,
     name: definition.name,
-    kind: "future",
+    kind: definition.kind,
     date: snapshot.date,
     timeEt,
     current: round(snapshot.close, Math.abs(snapshot.close) >= 1_000 ? 2 : 3),
@@ -293,7 +300,9 @@ async function resilientSnapshot(
         ? "16:00 ET 분봉이 최신 현물 마감일보다 뒤처져 Yahoo 일봉 마감값으로 대체"
         : snapshot.mode === "near-16et"
           ? "16:00 ET 5분봉이 최신 현물 마감일보다 뒤처져 근접 분봉으로 대체"
-          : "미국 현물 정규장 마감 16:00 ET 동시점 · 선물 공식 정산가 아님",
+          : definition.group === "volatility"
+            ? "미국 현물 정규장 마감 16:00 ET 부근 VIX 지수"
+            : "미국 현물 정규장 마감 16:00 ET 동시점 · 선물 공식 정산가 아님",
     group: definition.group,
     unitLabel: definition.unitLabel,
     snapshotMode: snapshot.mode,
@@ -322,7 +331,7 @@ async function buildMajorFuturesSnapshot(expectedMarketDate: string | null): Pro
 
 const cachedMajorFuturesSnapshot = unstable_cache(
   buildMajorFuturesSnapshot,
-  ["major-futures-16et-v3"],
+  ["major-futures-16et-v4"],
   {
     revalidate: CACHE_SECONDS,
     tags: ["major-futures-16et"],

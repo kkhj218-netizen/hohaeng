@@ -34,6 +34,14 @@ export function marketDataBadgeInfo(metric: JhMarketMetric): BadgeInfo {
     };
   }
 
+  if (source.includes("USTREASURY") || source.includes("U.S. TREASURY")) {
+    return {
+      label: "UST",
+      className: "border-violet-200 bg-violet-50 text-violet-700",
+      title: "미 재무부 Daily Treasury Par Yield Curve 공식 최신값",
+    };
+  }
+
   if (source.includes("FRED")) {
     return {
       label: "FRED",

@@ -154,7 +154,7 @@ export default async function GlobalPolicyRatesSection() {
   const steady = rates.filter((rate) => rate.trend === "steady").length;
   const hiking = rates.filter((rate) => rate.trend === "hiking").length;
 
-  const us = rates.find((rate) => rate.code === "US");
+  const us = rates.find((rate) => rate.code === "US") ?? null;
   const spreadTargets = ["KR", "JP", "XM"]
     .map((code) => rates.find((rate) => rate.code === code))
     .filter((rate): rate is GlobalPolicyRate => Boolean(rate));
@@ -196,7 +196,7 @@ export default async function GlobalPolicyRatesSection() {
         ))}
       </div>
 
-      {us?.currentRate !== null && spreadTargets.length > 0 && (
+      {us !== null && us.currentRate !== null && spreadTargets.length > 0 && (
         <div className="mt-4 rounded-3xl bg-slate-950 p-5 text-white sm:p-6">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-300">POLICY RATE GAP</p>
           <h3 className="mt-1 text-lg font-black">미국과 주요국 기준금리 차이</h3>
@@ -205,7 +205,7 @@ export default async function GlobalPolicyRatesSection() {
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {spreadTargets.map((rate) => {
-              const spread = us.currentRate !== null && rate.currentRate !== null ? us.currentRate - rate.currentRate : null;
+              const spread = rate.currentRate !== null ? us.currentRate - rate.currentRate : null;
               return (
                 <div key={rate.code} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-bold text-slate-400">미국 - {rate.countryKo}</p>

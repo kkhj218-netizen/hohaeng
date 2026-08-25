@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { getUsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/usMarketClose";
 import FearGreedPanel, { FearGreedSkeleton } from "@/app/today/FearGreedPanel";
 import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
+import MajorFuturesPanel, { MajorFuturesSkeleton } from "@/app/today/MajorFuturesPanel";
 
 const PAIRS = [
   { cash: "NASDAQ", future: "NQ", label: "나스닥 ↔ NQ" },
@@ -82,30 +83,6 @@ function CashCard({ quote }: { quote: UsMarketCloseQuote }) {
   );
 }
 
-function FutureRow({ quote }: { quote: UsMarketCloseQuote }) {
-  return (
-    <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black text-white">
-            {quote.symbol}
-          </span>
-          <p className="truncate text-xs font-bold text-slate-600">{quote.name}</p>
-        </div>
-        <p className="mt-1 text-[10px] text-slate-400">
-          {formatDate(quote.date)} · {quote.timeEt} ET 동시점
-        </p>
-      </div>
-      <div className="text-right">
-        <p className="font-black tabular-nums text-slate-950">{formatValue(quote)}</p>
-        <p className={`mt-0.5 text-xs font-black ${tone(quote.changePercent)}`}>
-          {formatPercent(quote.changePercent)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function directionMeta(cash: number | null, future: number | null) {
   if (cash === null || future === null) {
     return { label: "비교 대기", tone: "bg-slate-100 text-slate-600", delta: null };
@@ -179,30 +156,9 @@ export default async function UsMarketClosePanel() {
         </div>
       )}
 
-      {market.futures.length > 0 && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wider text-violet-600">
-                FUTURES AT CASH CLOSE
-              </p>
-              <h3 className="mt-1 text-base font-black text-slate-950">
-                현물 장마감 동시점 선물
-              </h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400">16:00 ET 기준</span>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {market.futures.map((quote) => (
-              <FutureRow key={quote.symbol} quote={quote} />
-            ))}
-          </div>
-          <p className="mt-3 text-[10px] leading-4 text-slate-400">
-            NQ·ES·YM·RTY는 미국 현물 정규장이 끝나는 16:00 ET 부근의 선물 가격을 비교합니다.
-            CME 공식 정산가(settlement)가 아니라 현물과 같은 시점의 시장 스냅샷입니다.
-          </p>
-        </div>
-      )}
+      <Suspense fallback={<MajorFuturesSkeleton />}>
+        <MajorFuturesPanel />
+      </Suspense>
 
       {paired.length > 0 && (
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white">

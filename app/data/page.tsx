@@ -2,15 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import GlobalPolicyRatesSection, { GlobalPolicyRatesSkeleton } from "@/app/data/GlobalPolicyRatesSection";
 import InvestmentDiscoveries from "@/app/data/InvestmentDiscoveries";
 import MarketDataSection from "@/app/data/MarketDataSection";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "투자 데이터 | 기업 공시·실적 변화 분석 | 호행처럼",
+  title: "투자 데이터 | 공시·글로벌 기준금리·거시 데이터 | 호행처럼",
   description:
-    "DART 공시에서 실적 급증, 흑자전환, 공급계약, 주주환원, 지분변화를 탐지하고 공식 시장·경제 데이터까지 함께 확인합니다.",
+    "기업 공시·실적 변화, 주요국 기준금리 추이, 물가·고용·경기·금리구조·유동성·환율·원자재 장기 데이터를 한곳에서 확인합니다.",
   alternates: {
     canonical: "/data",
   },
@@ -28,9 +29,8 @@ export default function DataHubPage() {
             <div>
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">투자 데이터</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                시장 이야기를 반복하기보다 공시와 숫자에서 실제로 달라진 기업을 찾습니다.
-                실적 급증·흑자전환·공급계약·주주환원·지분변화를 먼저 보여주고,
-                아래에서 공식 거시·시장 데이터도 함께 확인할 수 있습니다.
+                TODAY의 현물·선물 마감 숫자를 반복하지 않습니다. 먼저 기업 공시에서 실제로 달라진 사실을 찾고,
+                그 아래에서 글로벌 기준금리와 물가·고용·경기·금리구조·유동성 등 투자 판단의 원자료를 확인합니다.
               </p>
             </div>
 
@@ -70,6 +70,10 @@ export default function DataHubPage() {
           <InvestmentDiscoveries />
         </Suspense>
 
+        <Suspense fallback={<GlobalPolicyRatesSkeleton />}>
+          <GlobalPolicyRatesSection />
+        </Suspense>
+
         <Suspense
           fallback={
             <section className="mt-8">
@@ -87,10 +91,10 @@ export default function DataHubPage() {
         </Suspense>
 
         <section className="mt-7 rounded-3xl bg-slate-950 p-6 text-white">
-          <h2 className="text-xl font-black">데이터와 시황을 분리해서 봅니다.</h2>
+          <h2 className="text-xl font-black">Data → Analysis → Opinion</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-            투자 데이터에서는 공시·실적·지분의 객관적인 변화와 계산값을 먼저 확인하고,
-            “왜 시장이 움직였는가” 같은 해석은 시황 및 시장 콘텐츠에서 별도로 다룹니다.
+            투자 데이터에서는 공시와 공식 숫자를 먼저 확인하고, “왜 시장이 움직였는가” 같은 해석은 시황 및 시장에서 분리합니다.
+            데이터가 쌓일수록 시황 글의 근거를 바로 꺼내 쓸 수 있는 구조로 운영합니다.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link

@@ -101,6 +101,13 @@ alter table public.economic_event_metrics enable row level security;
 alter table public.economic_event_reactions enable row level security;
 alter table public.economic_event_notes enable row level security;
 
+-- 2026 Supabase Data API 기본값 변경 대응.
+-- 브라우저 역할(anon/authenticated)은 열지 않고 서버의 JH secret/service role만 사용한다.
+grant select, insert, update, delete on public.economic_events to service_role;
+grant select, insert, update, delete on public.economic_event_metrics to service_role;
+grant select, insert, update, delete on public.economic_event_reactions to service_role;
+grant select, insert, update, delete on public.economic_event_notes to service_role;
+
 comment on table public.economic_events is
   'HOHAENG 경제지표 발표 이벤트. 공개 화면은 서버의 JH service role을 통해 조회한다.';
 comment on table public.economic_event_metrics is

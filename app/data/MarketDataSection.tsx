@@ -4,6 +4,10 @@ import { Suspense } from "react";
 import MarketDataBadge from "@/app/components/MarketDataBadge";
 import MajorFuturesSection from "@/app/data/MajorFuturesSection";
 import {
+  applyMarketRiskRates,
+  getMarketRiskRatesSnapshot,
+} from "@/app/lib/marketRiskRates";
+import {
   changeTone,
   firstChange,
   formatChange,
@@ -13,7 +17,11 @@ import {
 } from "@/app/lib/publicMarket";
 
 export default async function MarketDataSection() {
-  const dashboard = await getPublicMarketDashboard();
+  const [dashboard, riskRates] = await Promise.all([
+    getPublicMarketDashboard(),
+    getMarketRiskRatesSnapshot(),
+  ]);
+  const metrics = dashboard ? applyMarketRiskRates(dashboard.metrics, riskRates) : [];
 
   return (
     <section className="mt-8">
@@ -56,6 +64,10 @@ export default async function MarketDataSection() {
               최근 시장시세
             </span>
             <span className="inline-flex items-center gap-1.5">
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-black text-sky-700">UST</span>
+              미 재무부 공식 금리
+            </span>
+            <span className="inline-flex items-center gap-1.5">
               <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-black text-blue-700">FRED</span>
               공식 최신 관측값
             </span>
@@ -71,7 +83,7 @@ export default async function MarketDataSection() {
 
           <div className="space-y-4">
             {dashboard.categoryOrder.map((category, categoryIndex) => {
-              const metrics = dashboard.metrics.filter((metric) => metric.category === category);
+              const categoryMetrics = metrics.filter((metric) => metric.category === category);
 
               return (
                 <details
@@ -85,14 +97,14 @@ export default async function MarketDataSection() {
                       <h3 className="mt-1 text-xl font-black">{dashboard.categoryLabels[category] ?? category}</h3>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-slate-400">{metrics.length}개</span>
+                      <span className="text-xs font-semibold text-slate-400">{categoryMetrics.length}개</span>
                       <span className="text-xl text-slate-400 transition group-open:rotate-180" aria-hidden="true">⌄</span>
                     </div>
                   </summary>
 
                   <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
                     <div className="divide-y divide-slate-100">
-                      {metrics.map((metric) => {
+                      {categoryMetrics.map((metric) => {
                         const change = firstChange(metric);
                         return (
                           <Link

@@ -4,7 +4,7 @@ import { unstable_cache } from "next/cache";
 
 import type { JhDashboardData, JhMarketMetric, JhPeriodChange } from "@/app/lib/jhMarketTypes";
 
-type SourceKind = "vix" | "treasury";
+type SourceKind = "vix" | "treasury" | "market_yield";
 
 type Quote = {
   symbol: string;
@@ -44,6 +44,13 @@ const TREASURY_FIELDS: Record<string, string> = {
   DGS10: "BC_10YEAR",
   DGS20: "BC_20YEAR",
   DGS30: "BC_30YEAR",
+};
+
+const MARKET_YIELD_SYMBOLS: Record<string, string> = {
+  DGS3MO: "^IRX",
+  DGS5: "^FVX",
+  DGS10: "^TNX",
+  DGS30: "^TYX",
 };
 
 function round(value: number, digits = 2) {
@@ -115,11 +122,15 @@ function daysBetween(from: string, to: string) {
   return Math.max(0, Math.floor((right - left) / 86_400_000));
 }
 
-async function fetchVix(): Promise<Quote | null> {
+async function fetchYahooDailyQuote(
+  yahooSymbol: string,
+  symbol: string,
+  sourceKind: "vix" | "market_yield",
+): Promise<Quote | null> {
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     try {
       const response = await fetch(
-        `https://${host}/v8/finance/chart/%5EVIX?range=1y&interval=1d&includePrePost=false&events=div%2Csplits`,
+        `https://${host}/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1y&interval=1d&includePrePost=false&events=div%2Csplits`,
         {
           next: { revalidate: CACHE_SECONDS },
           headers: {
@@ -130,9 +141,11 @@ async function fetchVix(): Promise<Quote | null> {
         },
       );
       if (!response.ok) continue;
+
       const payload = (await response.json()) as YahooChartResponse;
       const result = payload.chart?.result?.[0];
       if (!result) continue;
+
       const timeZone = result.meta?.exchangeTimezoneName || "America/New_York";
       const timestamps = result.timestamp ?? [];
       const closes = result.indicators?.quote?.[0]?.close ?? [];
@@ -148,16 +161,43 @@ async function fetchVix(): Promise<Quote | null> {
       const nowNy = newYorkNow();
       let latest = rows[0];
       if (!latest) continue;
-      if (latest.date === nowNy.date && nowNy.minute < 16 * 60 + 5 && rows[1]) latest = rows[1];
+
+      // 미국 현지 장이 아직 끝나지 않았다면 당일 미완료 값을 버리고 직전 완료일을 사용한다.
+      if (latest.date === nowNy.date && nowNy.minute < 16 * 60 + 5 && rows[1]) {
+        latest = rows[1];
+      }
+
       const history = rows
         .filter((row) => row.date < latest.date)
         .map((row) => ({ date: row.date, value: row.value }));
-      return { symbol: "VIXCLS", date: latest.date, current: round(latest.value, 2), history, sourceKind: "vix" };
+
+      return {
+        symbol,
+        date: latest.date,
+        current: round(latest.value, sourceKind === "vix" ? 2 : 3),
+        history,
+        sourceKind,
+      };
     } catch {
-      // try the next Yahoo host
+      // 다음 Yahoo 호스트로 재시도
     }
   }
+
   return null;
+}
+
+async function fetchVix(): Promise<Quote | null> {
+  return fetchYahooDailyQuote("^VIX", "VIXCLS", "vix");
+}
+
+async function fetchMarketYields(): Promise<Quote[]> {
+  const entries = Object.entries(MARKET_YIELD_SYMBOLS);
+  const results = await Promise.all(
+    entries.map(([symbol, yahooSymbol]) =>
+      fetchYahooDailyQuote(yahooSymbol, symbol, "market_yield"),
+    ),
+  );
+  return results.filter((quote): quote is Quote => quote !== null);
 }
 
 function property(entry: string, name: string) {
@@ -202,7 +242,10 @@ async function fetchTreasuryYear(year: number) {
 
 async function fetchTreasuryRates(): Promise<Quote[]> {
   const currentYear = Number(koreanToday().slice(0, 4));
-  const batches = await Promise.all([fetchTreasuryYear(currentYear), fetchTreasuryYear(currentYear - 1)]);
+  const batches = await Promise.all([
+    fetchTreasuryYear(currentYear),
+    fetchTreasuryYear(currentYear - 1),
+  ]);
   const rows = batches.flat().sort((a, b) => b.date.localeCompare(a.date));
 
   return Object.keys(TREASURY_FIELDS)
@@ -222,11 +265,26 @@ async function fetchTreasuryRates(): Promise<Quote[]> {
 }
 
 async function buildSnapshot(): Promise<MarketRiskRatesSnapshot> {
-  const [vix, treasury] = await Promise.all([fetchVix(), fetchTreasuryRates()]);
-  return { generatedAt: new Date().toISOString(), quotes: [...(vix ? [vix] : []), ...treasury] };
+  const [vix, treasury, marketYields] = await Promise.all([
+    fetchVix(),
+    fetchTreasuryRates(),
+    fetchMarketYields(),
+  ]);
+
+  const officialBySymbol = new Map(treasury.map((quote) => [quote.symbol, quote]));
+  const newerMarketYields = marketYields.filter((quote) => {
+    const official = officialBySymbol.get(quote.symbol);
+    return !official || quote.date > official.date;
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    // 같은 symbol이 있으면 뒤쪽 market_yield가 Map 생성 시 우선된다.
+    quotes: [...(vix ? [vix] : []), ...treasury, ...newerMarketYields],
+  };
 }
 
-const cachedSnapshot = unstable_cache(buildSnapshot, ["market-risk-rates-v2"], {
+const cachedSnapshot = unstable_cache(buildSnapshot, ["market-risk-rates-v3"], {
   revalidate: CACHE_SECONDS,
   tags: ["market-risk-rates"],
 });
@@ -237,19 +295,22 @@ export async function getMarketRiskRatesSnapshot() {
 
 function overlayChanges(metric: JhMarketMetric, quote: Quote): JhPeriodChange[] {
   const lags = [1, 5, 20, 60];
+  const isYield = quote.sourceKind !== "vix";
+
   return metric.changes.map((change, index) => {
     const comparison = quote.history[lags[index] - 1]?.value;
     if (comparison === undefined) return change;
-    const value = quote.sourceKind === "treasury"
+    const value = isYield
       ? round((quote.current - comparison) * 100, 2)
       : round(quote.current - comparison, 2);
-    return { ...change, value, unit: quote.sourceKind === "treasury" ? "bp" : "pt" };
+    return { ...change, value, unit: isYield ? "bp" : "pt" };
   });
 }
 
 function positionStats(metric: JhMarketMetric, quote: Quote) {
   const values = [quote.current, ...quote.history.map((item) => item.value)].slice(0, 252);
   if (values.length < 20) return metric;
+
   const average = mean(values);
   const deviation = std(values);
   const percentile = percentileRank(quote.current, values);
@@ -266,10 +327,20 @@ function positionStats(metric: JhMarketMetric, quote: Quote) {
   return {
     ...metric,
     percentile,
-    zScore: average !== null && deviation !== null && deviation > 0 ? round((quote.current - average) / deviation, 2) : null,
+    zScore:
+      average !== null && deviation !== null && deviation > 0
+        ? round((quote.current - average) / deviation, 2)
+        : null,
     distanceFromHigh: high !== 0 ? round(((quote.current / high) - 1) * 100, 2) : null,
     trend,
-    trendLabel: trend === "up" ? "20일 평균 위" : trend === "down" ? "20일 평균 아래" : trend === "flat" ? "20일 평균선 부근" : "추세 데이터 부족",
+    trendLabel:
+      trend === "up"
+        ? "20일 평균 위"
+        : trend === "down"
+          ? "20일 평균 아래"
+          : trend === "flat"
+            ? "20일 평균선 부근"
+            : "추세 데이터 부족",
   };
 }
 
@@ -277,45 +348,75 @@ export function applyMarketRiskRatesToDashboard(
   dashboard: JhDashboardData,
   snapshot: MarketRiskRatesSnapshot,
 ): JhDashboardData {
-  const quoteMap = new Map(snapshot.quotes.map((quote) => [quote.symbol.toUpperCase(), quote]));
+  const quoteMap = new Map(
+    snapshot.quotes.map((quote) => [quote.symbol.toUpperCase(), quote]),
+  );
   const today = koreanToday();
   let changed = false;
 
   const metrics = dashboard.metrics.map((metric) => {
-    const quote = quoteMap.get(metric.symbol.toUpperCase()) ?? quoteMap.get(metric.sourceSeriesCode.toUpperCase());
+    const quote =
+      quoteMap.get(metric.symbol.toUpperCase()) ??
+      quoteMap.get(metric.sourceSeriesCode.toUpperCase());
     if (!quote) return metric;
     if (metric.observedAt && quote.date < metric.observedAt) return metric;
+
     changed = true;
     const ageDays = daysBetween(quote.date, today);
     const isVix = quote.sourceKind === "vix";
+    const isMarketYield = quote.sourceKind === "market_yield";
+
     const base: JhMarketMetric = {
       ...metric,
       observedAt: quote.date,
       currentValue: quote.current,
       currentUnit: isVix ? "Index" : "Percent",
       changes: overlayChanges(metric, quote),
-      sourceCode: isVix ? "YAHOO+FRED" : "USTREASURY+FRED",
-      sourceName: isVix ? "Yahoo Finance VIX close + FRED history" : "U.S. Treasury official daily rate + FRED history",
-      provider: isVix ? "Yahoo Finance + FRED" : "U.S. Department of the Treasury + FRED",
+      sourceCode: isVix
+        ? "YAHOO+FRED"
+        : isMarketYield
+          ? "YAHOO_RATE+FRED"
+          : "USTREASURY+FRED",
+      sourceName: isVix
+        ? "Yahoo Finance VIX close + FRED history"
+        : isMarketYield
+          ? "Yahoo Finance market Treasury yield close + FRED history"
+          : "U.S. Treasury official daily rate + FRED history",
+      provider: isVix
+        ? "Yahoo Finance + FRED"
+        : isMarketYield
+          ? "Yahoo Finance market yield + FRED"
+          : "U.S. Department of the Treasury + FRED",
       stale: ageDays > 4,
       staleDays: ageDays,
       sourceAgeDays: ageDays,
       sourceUpdatedAt: `${quote.date}T00:00:00.000Z`,
       checkedAt: snapshot.generatedAt,
       freshnessStatus: ageDays > 4 ? "delayed" : "fresh",
-      freshnessLabel: isVix ? "VIX 정규장 마감 최신 · Yahoo + FRED 이력" : "미 재무부 공식 최신 금리 · FRED 이력",
+      freshnessLabel: isVix
+        ? "VIX 정규장 마감 최신 · Yahoo + FRED 이력"
+        : isMarketYield
+          ? "미국채 시장 마감금리 최신 · Yahoo + FRED 이력"
+          : "미 재무부 공식 최신 금리 · FRED 이력",
       error: null,
     };
+
     return positionStats(base, quote);
   });
 
   if (!changed) return dashboard;
-  const latestDataUpdate = metrics
-    .map((metric) => metric.observedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort((a, b) => b.localeCompare(a))[0] ?? dashboard.latestDataUpdate;
-  const freshSeries = metrics.filter((metric) => metric.currentValue !== null && !metric.stale).length;
-  const staleSeries = metrics.filter((metric) => metric.currentValue !== null && metric.stale).length;
+
+  const latestDataUpdate =
+    metrics
+      .map((metric) => metric.observedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => b.localeCompare(a))[0] ?? dashboard.latestDataUpdate;
+  const freshSeries = metrics.filter(
+    (metric) => metric.currentValue !== null && !metric.stale,
+  ).length;
+  const staleSeries = metrics.filter(
+    (metric) => metric.currentValue !== null && metric.stale,
+  ).length;
 
   return {
     ...dashboard,
@@ -329,7 +430,7 @@ export function applyMarketRiskRatesToDashboard(
     },
     copyPack: [
       "### LATEST VIX & U.S. TREASURY OVERRIDE",
-      "VIX는 정규장 마감값, 미국 국채금리는 미 재무부 Daily Treasury Par Yield Curve 최신 공식값을 우선한다. 장기 시장 데이터의 기본 이력은 FRED를 유지한다.",
+      "VIX는 정규장 마감값을 우선한다. 미국 국채금리는 시장금리 지수가 공식 Treasury 일별값보다 날짜가 더 최신이면 3개월·5년·10년·30년에 한해 시장 마감값을 우선하고, 나머지 만기는 미 재무부 Daily Treasury Par Yield Curve 최신 공식값을 사용한다. 장기 시장 데이터의 기본 이력은 FRED를 유지한다.",
       "",
       dashboard.copyPack,
     ].join("\n"),

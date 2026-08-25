@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
 import { getUsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/usMarketClose";
 import FearGreedPanel, { FearGreedSkeleton } from "@/app/today/FearGreedPanel";
 import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
@@ -116,9 +117,12 @@ function directionMeta(cash: number | null, future: number | null) {
 }
 
 export default async function UsMarketClosePanel() {
-  const market = await getUsMarketCloseDashboard();
+  const [market, majorFutures] = await Promise.all([
+    getUsMarketCloseDashboard(),
+    getMajorFuturesSnapshot(),
+  ]);
 
-  if (market.cash.length === 0 && market.futures.length === 0) {
+  if (market.cash.length === 0 && majorFutures.length === 0) {
     return (
       <p className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
         최근 미국시장 마감 데이터를 불러오지 못했습니다.
@@ -126,11 +130,15 @@ export default async function UsMarketClosePanel() {
     );
   }
 
-  const latestDate = [...market.cash, ...market.futures]
+  const latestDate = [...market.cash, ...majorFutures]
     .map((item) => item.date)
     .sort((a, b) => b.localeCompare(a))[0];
   const cashMap = new Map(market.cash.map((item) => [item.symbol, item]));
-  const futureMap = new Map(market.futures.map((item) => [item.symbol, item]));
+  const futureMap = new Map(
+    majorFutures
+      .filter((item) => item.group === "index")
+      .map((item) => [item.symbol, item]),
+  );
   const paired = PAIRS.map((pair) => ({
     ...pair,
     cashQuote: cashMap.get(pair.cash),

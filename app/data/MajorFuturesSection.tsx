@@ -15,7 +15,7 @@ function formatPercent(value: number | null) {
 
 function formatValue(value: number) {
   const absolute = Math.abs(value);
-  const digits = absolute >= 10_000 ? 1 : absolute >= 1_000 ? 2 : absolute >= 10 ? 2 : 3;
+  const digits = absolute >= 10_000 ? 1 : absolute >= 1_000 ? 2 : 3;
   return new Intl.NumberFormat("ko-KR", {
     maximumFractionDigits: digits,
   }).format(value);
@@ -25,6 +25,13 @@ function formatDate(value: string) {
   return value.replaceAll("-", ".");
 }
 
+function badgeTone(quote: MajorFutureQuote) {
+  if (quote.group === "index") return "border-violet-200 text-violet-700";
+  if (quote.group === "commodity") return "border-amber-200 text-amber-700";
+  if (quote.group === "volatility") return "border-rose-200 text-rose-700";
+  return "border-sky-200 text-sky-700";
+}
+
 function FutureRow({ quote }: { quote: MajorFutureQuote }) {
   const fallback = quote.snapshotMode !== "16et";
   return (
@@ -32,13 +39,7 @@ function FutureRow({ quote }: { quote: MajorFutureQuote }) {
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate text-sm font-bold text-slate-900">{quote.name}</p>
-          <span
-            className={`rounded-full border bg-white px-1.5 py-0.5 text-[9px] font-black ${
-              quote.group === "index"
-                ? "border-violet-200 text-violet-700"
-                : "border-amber-200 text-amber-700"
-            }`}
-          >
+          <span className={`rounded-full border bg-white px-1.5 py-0.5 text-[9px] font-black ${badgeTone(quote)}`}>
             {quote.symbol}
           </span>
           {fallback && (
@@ -126,6 +127,8 @@ export default async function MajorFuturesSection() {
 
   const indexFutures = futures.filter((item) => item.group === "index");
   const commodityFutures = futures.filter((item) => item.group === "commodity");
+  const volatility = futures.filter((item) => item.group === "volatility");
+  const rates = futures.filter((item) => item.group === "rates");
 
   return (
     <div className="mt-2 border-t border-slate-200 pt-4">
@@ -147,9 +150,7 @@ export default async function MajorFuturesSection() {
 
         {indexFutures.length > 0 && (
           <div className="mt-4">
-            <p className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              주가지수 선물
-            </p>
+            <p className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">주가지수 선물</p>
             <div className="mt-1 divide-y divide-slate-200/80">
               {indexFutures.map((quote) => (
                 <FutureRow key={quote.symbol} quote={quote} />
@@ -160,9 +161,7 @@ export default async function MajorFuturesSection() {
 
         {commodityFutures.length > 0 && (
           <div className="mt-4 border-t border-slate-200 pt-4">
-            <p className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              에너지 · 금속 선물
-            </p>
+            <p className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">에너지 · 금속 선물</p>
             <div className="mt-1 divide-y divide-slate-200/80">
               {commodityFutures.map((quote) => (
                 <FutureRow key={quote.symbol} quote={quote} />
@@ -171,8 +170,25 @@ export default async function MajorFuturesSection() {
           </div>
         )}
 
+        {(volatility.length > 0 || rates.length > 0) && (
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <p className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">변동성 · 미국채</p>
+            <div className="mt-1 divide-y divide-slate-200/80">
+              {volatility.map((quote) => (
+                <FutureRow key={quote.symbol} quote={quote} />
+              ))}
+              {rates.map((quote) => (
+                <FutureRow key={quote.symbol} quote={quote} />
+              ))}
+            </div>
+            <p className="mt-2 rounded-xl bg-sky-50 px-3 py-2 text-[10px] leading-4 text-sky-700">
+              미국채 선물은 가격과 금리가 반대로 움직이는 경향이 있습니다. 선물 가격 상승은 금리 하락 방향, 가격 하락은 금리 상승 방향을 참고할 때 유용합니다.
+            </p>
+          </div>
+        )}
+
         <p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] leading-4 text-slate-400">
-          NQ·ES·YM·RTY·CL·GC·SI·NG·HG는 CME 공식 정산가(settlement)가 아닙니다. 기본값은 미국 현물 정규장 마감 16:00 ET 부근 비교용 스냅샷이며, ‘대체값’ 표시는 해당 분봉 확보 실패 시 보조 데이터가 사용됐다는 뜻입니다.
+          NQ·ES·YM·RTY·CL·GC·SI·NG·HG·ZT·ZN·ZB는 공식 정산가가 아니라 미국 현물 정규장 마감 16:00 ET 부근 비교용 스냅샷입니다. VIX는 같은 시점의 변동성지수 값이며, ‘대체값’은 분봉 확보 실패 시 보조 데이터가 사용됐다는 뜻입니다.
         </p>
 
         <DisclosureLink />

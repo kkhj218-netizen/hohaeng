@@ -34,6 +34,14 @@ export function marketDataBadgeInfo(metric: JhMarketMetric): BadgeInfo {
     };
   }
 
+  if (source.includes("USTREASURY") || source.includes("U.S. TREASURY")) {
+    return {
+      label: "UST",
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+      title: "미 재무부 공식 일별 금리",
+    };
+  }
+
   if (source.includes("FRED")) {
     return {
       label: "FRED",

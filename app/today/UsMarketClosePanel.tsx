@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+
 import { getUsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/usMarketClose";
+import FearGreedPanel, { FearGreedSkeleton } from "@/app/today/FearGreedPanel";
 import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
 
 const PAIRS = [
@@ -244,6 +247,10 @@ export default async function UsMarketClosePanel() {
           </p>
         </div>
       )}
+
+      <Suspense fallback={<FearGreedSkeleton />}>
+        <FearGreedPanel />
+      </Suspense>
 
       <IndexTradingCheckPanel />
     </>

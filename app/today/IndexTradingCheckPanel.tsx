@@ -1,5 +1,9 @@
 import type { JhMarketMetric } from "@/app/lib/jhMarketTypes";
 import {
+  applyMarketRiskRates,
+  getMarketRiskRatesSnapshot,
+} from "@/app/lib/marketRiskRates";
+import {
   buildUpcomingReleases,
   changeTone,
   firstChange,
@@ -79,8 +83,11 @@ function MetricBox({ title, item, description }: { title: string; item: JhMarket
 }
 
 export default async function IndexTradingCheckPanel() {
-  const dashboard = await getPublicMarketDashboard();
-  const metrics = dashboard?.metrics ?? [];
+  const [dashboard, riskRates] = await Promise.all([
+    getPublicMarketDashboard(),
+    getMarketRiskRatesSnapshot(),
+  ]);
+  const metrics = dashboard ? applyMarketRiskRates(dashboard.metrics, riskRates) : [];
   const vix = metric(metrics, "VIXCLS");
   const us10y = metric(metrics, "DGS10");
   const dxy = metric(metrics, "DXY");
@@ -143,7 +150,7 @@ export default async function IndexTradingCheckPanel() {
       </div>
 
       <p className="mt-4 text-[10px] leading-4 text-slate-400">
-        특정 지표 하나를 매수·매도 신호로 쓰기보다 가격 구조와 리스크 관리와 함께 보는 참고용으로 설계했습니다.
+        VIX는 미국 정규장 마감값, 국채금리는 미 재무부 공식 일별 금리를 우선합니다. 특정 지표 하나를 매수·매도 신호로 쓰기보다 가격 구조와 리스크 관리와 함께 보는 참고용입니다.
       </p>
     </section>
   );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
+import { getMarketRiskRatesSnapshot } from "@/app/lib/marketRiskRates";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
 
 export const runtime = "nodejs";
@@ -22,13 +23,19 @@ export async function GET(request: NextRequest) {
   const startedAt = new Date().toISOString();
 
   try {
-    const [marketClose, futures, fearGreed] = await Promise.all([
+    const [marketClose, futures, fearGreed, riskRates] = await Promise.all([
       getUsMarketCloseDashboard(),
       getMajorFuturesSnapshot(),
       getCnnFearGreed(),
+      getMarketRiskRatesSnapshot(),
     ]);
 
-    const dates = [...marketClose.cash, ...marketClose.futures, ...futures]
+    const dates = [
+      ...marketClose.cash,
+      ...marketClose.futures,
+      ...futures,
+      ...riskRates.quotes,
+    ]
       .map((item) => item.date)
       .filter(Boolean)
       .sort((a, b) => b.localeCompare(a));
@@ -41,6 +48,9 @@ export async function GET(request: NextRequest) {
       cashCount: marketClose.cash.length,
       indexFutureCount: futures.filter((item) => item.group === "index").length,
       commodityFutureCount: futures.filter((item) => item.group === "commodity").length,
+      volatilityCount: futures.filter((item) => item.group === "volatility").length,
+      treasuryFutureCount: futures.filter((item) => item.group === "rates").length,
+      officialRateCount: riskRates.quotes.filter((item) => item.sourceKind === "treasury").length,
       fearGreed: fearGreed?.score ?? null,
       schedule: "07:00 KST",
     });

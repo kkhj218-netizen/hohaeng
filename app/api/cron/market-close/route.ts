@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
 import { getGlobalPolicyRates } from "@/app/lib/globalPolicyRates";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
+import { getMarketRiskRatesSnapshot } from "@/app/lib/marketRiskRates";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
 
 export const runtime = "nodejs";
@@ -23,11 +24,12 @@ export async function GET(request: NextRequest) {
   const startedAt = new Date().toISOString();
 
   try {
-    const [marketClose, futures, fearGreed, policyRates] = await Promise.all([
+    const [marketClose, futures, fearGreed, policyRates, riskRates] = await Promise.all([
       getUsMarketCloseDashboard(),
       getMajorFuturesSnapshot(),
       getCnnFearGreed(),
       getGlobalPolicyRates(),
+      getMarketRiskRatesSnapshot(),
     ]);
 
     const dates = [...marketClose.cash, ...marketClose.futures, ...futures]
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest) {
       commodityFutureCount: futures.filter((item) => item.group === "commodity").length,
       fearGreed: fearGreed?.score ?? null,
       policyRateCount: policyRates.filter((item) => item.currentRate !== null).length,
+      marketRiskRateCount: riskRates.quotes.length,
       schedule: "07:00 KST",
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
+import { syncCpiEconomicEventDb } from "@/app/lib/economicEventEngine";
 import { getGlobalPolicyRates } from "@/app/lib/globalPolicyRates";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
 import { getMarketRiskRatesSnapshot } from "@/app/lib/marketRiskRates";
@@ -8,7 +9,7 @@ import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -32,6 +33,15 @@ export async function GET(request: NextRequest) {
       getMarketRiskRatesSnapshot(),
     ]);
 
+    let economicEvents: Awaited<ReturnType<typeof syncCpiEconomicEventDb>> | null = null;
+    let economicEventsWarning: string | null = null;
+
+    try {
+      economicEvents = await syncCpiEconomicEventDb();
+    } catch (error) {
+      economicEventsWarning = error instanceof Error ? error.message : String(error);
+    }
+
     const dates = [...marketClose.cash, ...marketClose.futures, ...futures]
       .map((item) => item.date)
       .filter(Boolean)
@@ -48,6 +58,8 @@ export async function GET(request: NextRequest) {
       fearGreed: fearGreed?.score ?? null,
       policyRateCount: policyRates.filter((item) => item.currentRate !== null).length,
       marketRiskRateCount: riskRates.quotes.length,
+      cpiEventDb: economicEvents,
+      cpiEventDbWarning: economicEventsWarning,
       schedule: "07:00 KST",
     });
   } catch (error) {

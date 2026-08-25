@@ -4,6 +4,10 @@ import { notFound } from "next/navigation";
 
 import MarketDataBadge from "@/app/components/MarketDataBadge";
 import {
+  applyMarketRiskRates,
+  getMarketRiskRatesSnapshot,
+} from "@/app/lib/marketRiskRates";
+import {
   changeTone,
   firstChange,
   formatChange,
@@ -11,7 +15,6 @@ import {
   formatObservedDate,
   freshnessLabel,
   getPublicMarketDashboard,
-  metricBySymbol,
 } from "@/app/lib/publicMarket";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +52,13 @@ function releaseDate(value: string | null | undefined) {
 
 export default async function MarketMetricPage({ params }: PageProps) {
   const { symbol } = await params;
-  const dashboard = await getPublicMarketDashboard();
-  const metric = metricBySymbol(dashboard, decodeURIComponent(symbol));
+  const decoded = decodeURIComponent(symbol).toUpperCase();
+  const [dashboard, riskRates] = await Promise.all([
+    getPublicMarketDashboard(),
+    getMarketRiskRatesSnapshot(),
+  ]);
+  const metrics = dashboard ? applyMarketRiskRates(dashboard.metrics, riskRates) : [];
+  const metric = metrics.find((item) => item.symbol.toUpperCase() === decoded) ?? null;
 
   if (!dashboard || !metric) {
     notFound();
@@ -124,16 +132,12 @@ export default async function MarketMetricPage({ params }: PageProps) {
 
         <section className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              TREND
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">TREND</p>
             <h2 className="mt-2 text-xl font-black">{metric.trendLabel}</h2>
             <dl className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500">백분위</dt>
-                <dd className="font-bold">
-                  {metric.percentile === null ? "—" : `${metric.percentile}%`}
-                </dd>
+                <dd className="font-bold">{metric.percentile === null ? "—" : `${metric.percentile}%`}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500">Z-Score</dt>
@@ -142,28 +146,19 @@ export default async function MarketMetricPage({ params }: PageProps) {
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500">연속 방향</dt>
                 <dd className="font-bold">
-                  {metric.consecutiveCount > 0
-                    ? `${metric.consecutiveCount}회 ${metric.consecutiveDirection}`
-                    : "—"}
+                  {metric.consecutiveCount > 0 ? `${metric.consecutiveCount}회 ${metric.consecutiveDirection}` : "—"}
                 </dd>
               </div>
             </dl>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              NEXT RELEASE
-            </p>
-            <h2 className="mt-2 text-xl font-black">
-              {releaseDate(metric.nextReleaseDate)}
-            </h2>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">NEXT RELEASE</p>
+            <h2 className="mt-2 text-xl font-black">{releaseDate(metric.nextReleaseDate)}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
               {metric.releaseName || "연결된 발표명 정보가 없습니다."}
             </p>
-            <Link
-              href="/data/calendar"
-              className="mt-5 inline-flex rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
-            >
+            <Link href="/data/calendar" className="mt-5 inline-flex rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100">
               전체 발표 일정 →
             </Link>
           </div>
@@ -171,22 +166,14 @@ export default async function MarketMetricPage({ params }: PageProps) {
 
         {metric.description && (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
-              ABOUT
-            </p>
-            <h2 className="mt-2 text-xl font-black">
-              {metric.nameKo} 데이터 설명
-            </h2>
-            <p className="mt-4 text-sm leading-7 text-slate-600">
-              {metric.description}
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-600">ABOUT</p>
+            <h2 className="mt-2 text-xl font-black">{metric.nameKo} 데이터 설명</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">{metric.description}</p>
           </section>
         )}
 
         <section className="rounded-3xl bg-slate-950 p-5 text-white sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
-            SOURCE & CONTEXT
-          </p>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-300">SOURCE & CONTEXT</p>
           <h2 className="mt-2 text-xl font-black">출처와 함께 확인하기</h2>
           <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -208,16 +195,10 @@ export default async function MarketMetricPage({ params }: PageProps) {
           </dl>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link
-              href={`/blog?q=${encodeURIComponent(metric.nameKo)}`}
-              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold hover:bg-blue-500"
-            >
+            <Link href={`/blog?q=${encodeURIComponent(metric.nameKo)}`} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold hover:bg-blue-500">
               관련 글 찾아보기 →
             </Link>
-            <Link
-              href="/data"
-              className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10"
-            >
+            <Link href="/data" className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10">
               데이터 허브 →
             </Link>
           </div>

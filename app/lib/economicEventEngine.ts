@@ -316,17 +316,15 @@ async function fetchFredCpiReleaseDates(): Promise<string[]> {
   }
 
   const now = new Date();
-  const realtimeStart = isoDate(addDays(now, -550));
-  const realtimeEnd = isoDate(addDays(now, 160));
+  const minimumDate = isoDate(addDays(now, -550));
+  const maximumDate = isoDate(addDays(now, 160));
   const query = new URLSearchParams({
     api_key: apiKey,
     file_type: "json",
     release_id: String(FRED_CPI_RELEASE_ID),
-    realtime_start: realtimeStart,
-    realtime_end: realtimeEnd,
     include_release_dates_with_no_data: "true",
-    limit: "1000",
-    sort_order: "asc",
+    limit: "48",
+    sort_order: "desc",
   });
 
   const response = await fetch(
@@ -344,7 +342,14 @@ async function fetchFredCpiReleaseDates(): Promise<string[]> {
   const payload = (await response.json()) as FredReleaseResponse;
   return (payload.release_dates ?? [])
     .map((item) => item.date)
-    .filter((date): date is string => Boolean(date) && /^\d{4}-\d{2}-\d{2}$/.test(date));
+    .filter(
+      (date): date is string =>
+        Boolean(date) &&
+        /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        date >= minimumDate &&
+        date <= maximumDate,
+    )
+    .sort((left, right) => left.localeCompare(right));
 }
 
 async function fetchBlsCpiSeries(startYear: number, endYear: number) {
@@ -427,7 +432,7 @@ function computedCpiMetrics(seriesMap: Map<string, Map<string, number>>, period:
 async function fetchYahooBars(
   yahooSymbol: string,
   interval: "5m" | "30m",
-  range: "1mo" | "3mo",
+  range: "1mo",
 ): Promise<YahooPoint[]> {
   const query = `range=${range}&interval=${interval}&includePrePost=true&events=div%2Csplits`;
 
@@ -643,7 +648,7 @@ async function syncRecentCpiReactions(events: EconomicEventRow[]): Promise<numbe
   const recentEvents = events.filter((event) => {
     const releaseMs = Date.parse(event.release_at);
     const ageDays = (nowMs - releaseMs) / 86_400_000;
-    return releaseMs <= nowMs && ageDays >= 0 && ageDays <= 55;
+    return releaseMs <= nowMs && ageDays >= 0 && ageDays <= 28;
   });
 
   if (recentEvents.length === 0) return 0;
@@ -672,7 +677,7 @@ async function syncRecentCpiReactions(events: EconomicEventRow[]): Promise<numbe
   for (const asset of REACTION_ASSETS) {
     const [fiveMinuteRows, thirtyMinuteRows] = await Promise.all([
       fetchYahooBars(asset.yahooSymbol, "5m", "1mo"),
-      fetchYahooBars(asset.yahooSymbol, "30m", "3mo"),
+      fetchYahooBars(asset.yahooSymbol, "30m", "1mo"),
     ]);
     const closes = sessionCloses(thirtyMinuteRows);
 
@@ -972,6 +977,7 @@ export async function saveCpiForecasts(input: {
       ? input.forecasts[metricKey]
       : safeNumber(metric.forecast_value);
     const forecast = requested === null || requested === undefined ? null : Number(requested);
+    const normalizedForecast = forecast !== null && Number.isFinite(forecast) ? forecast : null;
     const actual = safeNumber(metric.actual_value);
     return {
       event_id: metric.event_id,
@@ -979,11 +985,11 @@ export async function saveCpiForecasts(input: {
       metric_name: metric.metric_name,
       unit: metric.unit,
       actual_value: actual,
-      forecast_value: Number.isFinite(forecast) ? forecast : null,
+      forecast_value: normalizedForecast,
       previous_value: safeNumber(metric.previous_value),
       surprise_value:
-        actual !== null && forecast !== null && Number.isFinite(forecast)
-          ? round(actual - forecast, 2)
+        actual !== null && normalizedForecast !== null
+          ? round(actual - normalizedForecast, 2)
           : null,
       source_series_id: metric.source_series_id,
       source_name: metric.source_name,

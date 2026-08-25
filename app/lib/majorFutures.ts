@@ -115,6 +115,12 @@ function newYorkNow() {
   };
 }
 
+function isFreshEnough(snapshot: Snapshot | null, minimumDate: string | null) {
+  if (!snapshot) return false;
+  if (!minimumDate) return true;
+  return snapshot.date >= minimumDate;
+}
+
 async function fetchYahoo(symbol: string, query: string): Promise<YahooChartResponse | null> {
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     try {
@@ -216,8 +222,11 @@ function dailySnapshot(payload: YahooChartResponse | null): Snapshot | null {
   };
 }
 
-async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuote | null> {
-  const fiveMinute = intradaySnapshot(
+async function resilientSnapshot(
+  definition: Definition,
+  minimumDate: string | null,
+): Promise<MajorFutureQuote | null> {
+  const fiveMinuteRaw = intradaySnapshot(
     await fetchYahoo(
       definition.yahooSymbol,
       "range=10d&interval=5m&includePrePost=true&events=div%2Csplits",
@@ -225,8 +234,9 @@ async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuo
     10,
     "16et",
   );
+  const fiveMinute = isFreshEnough(fiveMinuteRaw, minimumDate) ? fiveMinuteRaw : null;
 
-  const thirtyMinute = fiveMinute
+  const thirtyMinuteRaw = fiveMinute
     ? null
     : intradaySnapshot(
         await fetchYahoo(
@@ -236,8 +246,9 @@ async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuo
         35,
         "near-16et",
       );
+  const thirtyMinute = isFreshEnough(thirtyMinuteRaw, minimumDate) ? thirtyMinuteRaw : null;
 
-  const daily = fiveMinute || thirtyMinute
+  const dailyRaw = fiveMinute || thirtyMinute
     ? null
     : dailySnapshot(
         await fetchYahoo(
@@ -245,6 +256,7 @@ async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuo
           "range=1mo&interval=1d&includePrePost=false&events=div%2Csplits",
         ),
       );
+  const daily = isFreshEnough(dailyRaw, minimumDate) ? dailyRaw : null;
 
   const snapshot = fiveMinute ?? thirtyMinute ?? daily;
   if (!snapshot) return null;
@@ -278,8 +290,10 @@ async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuo
     source: "Yahoo Finance",
     note:
       snapshot.mode === "daily-fallback"
-        ? "16:00 ET 분봉을 가져오지 못해 Yahoo 일봉 마감값으로 대체"
-        : "미국 현물 정규장 마감 16:00 ET 동시점 · 선물 공식 정산가 아님",
+        ? "16:00 ET 분봉이 최신 현물 마감일보다 뒤처져 Yahoo 일봉 마감값으로 대체"
+        : snapshot.mode === "near-16et"
+          ? "16:00 ET 5분봉이 최신 현물 마감일보다 뒤처져 근접 분봉으로 대체"
+          : "미국 현물 정규장 마감 16:00 ET 동시점 · 선물 공식 정산가 아님",
     group: definition.group,
     unitLabel: definition.unitLabel,
     snapshotMode: snapshot.mode,
@@ -287,38 +301,18 @@ async function resilientSnapshot(definition: Definition): Promise<MajorFutureQuo
   };
 }
 
-async function buildMajorFuturesSnapshot(): Promise<MajorFutureQuote[]> {
-  const market = await getUsMarketCloseDashboard();
-  const definitionBySymbol = new Map(DEFINITIONS.map((item) => [item.symbol, item]));
+async function buildMajorFuturesSnapshot(expectedMarketDate: string | null): Promise<MajorFutureQuote[]> {
+  const quotes = await Promise.all(
+    DEFINITIONS.map((definition) => resilientSnapshot(definition, expectedMarketDate)),
+  );
 
-  const indexFutures: MajorFutureQuote[] = market.futures
-    .filter((quote) => definitionBySymbol.get(quote.symbol)?.group === "index")
-    .map((quote) => {
-      const definition = definitionBySymbol.get(quote.symbol)!;
-      return {
-        ...quote,
-        group: "index" as const,
-        unitLabel: definition.unitLabel,
-        snapshotMode: "16et" as const,
-        basisLabel: `${quote.timeEt} ET`,
-      };
+  const result = quotes
+    .filter((item): item is MajorFutureQuote => item !== null)
+    .sort((left, right) => {
+      return DEFINITIONS.findIndex((item) => item.symbol === left.symbol) -
+        DEFINITIONS.findIndex((item) => item.symbol === right.symbol);
     });
 
-  const existingIndex = new Set(indexFutures.map((item) => item.symbol));
-  const fallbackDefinitions = DEFINITIONS.filter(
-    (item) => item.group === "commodity" || !existingIndex.has(item.symbol),
-  );
-  const fallbackQuotes = await Promise.all(fallbackDefinitions.map(resilientSnapshot));
-
-  const result = [
-    ...indexFutures,
-    ...fallbackQuotes.filter((item): item is MajorFutureQuote => item !== null),
-  ].sort((left, right) => {
-    return DEFINITIONS.findIndex((item) => item.symbol === left.symbol) -
-      DEFINITIONS.findIndex((item) => item.symbol === right.symbol);
-  });
-
-  // 외부 시세가 순간적으로 모두 실패했을 때 빈 배열을 정상 캐시로 저장하지 않는다.
   if (result.length === 0) {
     throw new Error("주요 선물 시세 원천이 일시적으로 응답하지 않습니다.");
   }
@@ -328,7 +322,7 @@ async function buildMajorFuturesSnapshot(): Promise<MajorFutureQuote[]> {
 
 const cachedMajorFuturesSnapshot = unstable_cache(
   buildMajorFuturesSnapshot,
-  ["major-futures-16et-v2"],
+  ["major-futures-16et-v3"],
   {
     revalidate: CACHE_SECONDS,
     tags: ["major-futures-16et"],
@@ -336,5 +330,10 @@ const cachedMajorFuturesSnapshot = unstable_cache(
 );
 
 export async function getMajorFuturesSnapshot() {
-  return cachedMajorFuturesSnapshot();
+  const market = await getUsMarketCloseDashboard();
+  const expectedMarketDate = market.cash
+    .map((item) => item.date)
+    .sort((left, right) => right.localeCompare(left))[0] ?? null;
+
+  return cachedMajorFuturesSnapshot(expectedMarketDate);
 }

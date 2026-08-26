@@ -98,14 +98,14 @@ function HorizonCard({ horizon }: { horizon: CpiComparableHorizon }) {
 function ReactionRow({ reaction }: { reaction: CpiReactionView }) {
   return (
     <tr className="border-t border-slate-100">
-      <td className="whitespace-nowrap px-3 py-4 font-black text-slate-900">
+      <td className="w-[150px] min-w-[150px] px-2 py-4 font-black leading-tight text-slate-900 sm:w-auto sm:min-w-0 sm:px-3">
         {reaction.assetName}
         <span className="ml-2 text-[10px] font-bold text-slate-400">{reaction.assetKey}</span>
       </td>
-      <td className="px-3 py-4 text-right"><ReactionCell value={reaction.return30m} /></td>
-      <td className="px-3 py-4 text-right"><ReactionCell value={reaction.returnClose} /></td>
-      <td className="px-3 py-4 text-right"><ReactionCell value={reaction.return1d} /></td>
-      <td className="px-3 py-4 text-right"><ReactionCell value={reaction.return5d} /></td>
+      <td className="min-w-[96px] px-2 py-4 text-right sm:px-3"><ReactionCell value={reaction.return30m} /></td>
+      <td className="min-w-[110px] px-2 py-4 text-right sm:px-3"><ReactionCell value={reaction.returnClose} /></td>
+      <td className="min-w-[105px] px-2 py-4 text-right sm:px-3"><ReactionCell value={reaction.return1d} /></td>
+      <td className="min-w-[105px] px-2 py-4 text-right sm:px-3"><ReactionCell value={reaction.return5d} /></td>
     </tr>
   );
 }
@@ -228,14 +228,14 @@ export default async function CpiEventPage() {
               </div>
 
               <div className="mt-5 overflow-x-auto">
-                <table className="min-w-[760px] w-full text-sm">
+                <table className="w-full min-w-[620px] text-sm sm:min-w-[760px]">
                   <thead>
                     <tr className="text-left text-xs font-black text-slate-400">
-                      <th className="px-3 py-3">자산</th>
-                      <th className="px-3 py-3 text-right">+30분</th>
-                      <th className="px-3 py-3 text-right">당일 16ET</th>
-                      <th className="px-3 py-3 text-right">+1거래일</th>
-                      <th className="px-3 py-3 text-right">+5거래일</th>
+                      <th className="w-[150px] min-w-[150px] px-2 py-3 sm:w-auto sm:min-w-0 sm:px-3">자산</th>
+                      <th className="min-w-[96px] px-2 py-3 text-right sm:px-3">+30분</th>
+                      <th className="min-w-[110px] px-2 py-3 text-right sm:px-3">당일 16ET</th>
+                      <th className="min-w-[105px] px-2 py-3 text-right sm:px-3">+1거래일</th>
+                      <th className="min-w-[105px] px-2 py-3 text-right sm:px-3">+5거래일</th>
                     </tr>
                   </thead>
                   <tbody>

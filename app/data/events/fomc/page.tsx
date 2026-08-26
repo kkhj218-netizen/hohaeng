@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "FOMC EVENT DB | 기준금리·SEP·시장반응 | 호행처럼",
   description:
-    "2016년 이후 FOMC 기준금리 결정, SEP 회의 여부, 장기 점도표 중앙값과 나스닥·러셀·금·WTI·달러·국채선물 반응을 축적합니다.",
+    "2016년 이후 FOMC 기준금리 결정, SEP 회의 여부, 장기 점도표 중앙값과 나스닥·러셀·금·WTI·달러·국채선물 반응을 축적하고 직전 회의와 비교합니다.",
   alternates: { canonical: "/data/events/fomc" },
 };
 
@@ -74,8 +74,7 @@ export default async function FomcEventPage() {
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/data/events" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">EVENT DB 홈 →</Link>
-            <Link href="/data/events/cpi" className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">CPI →</Link>
-            <Link href="/data/events/pce" className="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-black text-violet-700">PCE →</Link>
+            <Link href="/data/events/fomc/compare" className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white">이전 회의와 비교 →</Link>
             <Link href="/data/events/nfp" className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">고용보고서 →</Link>
           </div>
         </div>
@@ -116,7 +115,7 @@ export default async function FomcEventPage() {
                       const badge = meetingBadge(latest.referencePeriod);
                       return <span className={`rounded-full px-3 py-1 text-[11px] font-black ${badge.className}`}>{badge.label}</span>;
                     })()}
-                    <span className={`rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black text-white`}>{bpLabel(change)}</span>
+                    <span className="rounded-full bg-slate-950 px-3 py-1 text-[11px] font-black text-white">{bpLabel(change)}</span>
                   </div>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">누적 {data.totalCount}개 이벤트</span>
@@ -142,6 +141,17 @@ export default async function FomcEventPage() {
                 </div>
               </div>
             </section>
+
+            <Link href="/data/events/fomc/compare" className="block rounded-3xl border border-blue-200 bg-blue-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md sm:p-6">
+              <p className="text-xs font-black text-blue-600">ANALYSIS V2</p>
+              <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-black">직전 회의·이전 SEP·같은 결정 유형과 비교</h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-900/70">이번 금리결정이 직전 회의에서 어떻게 바뀌었는지, 이전 점도표와 차이가 있는지, 과거 같은 인상·동결·인하 뒤 자산이 어떻게 움직였는지 한 번에 봅니다.</p>
+                </div>
+                <span className="text-2xl font-black text-blue-600">→</span>
+              </div>
+            </Link>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <p className="text-xs font-black uppercase tracking-wider text-violet-600">MARKET REACTION</p>

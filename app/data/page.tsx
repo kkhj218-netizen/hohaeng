@@ -9,9 +9,9 @@ import MarketDataSection from "@/app/data/MarketDataSection";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "투자 데이터 | 공시·CPI·글로벌 기준금리·거시 데이터 | 호행처럼",
+  title: "투자 데이터 | 공시·EVENT DB·글로벌 기준금리·거시 데이터 | 호행처럼",
   description:
-    "기업 공시·실적 변화, CPI 발표와 시장 반응, 주요국 기준금리 추이, 물가·고용·경기·금리구조·유동성·환율·원자재 장기 데이터를 한곳에서 확인합니다.",
+    "기업 공시·실적 변화, CPI·PCE EVENT DB와 시장 반응, 주요국 기준금리 추이, 물가·고용·경기·금리구조·유동성·환율·원자재 장기 데이터를 한곳에서 확인합니다.",
   alternates: {
     canonical: "/data",
   },
@@ -30,7 +30,7 @@ export default function DataHubPage() {
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">투자 데이터</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                 TODAY의 현물·선물 마감 숫자를 반복하지 않습니다. 먼저 기업 공시에서 실제로 달라진 사실을 찾고,
-                그 아래에서 CPI 이벤트 반응과 글로벌 기준금리, 물가·고용·경기·금리구조·유동성 등 투자 판단의 원자료를 확인합니다.
+                그 아래에서 CPI·PCE EVENT DB와 글로벌 기준금리, 물가·고용·경기·금리구조·유동성 등 투자 판단의 원자료를 확인합니다.
               </p>
             </div>
 
@@ -42,16 +42,16 @@ export default function DataHubPage() {
                 공시 데이터 →
               </Link>
               <Link
+                href="/data/events"
+                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+              >
+                EVENT DB →
+              </Link>
+              <Link
                 href="/data/calendar"
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-blue-600 hover:border-blue-300"
               >
                 발표 일정 →
-              </Link>
-              <Link
-                href="/data/events/cpi"
-                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
-              >
-                CPI 반응 데이터 →
               </Link>
             </div>
           </div>
@@ -100,7 +100,7 @@ export default function DataHubPage() {
           <h2 className="text-xl font-black">Data → Analysis → Opinion</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
             투자 데이터에서는 공시와 공식 숫자를 먼저 확인하고, “왜 시장이 움직였는가” 같은 해석은 시황 및 시장에서 분리합니다.
-            데이터가 쌓일수록 시황 글의 근거를 바로 꺼내 쓸 수 있는 구조로 운영합니다.
+            EVENT DB가 쌓일수록 같은 경제지표가 과거 비슷한 환경에서 어떤 반응을 만들었는지 바로 비교할 수 있습니다.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
@@ -110,10 +110,10 @@ export default function DataHubPage() {
               공시·실적 데이터 →
             </Link>
             <Link
-              href="/data/events/cpi"
+              href="/data/events"
               className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
             >
-              CPI 이벤트 DB →
+              경제지표 EVENT DB →
             </Link>
             <Link
               href="/blog?category=market"

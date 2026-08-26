@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { verifyAdminRequest } from "@/app/lib/adminAuth";
-import { runCpiHistoricalBackfill } from "@/app/lib/cpiHistoricalBackfill";
+import { runCpiHistoricalBackfillFixed } from "@/app/lib/cpiHistoricalBackfillFixed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runCpiHistoricalBackfill();
+    const result = await runCpiHistoricalBackfillFixed();
     return NextResponse.json(
       { ok: true, result },
       { headers: { "Cache-Control": "private, no-store, max-age=0" } },

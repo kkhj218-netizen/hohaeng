@@ -30,9 +30,9 @@ const DEFINITIONS = [
   {
     key: "US_NFP",
     name: "미국 고용보고서",
-    description: "비농업고용·실업률·임금과 시장 반응을 연결할 예정입니다.",
-    href: "#",
-    status: "planned" as const,
+    description: "비농업고용·실업률·시간당임금과 7개 자산의 발표 후 반응을 2016년 이후 연결합니다.",
+    href: "/data/events/nfp",
+    status: "active" as const,
   },
   {
     key: "US_FOMC",

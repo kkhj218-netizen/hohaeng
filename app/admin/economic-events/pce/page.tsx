@@ -11,9 +11,19 @@ type Result = {
   reactionCount: number;
   earliestRelease: string | null;
   latestRelease: string | null;
+  mode?: "batch";
 };
 
 type ApiResponse = { ok: true; result: Result } | { ok: false; error: string };
+
+function parseApiResponse(raw: string): ApiResponse | null {
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as ApiResponse;
+  } catch {
+    return null;
+  }
+}
 
 export default function PceBackfillAdminPage() {
   const router = useRouter();
@@ -40,11 +50,22 @@ export default function PceBackfillAdminPage() {
           "Content-Type": "application/json",
         },
       });
-      const payload = (await response.json()) as ApiResponse;
+
+      const raw = await response.text();
+      const payload = parseApiResponse(raw);
+
       if (response.status === 401) {
         router.replace("/admin/login");
         return;
       }
+
+      if (!payload) {
+        const hint = response.status >= 500
+          ? "서버 처리시간 초과 또는 일시적인 배포 서버 오류일 수 있습니다. 새로고침 후 다시 실행해 주세요."
+          : "서버 응답 형식을 읽지 못했습니다. 새로고침 후 다시 실행해 주세요.";
+        throw new Error(`PCE 백필 응답 오류 (${response.status}). ${hint}`);
+      }
+
       if (!payload.ok) throw new Error(payload.error);
       setResult(payload.result);
     } catch (runError) {
@@ -72,6 +93,7 @@ export default function PceBackfillAdminPage() {
             <p>• 시장반응: 발표 전 거래일 종가 대비 당일/+1D/+5D</p>
             <p>• 자산: NQ, RTY, 금, WTI, DXY, 2Y·10Y 국채선물</p>
             <p>• 컨센서스: 검증 가능한 원천만 별도 입력하고 임의 생성하지 않음</p>
+            <p>• 저장 방식: 이벤트·지표·시장반응을 묶어서 일괄 저장해 실행시간을 크게 줄임</p>
           </div>
         </section>
 
@@ -84,12 +106,26 @@ export default function PceBackfillAdminPage() {
           {running ? "PCE 백필 실행 중..." : "2016~현재 PCE 데이터 채우기"}
         </button>
 
-        {running && <p className="mt-3 text-xs leading-5 text-slate-500">10년 발표일과 7개 자산 일봉을 처리하므로 수십 초 걸릴 수 있습니다. 화면을 닫지 마세요.</p>}
-        {error && <div className="mt-5 rounded-2xl border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200">{error}</div>}
+        {running && (
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            현재는 일괄 저장 방식이라 이전보다 훨씬 빠르게 처리됩니다. 완료 표시가 뜰 때까지 화면을 유지해 주세요.
+          </p>
+        )}
+
+        {error && (
+          <div className="mt-5 rounded-2xl border border-rose-800 bg-rose-950/40 p-4 text-sm leading-6 text-rose-200">
+            {error}
+          </div>
+        )}
 
         {result && (
           <section className="mt-5 rounded-2xl border border-emerald-800 bg-emerald-950/30 p-5">
-            <h2 className="font-black text-emerald-200">PCE 백필 완료</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-black text-emerald-200">PCE 백필 완료</h2>
+              {result.mode === "batch" && (
+                <span className="rounded-full border border-emerald-800 px-3 py-1 text-xs font-bold text-emerald-300">일괄 저장 완료</span>
+              )}
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-slate-950/60 p-4"><p className="text-xs text-slate-500">이벤트</p><p className="mt-1 text-2xl font-black">{result.eventCount}</p></div>
               <div className="rounded-xl bg-slate-950/60 p-4"><p className="text-xs text-slate-500">지표 행</p><p className="mt-1 text-2xl font-black">{result.metricCount}</p></div>

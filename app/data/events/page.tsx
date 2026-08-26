@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "경제지표 EVENT DB | CPI·PCE·고용·FOMC | 호행처럼",
   description:
-    "CPI와 PCE를 시작으로 주요 미국 경제지표의 발표값, 과거 사례, 시장환경, 자산 반응을 하나의 EVENT DB로 축적합니다.",
+    "CPI·PCE·미국 고용보고서·FOMC의 발표값과 과거 시장반응을 같은 구조로 축적해 비교하는 호행처럼 EVENT DB입니다.",
   alternates: { canonical: "/data/events" },
 };
 
@@ -34,8 +34,8 @@ export default async function EventDbHubPage() {
           <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">HOHAENG EVENT DB</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">경제지표가 발표된 뒤 시장은 실제로 어떻게 움직였나?</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-            발표 숫자만 모으지 않습니다. 실제값·이전값·컨센서스와 발표 후 자산 반응을 같은 이벤트 단위로 저장해,
-            시간이 지날수록 과거 비교가 쉬워지는 데이터베이스를 만듭니다.
+            발표 숫자만 모으지 않습니다. CPI·PCE·고용보고서·FOMC를 같은 이벤트 구조로 저장하고,
+            실제값·이전값·검증 가능한 컨센서스와 발표 후 자산 반응을 연결해 시간이 지날수록 비교 가능한 기록을 만듭니다.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/data" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">투자 데이터 홈 →</Link>
@@ -80,33 +80,35 @@ export default async function EventDbHubPage() {
           </div>
         </section>
 
-        <section>
-          <div className="mb-4">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">NEXT</p>
-            <h2 className="mt-1 text-2xl font-black">다음 확장 순서</h2>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {planned.map((item, index) => (
-              <div key={item.key} className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-black text-slate-400">NEXT {index + 1}</p>
-                    <h3 className="mt-1 text-xl font-black">{item.name}</h3>
+        {planned.length > 0 && (
+          <section>
+            <div className="mb-4">
+              <p className="text-xs font-black uppercase tracking-wider text-slate-400">NEXT</p>
+              <h2 className="mt-1 text-2xl font-black">다음 확장 순서</h2>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {planned.map((item, index) => (
+                <div key={item.key} className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black text-slate-400">NEXT {index + 1}</p>
+                      <h3 className="mt-1 text-xl font-black">{item.name}</h3>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">PLANNED</span>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">PLANNED</span>
+                  <p className="mt-3 text-sm leading-6 text-slate-500">{item.description}</p>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-500">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="rounded-3xl bg-slate-950 p-6 text-white">
           <p className="text-xs font-black uppercase tracking-wider text-orange-300">WHY THIS MATTERS</p>
-          <h2 className="mt-1 text-2xl font-black">한 이벤트를 깊게 만든 뒤 옆으로 확장합니다.</h2>
+          <h2 className="mt-1 text-2xl font-black">네 개의 핵심 이벤트를 같은 언어로 비교합니다.</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-            CPI에서 만든 10년 아카이브·유사 사례·시장환경·반응 유형 구조를 공통 패턴으로 사용합니다.
-            PCE → 고용보고서 → FOMC로 늘어날수록 서로 다른 이벤트가 같은 시장환경에서 어떤 반응을 만들었는지 비교할 수 있게 됩니다.
+            CPI·PCE·고용보고서·FOMC를 발표값만 따로 보는 대신, 당시 시장환경과 NQ·RTY·금·WTI·달러·미 국채선물 반응을 같은 구조로 저장합니다.
+            다음 단계에서는 이 공통 EVENT DB 위에 이벤트 간 유사 사례와 복합 시장환경 분석을 확장합니다.
           </p>
         </section>
       </div>

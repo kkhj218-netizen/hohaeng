@@ -21,10 +21,28 @@ const ASSETS = [
 ] as const;
 
 type DatePoint = { date: string; value: number };
-type ReleaseResponse = { releases?: Array<{ id?: number; name?: string }>; error_message?: string };
-type ReleaseDatesResponse = { release_dates?: Array<{ date?: string }>; error_message?: string };
-type ObservationResponse = { observations?: Array<{ date?: string; value?: string }>; error_message?: string };
-type YahooResponse = { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }> } } };
+type ReleaseResponse = {
+  releases?: Array<{ id?: number; name?: string }>;
+  error_message?: string;
+};
+type ReleaseDatesResponse = {
+  release_dates?: Array<{ date?: string }>;
+  error_message?: string;
+};
+type ObservationResponse = {
+  observations?: Array<{ date?: string; value?: string }>;
+  error_message?: string;
+};
+type YahooResponse = {
+  chart?: {
+    result?: Array<{
+      timestamp?: number[];
+      indicators?: {
+        quote?: Array<{ close?: Array<number | null> }>;
+      };
+    }>;
+  };
+};
 
 type MetricKey = "headline_yoy" | "headline_mom" | "core_yoy" | "core_mom";
 
@@ -102,10 +120,38 @@ function nyDate(timestampMs: number) {
   return `${map.year}-${map.month}-${map.day}`;
 }
 
+function zonedLocalTimeToUtc(date: string, time: string, timeZone: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const desiredAsUtc = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = desiredAsUtc;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  for (let index = 0; index < 2; index += 1) {
+    const parts = formatter.formatToParts(new Date(guess));
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const representedAsUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+    );
+    guess += desiredAsUtc - representedAsUtc;
+  }
+  return new Date(guess);
+}
+
 function releaseUtc(date: string) {
-  // BEA Personal Income and Outlays is normally released at 08:30 ET.
-  // Noon UTC safely maps to the same release date for event identity; reaction calculations use the date only.
-  return `${date}T12:30:00.000Z`;
+  return zonedLocalTimeToUtc(date, "08:30", "America/New_York").toISOString();
 }
 
 function fredKey() {
@@ -142,20 +188,31 @@ async function fetchReleaseDates(): Promise<string[]> {
   const release = await fredJson<ReleaseResponse>("series/release", { series_id: HEADLINE_SERIES });
   const releaseId = release.releases?.[0]?.id;
   if (!releaseId) throw new Error("PCE FRED release id를 찾지 못했습니다.");
+
   const payload = await fredJson<ReleaseDatesResponse>("release/dates", {
     release_id: String(releaseId),
     include_release_dates_with_no_data: "true",
     sort_order: "desc",
     limit: "256",
   });
-  return [...new Set((payload.release_dates ?? []).map((item) => item.date ?? "").filter((date) => date >= HISTORY_START))]
-    .sort((a, b) => a.localeCompare(b));
+
+  return [...new Set(
+    (payload.release_dates ?? [])
+      .map((item) => item.date ?? "")
+      .filter((date) => date >= HISTORY_START),
+  )].sort((a, b) => a.localeCompare(b));
 }
 
 async function fetchYahooDaily(symbol: string): Promise<DatePoint[]> {
   const period1 = Math.floor(Date.parse(`${HISTORY_START}T00:00:00Z`) / 1000) - 10 * 86_400;
   const period2 = Math.floor((Date.now() + 14 * 86_400_000) / 1000);
-  const query = new URLSearchParams({ period1: String(period1), period2: String(period2), interval: "1d", events: "div,splits" });
+  const query = new URLSearchParams({
+    period1: String(period1),
+    period2: String(period2),
+    interval: "1d",
+    events: "div,splits",
+  });
+
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     try {
       const response = await fetch(`https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?${query.toString()}`, {
@@ -171,9 +228,9 @@ async function fetchYahooDaily(symbol: string): Promise<DatePoint[]> {
       const closes = result.indicators?.quote?.[0]?.close ?? [];
       return timestamps
         .map((timestamp, index) => {
-          const value = closes[index];
-          return typeof value === "number" && Number.isFinite(value)
-            ? { date: nyDate(timestamp * 1000), value }
+          const close = closes[index];
+          return typeof close === "number" && Number.isFinite(close)
+            ? { date: nyDate(timestamp * 1000), value: close }
             : null;
         })
         .filter((item): item is DatePoint => item !== null)
@@ -268,7 +325,9 @@ export async function runPceHistoricalBackfill(): Promise<PceBackfillResult> {
       .select("id")
       .single();
 
-    if (eventError || !eventRow?.id) throw new Error(`PCE 이벤트 저장 실패: ${eventError?.message ?? "id 없음"}`);
+    if (eventError || !eventRow?.id) {
+      throw new Error(`PCE 이벤트 저장 실패: ${eventError?.message ?? "id 없음"}`);
+    }
     const eventId = eventRow.id as string;
 
     const metricDefs: Array<[MetricKey, string, string]> = [
@@ -287,6 +346,7 @@ export async function runPceHistoricalBackfill(): Promise<PceBackfillResult> {
         .eq("metric_key", key)
         .maybeSingle();
       const forecast = safeNumber(existing?.forecast_value);
+
       const { error } = await supabase.from("economic_event_metrics").upsert({
         event_id: eventId,
         metric_key: key,
@@ -309,11 +369,13 @@ export async function runPceHistoricalBackfill(): Promise<PceBackfillResult> {
     }
 
     if (!released) continue;
+
     for (let index = 0; index < ASSETS.length; index += 1) {
       const asset = ASSETS[index];
       const reaction = reactionForDate(releaseDate, assetSeries[index] ?? []);
       if (!reaction) continue;
-      const missing = [reaction.returnClose, reaction.return1d, reaction.return5d].filter((value) => value === null).length;
+      const missing = [reaction.returnClose, reaction.return1d, reaction.return5d].filter((item) => item === null).length;
+
       const { error } = await supabase.from("economic_event_reactions").upsert({
         event_id: eventId,
         asset_key: asset.key,
@@ -346,7 +408,7 @@ export async function runPceHistoricalBackfill(): Promise<PceBackfillResult> {
     metricCount,
     reactionCount,
     earliestRelease: releaseDates[0] ?? null,
-    latestRelease: releaseDates.at(-1) ?? null,
+    latestRelease: releaseDates[releaseDates.length - 1] ?? null,
   };
 }
 
@@ -360,35 +422,53 @@ export async function getPcePageData(): Promise<PcePageData> {
     .order("release_at", { ascending: false })
     .limit(140);
   if (error) throw new Error(`PCE 이벤트 조회 실패: ${error.message}`);
-  const rows = (events ?? []) as Array<{ id: string; release_at: string; reference_period: string | null; status: string }>;
+
+  const rows = (events ?? []) as Array<{
+    id: string;
+    release_at: string;
+    reference_period: string | null;
+    status: string;
+  }>;
   if (!rows.length) return { latest: null, upcoming: null, history: [], totalCount: 0 };
 
   const ids = rows.map((row) => row.id);
-  const [{ data: metricRows }, { data: reactionRows }] = await Promise.all([
-    supabase.from("economic_event_metrics").select("event_id,metric_key,metric_name,actual_value,forecast_value,previous_value,surprise_value").in("event_id", ids),
-    supabase.from("economic_event_reactions").select("event_id,asset_key,asset_name,return_close_pct,return_1d_pct,return_5d_pct").in("event_id", ids),
+  const [{ data: metricRows, error: metricError }, { data: reactionRows, error: reactionError }] = await Promise.all([
+    supabase
+      .from("economic_event_metrics")
+      .select("event_id,metric_key,metric_name,actual_value,forecast_value,previous_value,surprise_value")
+      .in("event_id", ids),
+    supabase
+      .from("economic_event_reactions")
+      .select("event_id,asset_key,asset_name,return_close_pct,return_1d_pct,return_5d_pct")
+      .in("event_id", ids),
   ]);
+  if (metricError) throw new Error(`PCE 지표 조회 실패: ${metricError.message}`);
+  if (reactionError) throw new Error(`PCE 반응 조회 실패: ${reactionError.message}`);
 
   const views: PceEventView[] = rows.map((row) => ({
     id: row.id,
     releaseAt: row.release_at,
     referencePeriod: row.reference_period,
     status: row.status,
-    metrics: (metricRows ?? []).filter((metric) => metric.event_id === row.id).map((metric) => ({
-      key: metric.metric_key,
-      name: metric.metric_name,
-      actual: safeNumber(metric.actual_value),
-      forecast: safeNumber(metric.forecast_value),
-      previous: safeNumber(metric.previous_value),
-      surprise: safeNumber(metric.surprise_value),
-    })),
-    reactions: (reactionRows ?? []).filter((reaction) => reaction.event_id === row.id).map((reaction) => ({
-      assetKey: reaction.asset_key,
-      assetName: reaction.asset_name,
-      close: safeNumber(reaction.return_close_pct),
-      oneDay: safeNumber(reaction.return_1d_pct),
-      fiveDay: safeNumber(reaction.return_5d_pct),
-    })),
+    metrics: (metricRows ?? [])
+      .filter((metric) => metric.event_id === row.id)
+      .map((metric) => ({
+        key: metric.metric_key,
+        name: metric.metric_name,
+        actual: safeNumber(metric.actual_value),
+        forecast: safeNumber(metric.forecast_value),
+        previous: safeNumber(metric.previous_value),
+        surprise: safeNumber(metric.surprise_value),
+      })),
+    reactions: (reactionRows ?? [])
+      .filter((reaction) => reaction.event_id === row.id)
+      .map((reaction) => ({
+        assetKey: reaction.asset_key,
+        assetName: reaction.asset_name,
+        close: safeNumber(reaction.return_close_pct),
+        oneDay: safeNumber(reaction.return_1d_pct),
+        fiveDay: safeNumber(reaction.return_5d_pct),
+      })),
   }));
 
   const latest = views.find((view) => view.releaseAt <= nowIso && view.metrics.some((metric) => metric.actual !== null)) ?? null;

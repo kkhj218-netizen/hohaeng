@@ -11,9 +11,19 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 type DeviceType = "ios" | "android" | "desktop";
+type ButtonVariant = "header" | "hero";
 
 type NavigatorWithStandalone = Navigator & {
   standalone?: boolean;
+};
+
+type GtagWindow = Window & {
+  gtag?: (...args: unknown[]) => void;
+};
+
+type Props = {
+  variant?: ButtonVariant;
+  source?: string;
 };
 
 function detectDevice(): DeviceType {
@@ -33,7 +43,12 @@ function isStandaloneMode() {
   return iosStandalone || displayStandalone;
 }
 
-export default function PwaInstallButton() {
+function track(eventName: string, params: Record<string, string | boolean | number>) {
+  if (typeof window === "undefined") return;
+  (window as GtagWindow).gtag?.("event", eventName, params);
+}
+
+export default function PwaInstallButton({ variant = "header", source = "header" }: Props) {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [device, setDevice] = useState<DeviceType>("desktop");
   const [isOpen, setIsOpen] = useState(false);
@@ -41,7 +56,8 @@ export default function PwaInstallButton() {
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
-    setDevice(detectDevice());
+    const detectedDevice = detectDevice();
+    setDevice(detectedDevice);
     setIsInstalled(isStandaloneMode());
 
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -53,6 +69,7 @@ export default function PwaInstallButton() {
       setInstallPrompt(null);
       setIsInstalled(true);
       setIsOpen(false);
+      track("pwa_installed", { source, device: detectDevice() });
     };
 
     const media = window.matchMedia("(display-mode: standalone)");
@@ -67,7 +84,7 @@ export default function PwaInstallButton() {
       window.removeEventListener("appinstalled", handleInstalled);
       media.removeEventListener?.("change", handleDisplayMode);
     };
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -127,11 +144,23 @@ export default function PwaInstallButton() {
   async function requestInstall() {
     if (isInstalled) return;
 
+    const detectedDevice = detectDevice();
+    track("pwa_install_click", {
+      source,
+      device: detectedDevice,
+      native_prompt: Boolean(installPrompt),
+    });
+
     if (installPrompt) {
       setInstalling(true);
       try {
         await installPrompt.prompt();
         const choice = await installPrompt.userChoice;
+        track("pwa_install_result", {
+          source,
+          device: detectedDevice,
+          outcome: choice.outcome,
+        });
         setInstallPrompt(null);
         if (choice.outcome === "accepted") {
           setIsInstalled(true);
@@ -143,9 +172,31 @@ export default function PwaInstallButton() {
       return;
     }
 
-    setDevice(detectDevice());
+    setDevice(detectedDevice);
     setIsOpen(true);
+    track("pwa_install_guide_open", { source, device: detectedDevice });
   }
+
+  const hero = variant === "hero";
+  const buttonClass = hero
+    ? `flex w-full items-center justify-center rounded-2xl px-5 py-4 text-base font-black shadow-lg transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+        isInstalled
+          ? "cursor-default bg-emerald-100 text-emerald-800 focus:ring-emerald-400"
+          : "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500"
+      }`
+    : `shrink-0 rounded-full px-3 py-2 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+        isInstalled
+          ? "cursor-default bg-emerald-100 text-emerald-700 focus:ring-emerald-400"
+          : "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500"
+      }`;
+
+  const label = isInstalled
+    ? "설치됨"
+    : installing
+      ? "설치 중..."
+      : hero
+        ? "호행처럼을 홈 화면에 저장"
+        : "앱으로 저장";
 
   return (
     <>
@@ -153,17 +204,19 @@ export default function PwaInstallButton() {
         type="button"
         onClick={() => void requestInstall()}
         disabled={isInstalled || installing}
-        className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-          isInstalled
-            ? "cursor-default bg-emerald-100 text-emerald-700 focus:ring-emerald-400"
-            : "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500"
-        }`}
+        className={buttonClass}
         aria-haspopup={isInstalled ? undefined : "dialog"}
         aria-label={isInstalled ? "호행처럼 앱 설치됨" : "호행처럼 앱으로 저장하기"}
       >
         <span aria-hidden="true">{isInstalled ? "✓" : "💾"}</span>{" "}
-        <span className="hidden sm:inline">{isInstalled ? "설치됨" : installing ? "설치 중..." : "앱으로 저장"}</span>
-        <span className="sm:hidden">{isInstalled ? "설치됨" : installing ? "설치중" : "저장"}</span>
+        {hero ? (
+          <span className="ml-1">{label}</span>
+        ) : (
+          <>
+            <span className="hidden sm:inline">{label}</span>
+            <span className="sm:hidden">{isInstalled ? "설치됨" : installing ? "설치중" : "저장"}</span>
+          </>
+        )}
       </button>
 
       {isOpen && !isInstalled && (
@@ -213,7 +266,7 @@ export default function PwaInstallButton() {
 
               {device === "ios" && (
                 <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
-                  <strong>팁:</strong> 지금 화면이 앱 내부 브라우저나 다른 브라우저라면 Safari로 열고 진행하는 것이 가장 확실합니다.
+                  <strong>팁:</strong> 인스타·Threads·X의 앱 내부 브라우저라면 Safari로 열고 진행하는 것이 가장 확실합니다.
                 </div>
               )}
 

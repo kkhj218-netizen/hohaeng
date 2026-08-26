@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "미국 PCE 물가 EVENT DB | 발표값·시장반응 | 호행처럼",
   description:
-    "미국 PCE 물가지수의 헤드라인·근원 YoY/MoM과 발표 후 나스닥·러셀·금·WTI·달러·국채선물 반응을 축적합니다.",
+    "미국 PCE 물가지수의 헤드라인·근원 YoY/MoM과 발표 후 나스닥·러셀·금·WTI·달러·국채선물 반응을 축적하고 유사 사례·시장환경·반응 유형을 분석합니다.",
   alternates: { canonical: "/data/events/pce" },
 };
 
@@ -52,6 +52,9 @@ export default async function PceEventPage() {
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href="/data/events" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">EVENT DB 홈 →</Link>
+            <Link href="/data/events/pce/similar" className="rounded-full bg-violet-600 px-4 py-2 text-sm font-black text-white">비슷했던 과거 →</Link>
+            <Link href="/data/events/pce/regime" className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white">PCE + 시장환경 →</Link>
+            <Link href="/data/events/pce/pattern" className="rounded-full bg-fuchsia-600 px-4 py-2 text-sm font-black text-white">반응 유형 →</Link>
             <Link href="/data/events/cpi" className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700">CPI EVENT DB →</Link>
           </div>
         </div>
@@ -64,7 +67,7 @@ export default async function PceEventPage() {
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-black">다음 PCE 발표 {formatDate(upcoming.releaseAt)}</h2>
-                <p className="mt-1 text-sm text-blue-900/70">기준월 {upcoming.referencePeriod ?? "—"} · 컨센서스는 향후 관리자 화면에서 입력 가능</p>
+                <p className="mt-1 text-sm text-blue-900/70">기준월 {upcoming.referencePeriod ?? "—"} · 컨센서스는 검증 가능한 원천만 입력</p>
               </div>
               <span className="rounded-full bg-white px-3 py-2 text-xs font-black text-blue-700">예정</span>
             </div>
@@ -101,10 +104,22 @@ export default async function PceEventPage() {
               </div>
             </section>
 
+            <section className="grid gap-3 md:grid-cols-3">
+              <Link href="/data/events/pce/similar" className="rounded-3xl border border-violet-200 bg-violet-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+                <p className="text-xs font-black text-violet-600">ANALYSIS V2</p><h2 className="mt-1 text-xl font-black">비슷했던 과거</h2><p className="mt-2 text-xs leading-5 text-violet-900/70">근원 PCE 비중을 높인 유사도, TOP5·10·20 민감도, 7개 자산 통계.</p>
+              </Link>
+              <Link href="/data/events/pce/regime" className="rounded-3xl border border-blue-200 bg-blue-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+                <p className="text-xs font-black text-blue-600">ANALYSIS V3</p><h2 className="mt-1 text-xl font-black">PCE + 시장환경</h2><p className="mt-2 text-xs leading-5 text-blue-900/70">금리·VIX·DXY·나스닥 추세까지 비슷했던 과거와 가격경로.</p>
+              </Link>
+              <Link href="/data/events/pce/pattern" className="rounded-3xl border border-fuchsia-200 bg-fuchsia-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+                <p className="text-xs font-black text-fuchsia-600">ANALYSIS V4</p><h2 className="mt-1 text-xl font-black">시장 반응 유형</h2><p className="mt-2 text-xs leading-5 text-fuchsia-900/70">Risk-On·금리부담·성장둔화·리플레이션 등 Cross Asset 패턴 분류.</p>
+              </Link>
+            </section>
+
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <p className="text-xs font-black uppercase tracking-wider text-violet-600">MARKET REACTION</p>
               <h2 className="mt-1 text-2xl font-black">발표 뒤 7개 자산 반응</h2>
-              <p className="mt-2 text-xs leading-5 text-slate-500">현재 PCE V1 역사 데이터는 발표 전 거래일 종가 대비 일봉 기준입니다. +30분 정밀 반응은 다음 단계에서 추가합니다.</p>
+              <p className="mt-2 text-xs leading-5 text-slate-500">현재 PCE 역사 데이터는 발표 전 거래일 종가 대비 일봉 기준입니다. +30분 정밀 반응은 별도 데이터 원천 확보 후 확장합니다.</p>
               <div className="mt-5 overflow-x-auto">
                 <table className="w-full min-w-[680px] text-sm">
                   <thead className="bg-slate-50 text-xs font-black text-slate-400">

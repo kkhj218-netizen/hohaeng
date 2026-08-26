@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
@@ -211,6 +212,20 @@ export default async function UsMarketClosePanel() {
           </p>
         </div>
       )}
+
+      <Link
+        href="/data/regime"
+        className="mt-5 block rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-4 transition hover:border-blue-300 hover:shadow-sm"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-wider text-blue-600">HOHAENG MARKET REGIME</p>
+            <h3 className="mt-1 text-lg font-black text-slate-950">지금 시장환경을 7개 축으로 보기</h3>
+            <p className="mt-2 text-xs leading-5 text-slate-500">추세·물가·금리·유동성·VIX·달러·경기를 한 번에 보고, 과거 비슷했던 국면과 이후 1D·5D·20D 자산 반응까지 비교합니다.</p>
+          </div>
+          <span className="shrink-0 text-xl font-black text-blue-600">→</span>
+        </div>
+      </Link>
 
       <Suspense fallback={<FearGreedSkeleton />}>
         <FearGreedPanel />

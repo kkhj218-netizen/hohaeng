@@ -9,9 +9,9 @@ import MarketDataSection from "@/app/data/MarketDataSection";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "투자 데이터 | 공시·EVENT DB·글로벌 기준금리·거시 데이터 | 호행처럼",
+  title: "투자 데이터 | 시장국면·공시·EVENT DB·거시 데이터 | 호행처럼",
   description:
-    "기업 공시·실적 변화, CPI·PCE EVENT DB와 시장 반응, 주요국 기준금리 추이, 물가·고용·경기·금리구조·유동성·환율·원자재 장기 데이터를 한곳에서 확인합니다.",
+    "현재 시장국면, 기업 공시·실적 변화, CPI·PCE·고용·FOMC EVENT DB, 주요국 기준금리와 물가·고용·경기·유동성 장기 데이터를 한곳에서 확인합니다.",
   alternates: {
     canonical: "/data",
   },
@@ -29,12 +29,18 @@ export default function DataHubPage() {
             <div>
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">투자 데이터</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                TODAY의 현물·선물 마감 숫자를 반복하지 않습니다. 먼저 기업 공시에서 실제로 달라진 사실을 찾고,
-                그 아래에서 CPI·PCE EVENT DB와 글로벌 기준금리, 물가·고용·경기·금리구조·유동성 등 투자 판단의 원자료를 확인합니다.
+                TODAY의 마감 숫자를 반복하지 않습니다. 현재 시장국면을 먼저 보고, 기업 공시와 경제지표 EVENT DB,
+                글로벌 기준금리·물가·고용·경기·유동성 원자료까지 내려가며 확인합니다.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Link
+                href="/data/regime"
+                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+              >
+                시장국면 →
+              </Link>
               <Link
                 href="/data/disclosures"
                 className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
@@ -43,7 +49,7 @@ export default function DataHubPage() {
               </Link>
               <Link
                 href="/data/events"
-                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+                className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:border-blue-300"
               >
                 EVENT DB →
               </Link>
@@ -59,6 +65,22 @@ export default function DataHubPage() {
       </section>
 
       <div className="mx-auto max-w-5xl px-4 py-7 sm:px-6">
+        <section className="mb-7 rounded-3xl bg-slate-950 p-6 text-white shadow-sm sm:p-7">
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div className="max-w-3xl">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">HOHAENG MARKET REGIME</p>
+              <h2 className="mt-2 text-2xl font-black sm:text-3xl">지금 시장은 어떤 환경인가?</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                Trend·Inflation·Rates·Liquidity·Volatility·Dollar·Growth 7개 축으로 현재 환경을 정리하고,
+                2016년 이후 비슷했던 국면과 그 뒤 NQ·RTY·금·WTI·달러·국채선물의 1D·5D·20D 반응을 비교합니다.
+              </p>
+            </div>
+            <Link href="/data/regime" className="rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950">
+              현재 시장국면 보기 →
+            </Link>
+          </div>
+        </section>
+
         <Suspense
           fallback={
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -97,12 +119,18 @@ export default function DataHubPage() {
         </Suspense>
 
         <section className="mt-7 rounded-3xl bg-slate-950 p-6 text-white">
-          <h2 className="text-xl font-black">Data → Analysis → Opinion</h2>
+          <h2 className="text-xl font-black">Data → Regime → Analysis → Opinion</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-            투자 데이터에서는 공시와 공식 숫자를 먼저 확인하고, “왜 시장이 움직였는가” 같은 해석은 시황 및 시장에서 분리합니다.
-            EVENT DB가 쌓일수록 같은 경제지표가 과거 비슷한 환경에서 어떤 반응을 만들었는지 바로 비교할 수 있습니다.
+            원자료를 먼저 확인하고 현재 시장환경을 같은 기준으로 정리한 뒤, EVENT DB의 과거 사례와 연결합니다.
+            “왜 시장이 움직였는가” 같은 해석과 개인 판단은 그 다음 단계로 분리합니다.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              href="/data/regime"
+              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              MARKET REGIME →
+            </Link>
             <Link
               href="/data/disclosures"
               className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-950"
@@ -111,21 +139,15 @@ export default function DataHubPage() {
             </Link>
             <Link
               href="/data/events"
-              className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+              className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700"
             >
               경제지표 EVENT DB →
             </Link>
             <Link
               href="/blog?category=market"
-              className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold hover:bg-slate-700"
-            >
-              시황 및 시장 →
-            </Link>
-            <Link
-              href="/blog?category=investment-data"
               className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10"
             >
-              투자 데이터 글 →
+              시황 및 시장 →
             </Link>
           </div>
         </section>

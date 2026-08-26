@@ -25,40 +25,49 @@ export default function DataHubPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
             HOHAENG INVEST DATA
           </p>
-          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-            <div>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-5">
+            <div className="max-w-2xl">
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">투자 데이터</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                TODAY의 마감 숫자를 반복하지 않습니다. 현재 시장국면을 먼저 보고, 기업 공시와 경제지표 EVENT DB,
-                글로벌 기준금리·물가·고용·경기·유동성 원자료까지 내려가며 확인합니다.
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                처음이라면 오늘 시장부터 확인하세요. 그다음 궁금한 경제지표의 과거 반응이나 기업 공시·실적,
+                이번 주 주요 발표 일정으로 더 깊게 들어갈 수 있습니다.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="w-full sm:w-auto sm:min-w-[360px]">
               <Link
-                href="/data/regime"
-                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+                href="/today"
+                className="group flex w-full items-center justify-between rounded-2xl bg-blue-600 px-5 py-4 text-white shadow-sm transition hover:bg-blue-500"
               >
-                시장국면 →
+                <span>
+                  <span className="block text-base font-black">오늘 시장 한눈에</span>
+                  <span className="mt-0.5 block text-[11px] font-semibold text-blue-100">
+                    지수 · 금리 · VIX · 시장환경
+                  </span>
+                </span>
+                <span className="text-xl font-black transition group-hover:translate-x-0.5">→</span>
               </Link>
-              <Link
-                href="/data/disclosures"
-                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
-              >
-                공시 데이터 →
-              </Link>
-              <Link
-                href="/data/events"
-                className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:border-blue-300"
-              >
-                EVENT DB →
-              </Link>
-              <Link
-                href="/data/calendar"
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-blue-600 hover:border-blue-300"
-              >
-                발표 일정 →
-              </Link>
+
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <Link
+                  href="/data/events"
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-center text-xs font-black text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                >
+                  경제지표 과거반응
+                </Link>
+                <Link
+                  href="/data/disclosures"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xs font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  기업 공시·실적
+                </Link>
+                <Link
+                  href="/data/calendar"
+                  className="col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-xs font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:col-span-1"
+                >
+                  이번 주 경제일정
+                </Link>
+              </div>
             </div>
           </div>
         </div>

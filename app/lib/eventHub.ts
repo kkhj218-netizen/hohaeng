@@ -37,9 +37,9 @@ const DEFINITIONS = [
   {
     key: "US_FOMC",
     name: "FOMC",
-    description: "금리결정·점도표·성명 변화와 자산 반응을 축적할 예정입니다.",
-    href: "#",
-    status: "planned" as const,
+    description: "기준금리 범위·결정 변화폭·SEP 장기 점도표와 7개 자산의 발표 후 반응을 연결합니다.",
+    href: "/data/events/fomc",
+    status: "active" as const,
   },
 ] as const;
 

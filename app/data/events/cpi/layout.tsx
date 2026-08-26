@@ -14,6 +14,9 @@ export default function CpiEventLayout({ children }: { children: React.ReactNode
           <Link href="/data/events/cpi/regime" className="whitespace-nowrap rounded-full border border-fuchsia-200 bg-fuchsia-50 px-3.5 py-2 text-fuchsia-700">
             CPI + 시장환경
           </Link>
+          <Link href="/data/events/cpi/pattern" className="whitespace-nowrap rounded-full border border-orange-200 bg-orange-50 px-3.5 py-2 text-orange-700">
+            시장 반응 유형
+          </Link>
           <Link href="/data/events/cpi/history" className="whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-3.5 py-2 text-blue-700">
             2016~ 10년 아카이브
           </Link>

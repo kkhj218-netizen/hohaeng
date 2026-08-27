@@ -1,49 +1,14 @@
 import "server-only";
 
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
+import type {
+  MarketMapIndexKey,
+  MarketMapSector,
+  MarketMapSnapshot,
+  MarketMapStock,
+} from "@/app/lib/marketMapTypes";
 
-export type MarketMapIndexKey = "nasdaq100" | "sp500";
-
-export type MarketMapStock = {
-  symbol: string;
-  displaySymbol: string;
-  name: string;
-  sector: string;
-  industry: string;
-  price: number | null;
-  changePercent: number;
-  marketCap: number;
-  volume: number | null;
-};
-
-export type MarketMapSector = {
-  name: string;
-  stockCount: number;
-  marketCap: number;
-  weightedChange: number;
-  advancers: number;
-  decliners: number;
-};
-
-export type MarketMapSnapshot = {
-  indexKey: MarketMapIndexKey;
-  indexName: string;
-  marketDate: string | null;
-  generatedAt: string;
-  stocks: MarketMapStock[];
-  sectors: MarketMapSector[];
-  totalCount: number;
-  advancers: number;
-  decliners: number;
-  unchanged: number;
-  advanceRatio: number;
-  advanceMarketCapShare: number;
-  marketCapWeightedChange: number;
-  breadthLabel: "강한 확산" | "중립" | "약한 확산";
-  strongestSector: MarketMapSector | null;
-  weakestSector: MarketMapSector | null;
-  sourceNote: string;
-};
+export type { MarketMapIndexKey, MarketMapSector, MarketMapSnapshot, MarketMapStock } from "@/app/lib/marketMapTypes";
 
 type MembershipRow = {
   symbol: string;
@@ -213,7 +178,7 @@ async function fetchMembership(indexKey: MarketMapIndexKey): Promise<MembershipR
 }
 
 async function fetchNasdaqScreenerRows(): Promise<NasdaqScreenerRow[]> {
-  // 뉴욕 날짜를 캐시 키에 포함해, 매일 새 스냅샷이 만들어지도록 한다.
+  // 뉴욕 날짜를 캐시 키에 포함해 매일 새 스냅샷을 만든다.
   // 05:30 UTC cron이 미국장 개장 전에 이 캐시를 미리 채운다.
   const sessionKey = newYorkDateKey();
   const url = `${NASDAQ_SCREENER_URL}&hohaeng_session=${encodeURIComponent(sessionKey)}`;

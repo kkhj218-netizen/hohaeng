@@ -68,10 +68,16 @@ export default async function MarketMapPage() {
                 NASDAQ100과 S&amp;P500 구성종목을 장마감 기준으로 묶어 봅니다. 박스 크기는 시가총액,
                 색은 전일 등락률이며, 지수 숫자만으로는 보이지 않는 상승·하락 확산도를 함께 확인합니다.
               </p>
+              <p className="mt-2 text-xs leading-5 text-amber-200">
+                ⚠ 향후 7일 내 대형주 실적이 잡히면 큰 종목 박스에 D-day 경고가 함께 표시됩니다.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/today" className="rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950">
                 TODAY →
+              </Link>
+              <Link href="/data/earnings-risk" className="rounded-full border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-black text-amber-200 hover:bg-amber-300/20">
+                실적 위험 레이더 →
               </Link>
               <Link href="/data/regime" className="rounded-full border border-white/20 px-4 py-2 text-sm font-black text-white hover:bg-white/10">
                 MARKET REGIME →

@@ -1,6 +1,5 @@
-const CACHE_NAME = "hohaeng-shell-v4";
+const CACHE_NAME = "hohaeng-shell-v5";
 const STATIC_ASSETS = [
-  "/",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
@@ -37,41 +36,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-async function updateNavigationCache(request) {
-  const cache = await caches.open(CACHE_NAME);
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      await cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    return null;
-  }
-}
-
-async function cachedNavigation(request, networkPromise) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request, { ignoreSearch: true });
-
-  // PWA 재실행에서는 캐시가 있으면 네트워크를 전혀 기다리지 않는다.
-  if (cached) return cached;
-
-  const network = await networkPromise;
-  return network || Response.error();
-}
-
-async function warmToday() {
-  const request = new Request("/today", { cache: "reload" });
-  await updateNavigationCache(request);
-}
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "WARM_TODAY") {
-    event.waitUntil(warmToday());
-  }
-});
-
 async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
@@ -91,14 +55,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // 동적 페이지 HTML/RSC는 캐시하지 않는다.
+  // 배포 후 오래된 HTML이 새 JS 청크와 섞여 PWA가 깨지는 문제를 막는다.
   if (request.mode === "navigate") {
-    if (url.pathname === "/" || url.pathname.startsWith("/today")) {
-      const refresh = updateNavigationCache(request);
-      event.waitUntil(refresh.then(() => undefined));
-      event.respondWith(cachedNavigation(request, refresh));
-      return;
-    }
-
     event.respondWith(fetch(request));
     return;
   }

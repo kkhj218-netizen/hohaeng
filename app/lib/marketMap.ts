@@ -47,11 +47,18 @@ const NASDAQ_SCREENER_URL =
 
 const MEMBERSHIP_CACHE_SECONDS = 60 * 60 * 24 * 7;
 const MARKET_CACHE_SECONDS = 90_000;
-const FETCH_TIMEOUT_MS = 20_000;
+const MEMBERSHIP_TIMEOUT_MS = 25_000;
+const MARKET_FETCH_TIMEOUT_MS = 45_000;
+const MARKET_FETCH_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 1_200;
 
 function round(value: number, digits = 2) {
   const factor = 10 ** digits;
   return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseCsvLine(line: string) {
@@ -152,7 +159,7 @@ async function fetchText(url: string, revalidate: number) {
       Accept: "text/plain,text/csv;q=0.9,*/*;q=0.8",
       "User-Agent": "Mozilla/5.0 (compatible; HOHAENG-OS/1.0; +https://hohaeng.vercel.app)",
     },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(MEMBERSHIP_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`구성종목 데이터를 불러오지 못했습니다. (${response.status})`);
   return response.text();
@@ -184,19 +191,42 @@ async function fetchMembership(indexKey: MarketMapIndexKey): Promise<MembershipR
 
 async function fetchNasdaqScreenerRows(): Promise<NasdaqScreenerRow[]> {
   const sessionKey = newYorkDateKey();
-  const url = `${NASDAQ_SCREENER_URL}&hohaeng_session=${encodeURIComponent(sessionKey)}`;
-  const response = await fetch(url, {
-    next: { revalidate: MARKET_CACHE_SECONDS },
-    headers: {
-      Accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; HOHAENG-OS/1.0; +https://hohaeng.vercel.app)",
-      Referer: "https://www.nasdaq.com/market-activity/stocks/screener",
-    },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new Error(`NASDAQ 종가 스냅샷을 불러오지 못했습니다. (${response.status})`);
-  const payload = (await response.json()) as NasdaqScreenerResponse;
-  return payload.data?.rows ?? [];
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= MARKET_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const url = `${NASDAQ_SCREENER_URL}&hohaeng_session=${encodeURIComponent(sessionKey)}&hohaeng_attempt=${attempt}`;
+      const response = await fetch(url, {
+        next: { revalidate: MARKET_CACHE_SECONDS },
+        headers: {
+          Accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (compatible; HOHAENG-OS/1.0; +https://hohaeng.vercel.app)",
+          Referer: "https://www.nasdaq.com/market-activity/stocks/screener",
+        },
+        signal: AbortSignal.timeout(MARKET_FETCH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        throw new Error(`NASDAQ 종가 스냅샷 응답 오류 (${response.status})`);
+      }
+
+      const payload = (await response.json()) as NasdaqScreenerResponse;
+      const rows = payload.data?.rows ?? [];
+      if (rows.length < 500) {
+        throw new Error(`NASDAQ 종가 스냅샷이 불완전합니다. (${rows.length}개)`);
+      }
+      return rows;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MARKET_FETCH_ATTEMPTS) {
+        console.warn(`NASDAQ MARKET MAP 원본 수집 ${attempt}차 실패, 재시도합니다.`, error);
+        await sleep(RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "알 수 없는 오류");
+  throw new Error(`NASDAQ MARKET MAP 원본 데이터를 가져오지 못했습니다. ${detail}`);
 }
 
 function sectorSummary(stocks: MarketMapStock[]): MarketMapSector[] {
@@ -327,7 +357,7 @@ export async function getMarketMapSnapshot(
 }
 
 export async function warmMarketMapCache() {
-  // NASDAQ screener는 전체 시장 스냅샷이므로 한 번만 받아 두 지수에 재사용한다.
+  // 전체 시장 원본은 한 번만 받아 NASDAQ100과 S&P500에 함께 사용한다.
   const [nasdaqMembership, sp500Membership, screenerRows, marketDate] = await Promise.all([
     fetchMembership("nasdaq100"),
     fetchMembership("sp500"),
@@ -337,6 +367,14 @@ export async function warmMarketMapCache() {
 
   const nasdaq100 = buildSnapshot("nasdaq100", nasdaqMembership, screenerRows, marketDate);
   const sp500 = buildSnapshot("sp500", sp500Membership, screenerRows, marketDate);
+
+  // 외부 원본이 일부만 내려온 경우 빈/불완전 스냅샷을 영구 저장하지 않는다.
+  if (nasdaq100.totalCount < 80) {
+    throw new Error(`NASDAQ100 MARKET MAP 종목 수가 부족합니다. (${nasdaq100.totalCount}개)`);
+  }
+  if (sp500.totalCount < 400) {
+    throw new Error(`S&P500 MARKET MAP 종목 수가 부족합니다. (${sp500.totalCount}개)`);
+  }
 
   const [nasdaqStorage, sp500Storage] = await Promise.all([
     saveMarketMapSnapshot(nasdaq100),

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       startedAt,
       completedAt: new Date().toISOString(),
       ...result,
-      schedule: "05:30 UTC · 미국장 개장 전 장마감 스냅샷 캐시",
+      schedule: "05:30 UTC · 미국장 개장 전 장마감 MARKET MAP 생성 → DB 저장",
     });
   } catch (error) {
     return NextResponse.json(

@@ -134,7 +134,7 @@ export default function MarketMapExplorer({ nasdaq100, sp500 }: Props) {
           <p className="text-[11px] font-semibold text-slate-400">종목을 누르면 상세 숫자를 확인할 수 있습니다.</p>
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mt-4 flex gap-1.5 overflow-x-auto pb-2 pr-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             onClick={() => setSector("ALL")}
@@ -149,7 +149,7 @@ export default function MarketMapExplorer({ nasdaq100, sp500 }: Props) {
                 type="button"
                 key={name}
                 onClick={() => setSector(name)}
-                className={`shrink-0 rounded-full px-3 py-2 text-xs font-black ${sector === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                className={`shrink-0 rounded-full px-2.5 py-2 text-xs font-black ${sector === name ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
               >
                 {name} {summary?.stockCount ?? 0}
               </button>
@@ -223,25 +223,28 @@ export default function MarketMapExplorer({ nasdaq100, sp500 }: Props) {
             </p>
           )}
         </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-xs">
+        <div className="mt-3 flex items-center justify-end text-[10px] font-bold text-slate-400 sm:hidden">
+          ← 좌우로 밀어 전체 보기 →
+        </div>
+        <div className="mt-2 -mr-2 overflow-x-auto pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-4 sm:mr-0 sm:pr-0">
+          <table className="w-full min-w-[540px] text-left text-xs sm:min-w-[620px]">
             <thead className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="px-2 py-2">섹터</th>
-                <th className="px-2 py-2 text-right">종목수</th>
-                <th className="px-2 py-2 text-right">상승</th>
-                <th className="px-2 py-2 text-right">하락</th>
-                <th className="px-2 py-2 text-right">시총가중 평균</th>
+                <th className="w-[180px] px-1.5 py-2 sm:px-2">섹터</th>
+                <th className="w-[72px] px-1.5 py-2 text-right sm:px-2">종목수</th>
+                <th className="w-[64px] px-1.5 py-2 text-right sm:px-2">상승</th>
+                <th className="w-[64px] px-1.5 py-2 text-right sm:px-2">하락</th>
+                <th className="w-[110px] px-1.5 py-2 text-right sm:px-2">시총가중 평균</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {[...snapshot.sectors].sort((a, b) => b.weightedChange - a.weightedChange).map((item) => (
                 <tr key={item.name}>
-                  <td className="px-2 py-3 font-black text-slate-800">{item.name}</td>
-                  <td className="px-2 py-3 text-right font-semibold text-slate-500">{item.stockCount}</td>
-                  <td className="px-2 py-3 text-right font-bold text-emerald-600">{item.advancers}</td>
-                  <td className="px-2 py-3 text-right font-bold text-rose-600">{item.decliners}</td>
-                  <td className={`px-2 py-3 text-right font-black ${tone(item.weightedChange)}`}>{signedPercent(item.weightedChange)}</td>
+                  <td className="max-w-[180px] truncate px-1.5 py-3 font-black text-slate-800 sm:px-2" title={item.name}>{item.name}</td>
+                  <td className="px-1.5 py-3 text-right font-semibold text-slate-500 sm:px-2">{item.stockCount}</td>
+                  <td className="px-1.5 py-3 text-right font-bold text-emerald-600 sm:px-2">{item.advancers}</td>
+                  <td className="px-1.5 py-3 text-right font-bold text-rose-600 sm:px-2">{item.decliners}</td>
+                  <td className={`px-1.5 py-3 text-right font-black sm:px-2 ${tone(item.weightedChange)}`}>{signedPercent(item.weightedChange)}</td>
                 </tr>
               ))}
             </tbody>

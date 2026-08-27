@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import type { EarningsRiskEvent, EarningsRiskSnapshot } from "@/app/lib/earningsRiskTypes";
 import type { MarketMapStock } from "@/app/lib/marketMapTypes";
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -12,6 +13,11 @@ type MarketTreemapProps = {
   stocks: MarketMapStock[];
   compact?: boolean;
   showDetail?: boolean;
+};
+
+type EarningsApiResponse = {
+  ok?: boolean;
+  snapshot?: EarningsRiskSnapshot | null;
 };
 
 function sumWeight<T>(items: Weighted<T>[]) {
@@ -108,12 +114,50 @@ function formatMarketCap(value: number) {
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
+function normalizeSymbol(value: string) {
+  return value.trim().toUpperCase().replaceAll(".", "/");
+}
+
+function earningsDday(event: EarningsRiskEvent) {
+  if (event.daysAway <= 0) return "오늘";
+  return `D-${event.daysAway}`;
+}
+
 export default function MarketTreemap({
   stocks,
   compact = false,
   showDetail = true,
 }: MarketTreemapProps) {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [earningsEvents, setEarningsEvents] = useState<EarningsRiskEvent[]>([]);
+
+  useEffect(() => {
+    if (compact) return;
+    let cancelled = false;
+
+    async function loadEarnings() {
+      try {
+        const response = await fetch("/api/public/earnings-risk", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as EarningsApiResponse;
+        if (!cancelled && payload.snapshot?.events) {
+          setEarningsEvents(payload.snapshot.events);
+        }
+      } catch {
+        // MARKET MAP 자체 표시를 방해하지 않는다.
+      }
+    }
+
+    void loadEarnings();
+    return () => {
+      cancelled = true;
+    };
+  }, [compact]);
+
+  const earningsMap = useMemo(
+    () => new Map(earningsEvents.map((event) => [normalizeSymbol(event.symbol), event])),
+    [earningsEvents],
+  );
 
   const layout = useMemo(() => {
     const sectorMap = new Map<string, MarketMapStock[]>();
@@ -153,6 +197,9 @@ export default function MarketTreemap({
 
   const selected = selectedSymbol
     ? stocks.find((stock) => stock.symbol === selectedSymbol) ?? null
+    : null;
+  const selectedEarnings = selected
+    ? earningsMap.get(normalizeSymbol(selected.symbol)) ?? null
     : null;
 
   if (stocks.length === 0) {
@@ -195,6 +242,8 @@ export default function MarketTreemap({
               const showSymbol = compact ? area >= 22 : area >= 10;
               const showChange = compact ? area >= 48 : area >= 24;
               const symbolSize = Math.max(8, Math.min(compact ? 16 : 22, Math.sqrt(area) * 1.5));
+              const earnings = earningsMap.get(normalizeSymbol(stock.symbol));
+              const showEarnings = !compact && Boolean(earnings) && area >= 28;
               return (
                 <button
                   type="button"
@@ -208,8 +257,13 @@ export default function MarketTreemap({
                     height: `${rect.height}%`,
                     backgroundColor: background(stock.changePercent),
                   }}
-                  title={`${stock.displaySymbol} ${stock.name} ${signedPercent(stock.changePercent)}`}
+                  title={`${stock.displaySymbol} ${stock.name} ${signedPercent(stock.changePercent)}${earnings ? ` · 실적 ${earningsDday(earnings)}` : ""}`}
                 >
+                  {showEarnings && earnings && (
+                    <span className="absolute right-1 top-1 z-20 rounded-full bg-amber-300 px-1.5 py-0.5 text-[8px] font-black text-slate-950 shadow-sm sm:text-[9px]">
+                      ⚠ {earningsDday(earnings)}
+                    </span>
+                  )}
                   {showSymbol && (
                     <span className="leading-tight drop-shadow-sm">
                       <strong className="block font-black" style={{ fontSize: `${symbolSize}px` }}>
@@ -249,6 +303,20 @@ export default function MarketTreemap({
               <p className="mt-1 text-xs font-bold text-slate-500">{formatPrice(selected.price)}</p>
             </div>
           </div>
+
+          {selectedEarnings && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+              <div className="flex flex-wrap items-center gap-2 font-black">
+                <span>⚠ 실적 {earningsDday(selectedEarnings)}</span>
+                <span>· {selectedEarnings.sessionLabel}</span>
+                <span>· 영향도 {selectedEarnings.impactScore}</span>
+              </div>
+              <p className="mt-1 text-[10px] font-semibold text-amber-700">
+                {selectedEarnings.reportDate} · {selectedEarnings.confidenceLabel} 일정
+              </p>
+            </div>
+          )}
+
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl bg-slate-50 p-3">
               <p className="font-semibold text-slate-400">시가총액</p>

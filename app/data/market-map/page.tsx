@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import MarketMapExplorer from "@/app/data/market-map/MarketMapExplorer";
 import { getMarketMapSnapshot } from "@/app/lib/marketMap";
+import type { MarketMapSnapshot } from "@/app/lib/marketMapTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,8 @@ export const metadata: Metadata = {
 };
 
 export default async function MarketMapPage() {
-  let nasdaq100;
-  let sp500;
+  let nasdaq100: MarketMapSnapshot;
+  let sp500: MarketMapSnapshot;
 
   try {
     [nasdaq100, sp500] = await Promise.all([

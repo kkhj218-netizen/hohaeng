@@ -6,6 +6,7 @@ import { getUsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/us
 import FearGreedPanel, { FearGreedSkeleton } from "@/app/today/FearGreedPanel";
 import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
 import MajorFuturesPanel, { MajorFuturesSkeleton } from "@/app/today/MajorFuturesPanel";
+import MarketMapPreview from "@/app/today/MarketMapPreview";
 
 const PAIRS = [
   { cash: "NASDAQ", future: "NQ", label: "나스닥 ↔ NQ" },
@@ -212,6 +213,14 @@ export default async function UsMarketClosePanel() {
           </p>
         </div>
       )}
+
+      <Suspense
+        fallback={
+          <div className="mt-5 h-[430px] animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
+        }
+      >
+        <MarketMapPreview />
+      </Suspense>
 
       <Link
         href="/data/regime"

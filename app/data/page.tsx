@@ -9,9 +9,9 @@ import MarketDataSection from "@/app/data/MarketDataSection";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "투자 데이터 | 시장국면·공시·EVENT DB·거시 데이터 | 호행처럼",
+  title: "투자 데이터 | 시장국면·시장지도·공시·EVENT DB·거시 데이터 | 호행처럼",
   description:
-    "현재 시장국면, 기업 공시·실적 변화, CPI·PCE·고용·FOMC EVENT DB, 주요국 기준금리와 물가·고용·경기·유동성 장기 데이터를 한곳에서 확인합니다.",
+    "현재 시장국면, NASDAQ100·S&P500 시장지도, 기업 공시·실적 변화, CPI·PCE·고용·FOMC EVENT DB, 주요국 기준금리와 물가·고용·경기·유동성 장기 데이터를 한곳에서 확인합니다.",
   alternates: {
     canonical: "/data",
   },
@@ -74,7 +74,7 @@ export default function DataHubPage() {
       </section>
 
       <div className="mx-auto max-w-5xl px-4 py-7 sm:px-6">
-        <section className="mb-7 rounded-3xl bg-slate-950 p-6 text-white shadow-sm sm:p-7">
+        <section className="mb-4 rounded-3xl bg-slate-950 p-6 text-white shadow-sm sm:p-7">
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div className="max-w-3xl">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">HOHAENG MARKET REGIME</p>
@@ -87,6 +87,47 @@ export default function DataHubPage() {
             <Link href="/data/regime" className="rounded-full bg-white px-5 py-2.5 text-sm font-black text-slate-950">
               현재 시장국면 보기 →
             </Link>
+          </div>
+        </section>
+
+        <section className="mb-7 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid gap-0 md:grid-cols-[1.25fr_0.75fr]">
+            <div className="p-6 sm:p-7">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">HOHAENG MARKET MAP</p>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">어제 미국장은 어디가 움직였을까?</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                NASDAQ100·S&amp;P500 구성종목을 시가총액 크기와 전일 등락률로 펼쳐 봅니다.
+                상승·하락 종목 수, 상승 시총 비중, 강한·약한 섹터까지 한 화면에서 확인합니다.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">NASDAQ 100</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">S&amp;P 500</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">Breadth</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5">Sector</span>
+              </div>
+              <Link
+                href="/data/market-map"
+                className="mt-5 inline-flex rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-500"
+              >
+                미국장 시장지도 보기 →
+              </Link>
+            </div>
+            <div className="flex min-h-44 items-center justify-center bg-gradient-to-br from-emerald-950 via-slate-950 to-rose-950 p-6 text-white">
+              <div className="grid w-full max-w-xs grid-cols-4 gap-1.5" aria-hidden="true">
+                {[
+                  ["NVDA", "bg-rose-700 col-span-2 row-span-2"],
+                  ["MSFT", "bg-emerald-700 col-span-2"],
+                  ["AAPL", "bg-emerald-600"],
+                  ["AMZN", "bg-rose-600"],
+                  ["META", "bg-emerald-800"],
+                  ["AVGO", "bg-rose-800"],
+                ].map(([symbol, className]) => (
+                  <div key={symbol} className={`flex min-h-12 items-center justify-center rounded-lg text-[10px] font-black ${className}`}>
+                    {symbol}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -135,6 +176,12 @@ export default function DataHubPage() {
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
+              href="/data/market-map"
+              className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500"
+            >
+              MARKET MAP →
+            </Link>
+            <Link
               href="/data/regime"
               className="rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
             >
@@ -151,12 +198,6 @@ export default function DataHubPage() {
               className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700"
             >
               경제지표 EVENT DB →
-            </Link>
-            <Link
-              href="/blog?category=market"
-              className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10"
-            >
-              시황 및 시장 →
             </Link>
           </div>
         </section>

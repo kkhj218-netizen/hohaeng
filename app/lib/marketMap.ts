@@ -28,10 +28,24 @@ type NasdaqScreenerRow = {
   industry?: string;
 };
 
+type NasdaqScreenerTable = {
+  rows?: NasdaqScreenerRow[];
+  totalrecords?: number | string;
+  totalRecords?: number | string;
+};
+
 type NasdaqScreenerResponse = {
   data?: {
     rows?: NasdaqScreenerRow[];
+    table?: NasdaqScreenerTable;
+    totalrecords?: number | string;
+    totalRecords?: number | string;
   };
+};
+
+type NasdaqPage = {
+  rows: NasdaqScreenerRow[];
+  total: number | null;
 };
 
 type GetSnapshotOptions = {
@@ -42,15 +56,16 @@ const NASDAQ_100_URL =
   "https://raw.githubusercontent.com/Gary-Strauss/NASDAQ100_Constituents/master/data/nasdaq100_constituents.csv";
 const SP500_URL =
   "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv";
-const NASDAQ_SCREENER_URL =
-  "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=25&offset=0&download=true";
+const NASDAQ_SCREENER_BASE_URL = "https://api.nasdaq.com/api/screener/stocks";
 
 const MEMBERSHIP_CACHE_SECONDS = 60 * 60 * 24 * 7;
-const MARKET_CACHE_SECONDS = 90_000;
 const MEMBERSHIP_TIMEOUT_MS = 25_000;
-const MARKET_FETCH_TIMEOUT_MS = 45_000;
+const MARKET_PAGE_SIZE = 1_000;
+const MARKET_MAX_PAGES = 10;
+const MARKET_PAGE_CONCURRENCY = 3;
+const MARKET_FETCH_TIMEOUT_MS = 15_000;
 const MARKET_FETCH_ATTEMPTS = 2;
-const RETRY_DELAY_MS = 1_200;
+const RETRY_DELAY_MS = 900;
 
 function round(value: number, digits = 2) {
   const factor = 10 ** digits;
@@ -100,6 +115,12 @@ function parseNumeric(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number(value.replaceAll(",", "").replaceAll("$", "").replaceAll("%", "").trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCount(value: number | string | undefined): number | null {
+  if (value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value.replaceAll(",", "").trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function normalizeSector(value: string | undefined, fallback: string) {
@@ -189,44 +210,106 @@ async function fetchMembership(indexKey: MarketMapIndexKey): Promise<MembershipR
   }).filter((item) => item.symbol);
 }
 
-async function fetchNasdaqScreenerRows(): Promise<NasdaqScreenerRow[]> {
-  const sessionKey = newYorkDateKey();
+function extractNasdaqPage(payload: NasdaqScreenerResponse): NasdaqPage {
+  const data = payload.data;
+  const rows = data?.rows ?? data?.table?.rows ?? [];
+  const total =
+    parseCount(data?.totalrecords) ??
+    parseCount(data?.totalRecords) ??
+    parseCount(data?.table?.totalrecords) ??
+    parseCount(data?.table?.totalRecords);
+  return { rows, total };
+}
+
+async function fetchNasdaqPage(offset: number): Promise<NasdaqPage> {
   let lastError: unknown = null;
+  const sessionKey = newYorkDateKey();
 
   for (let attempt = 1; attempt <= MARKET_FETCH_ATTEMPTS; attempt += 1) {
     try {
-      const url = `${NASDAQ_SCREENER_URL}&hohaeng_session=${encodeURIComponent(sessionKey)}&hohaeng_attempt=${attempt}`;
-      const response = await fetch(url, {
-        next: { revalidate: MARKET_CACHE_SECONDS },
+      const params = new URLSearchParams({
+        tableonly: "true",
+        limit: String(MARKET_PAGE_SIZE),
+        offset: String(offset),
+        hohaeng_session: sessionKey,
+        hohaeng_attempt: String(attempt),
+      });
+      const response = await fetch(`${NASDAQ_SCREENER_BASE_URL}?${params.toString()}`, {
+        cache: "no-store",
         headers: {
-          Accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
-          "User-Agent": "Mozilla/5.0 (compatible; HOHAENG-OS/1.0; +https://hohaeng.vercel.app)",
+          Accept: "application/json,text/plain,*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          Origin: "https://www.nasdaq.com",
           Referer: "https://www.nasdaq.com/market-activity/stocks/screener",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
         },
         signal: AbortSignal.timeout(MARKET_FETCH_TIMEOUT_MS),
       });
 
-      if (!response.ok) {
-        throw new Error(`NASDAQ 종가 스냅샷 응답 오류 (${response.status})`);
+      if (!response.ok) throw new Error(`NASDAQ 페이지 응답 오류 (${response.status}, offset ${offset})`);
+      const page = extractNasdaqPage((await response.json()) as NasdaqScreenerResponse);
+      if (page.rows.length === 0 && offset === 0) {
+        throw new Error("NASDAQ 첫 페이지가 비어 있습니다.");
       }
-
-      const payload = (await response.json()) as NasdaqScreenerResponse;
-      const rows = payload.data?.rows ?? [];
-      if (rows.length < 500) {
-        throw new Error(`NASDAQ 종가 스냅샷이 불완전합니다. (${rows.length}개)`);
-      }
-      return rows;
+      return page;
     } catch (error) {
       lastError = error;
       if (attempt < MARKET_FETCH_ATTEMPTS) {
-        console.warn(`NASDAQ MARKET MAP 원본 수집 ${attempt}차 실패, 재시도합니다.`, error);
-        await sleep(RETRY_DELAY_MS);
+        await sleep(RETRY_DELAY_MS * attempt);
       }
     }
   }
 
   const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "알 수 없는 오류");
-  throw new Error(`NASDAQ MARKET MAP 원본 데이터를 가져오지 못했습니다. ${detail}`);
+  throw new Error(detail);
+}
+
+async function fetchNasdaqScreenerRows(): Promise<NasdaqScreenerRow[]> {
+  const firstPage = await fetchNasdaqPage(0);
+  const totalPages = firstPage.total
+    ? Math.min(MARKET_MAX_PAGES, Math.max(1, Math.ceil(firstPage.total / MARKET_PAGE_SIZE)))
+    : MARKET_MAX_PAGES;
+
+  const collected = [...firstPage.rows];
+  const failures: string[] = [];
+  let shouldStop = firstPage.rows.length < MARKET_PAGE_SIZE;
+
+  for (let page = 1; page < totalPages && !shouldStop; page += MARKET_PAGE_CONCURRENCY) {
+    const offsets = Array.from(
+      { length: Math.min(MARKET_PAGE_CONCURRENCY, totalPages - page) },
+      (_, index) => (page + index) * MARKET_PAGE_SIZE,
+    );
+    const results = await Promise.allSettled(offsets.map((offset) => fetchNasdaqPage(offset)));
+
+    results.forEach((result, index) => {
+      const offset = offsets[index];
+      if (result.status === "fulfilled") {
+        collected.push(...result.value.rows);
+        if (!firstPage.total && result.value.rows.length < MARKET_PAGE_SIZE) shouldStop = true;
+      } else {
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        failures.push(`offset ${offset}: ${message}`);
+      }
+    });
+  }
+
+  const bySymbol = new Map<string, NasdaqScreenerRow>();
+  for (const row of collected) {
+    if (!row.symbol) continue;
+    bySymbol.set(normalizeSymbol(row.symbol), row);
+  }
+  const rows = Array.from(bySymbol.values());
+
+  if (rows.length < 500) {
+    const failureNote = failures.length > 0 ? ` 실패 페이지: ${failures.join(" / ")}` : "";
+    throw new Error(`NASDAQ MARKET MAP 원본 데이터가 부족합니다. (${rows.length}개).${failureNote}`);
+  }
+
+  if (failures.length > 0) {
+    console.warn("NASDAQ MARKET MAP 일부 페이지 재시도 후 누락:", failures);
+  }
+  return rows;
 }
 
 function sectorSummary(stocks: MarketMapStock[]): MarketMapSector[] {
@@ -325,7 +408,7 @@ function buildSnapshot(
     strongestSector: byPerformance[0] ?? null,
     weakestSector: byPerformance.at(-1) ?? null,
     sourceNote:
-      "구성종목은 공개 구성자료, 종가·등락률·시가총액·섹터는 NASDAQ Stock Screener의 최근 장마감 스냅샷을 사용합니다. 공개 화면은 저장된 완성 스냅샷을 우선 읽으며, 시총가중 평균은 실제 지수 수익률과 다를 수 있습니다.",
+      "구성종목은 공개 구성자료, 종가·등락률·시가총액·섹터는 NASDAQ Stock Screener의 장마감 데이터를 페이지 단위로 수집합니다. 공개 화면은 저장된 완성 스냅샷만 읽으며, 시총가중 평균은 실제 지수 수익률과 다를 수 있습니다.",
   };
 }
 
@@ -357,7 +440,6 @@ export async function getMarketMapSnapshot(
 }
 
 export async function warmMarketMapCache() {
-  // 전체 시장 원본은 한 번만 받아 NASDAQ100과 S&P500에 함께 사용한다.
   const [nasdaqMembership, sp500Membership, screenerRows, marketDate] = await Promise.all([
     fetchMembership("nasdaq100"),
     fetchMembership("sp500"),
@@ -368,7 +450,6 @@ export async function warmMarketMapCache() {
   const nasdaq100 = buildSnapshot("nasdaq100", nasdaqMembership, screenerRows, marketDate);
   const sp500 = buildSnapshot("sp500", sp500Membership, screenerRows, marketDate);
 
-  // 외부 원본이 일부만 내려온 경우 빈/불완전 스냅샷을 영구 저장하지 않는다.
   if (nasdaq100.totalCount < 80) {
     throw new Error(`NASDAQ100 MARKET MAP 종목 수가 부족합니다. (${nasdaq100.totalCount}개)`);
   }

@@ -327,10 +327,16 @@ export async function getMarketMapSnapshot(
 }
 
 export async function warmMarketMapCache() {
-  const [nasdaq100, sp500] = await Promise.all([
-    buildFreshMarketMapSnapshot("nasdaq100"),
-    buildFreshMarketMapSnapshot("sp500"),
+  // NASDAQ screener는 전체 시장 스냅샷이므로 한 번만 받아 두 지수에 재사용한다.
+  const [nasdaqMembership, sp500Membership, screenerRows, marketDate] = await Promise.all([
+    fetchMembership("nasdaq100"),
+    fetchMembership("sp500"),
+    fetchNasdaqScreenerRows(),
+    latestMarketDate(),
   ]);
+
+  const nasdaq100 = buildSnapshot("nasdaq100", nasdaqMembership, screenerRows, marketDate);
+  const sp500 = buildSnapshot("sp500", sp500Membership, screenerRows, marketDate);
 
   const [nasdaqStorage, sp500Storage] = await Promise.all([
     saveMarketMapSnapshot(nasdaq100),

@@ -11,9 +11,6 @@ export default function PwaRegister() {
         await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
         });
-
-        const ready = await navigator.serviceWorker.ready;
-        ready.active?.postMessage({ type: "WARM_TODAY" });
       } catch (error) {
         console.warn("호행처럼 앱 등록 실패:", error);
       }

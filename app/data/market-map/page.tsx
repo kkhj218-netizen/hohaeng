@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import MarketMapExplorer from "@/app/data/market-map/MarketMapExplorer";
-import { getMarketMapSnapshot } from "@/app/lib/marketMap";
-import type { MarketMapSnapshot } from "@/app/lib/marketMapTypes";
+import { loadMarketMapSnapshot } from "@/app/lib/marketMapSnapshotStore";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 120;
 
 export const metadata: Metadata = {
   title: "미국 주식 시장 히트맵 | NASDAQ100·S&P500 MARKET MAP | 호행처럼",
@@ -20,29 +19,36 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function MarketMapPage() {
-  let nasdaq100: MarketMapSnapshot;
-  let sp500: MarketMapSnapshot;
-
-  try {
-    [nasdaq100, sp500] = await Promise.all([
-      getMarketMapSnapshot("nasdaq100"),
-      getMarketMapSnapshot("sp500"),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "시장 지도를 불러오지 못했습니다.";
-    return (
-      <main className="min-h-screen bg-[#f6f7f9] px-4 py-10 text-slate-900">
-        <div className="mx-auto max-w-5xl rounded-3xl border border-rose-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-rose-600">MARKET MAP</p>
-          <h1 className="mt-2 text-2xl font-black">시장 지도를 잠시 불러오지 못했습니다.</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-500">{message}</p>
-          <Link href="/data" className="mt-5 inline-flex rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">
-            투자 데이터 홈으로 →
+function PreparingState() {
+  return (
+    <main className="min-h-screen bg-[#f6f7f9] px-4 py-10 text-slate-900">
+      <div className="mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">HOHAENG MARKET MAP</p>
+        <h1 className="mt-2 text-2xl font-black">시장지도 데이터를 준비하고 있습니다.</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+          공개 화면에서는 외부 시세 API를 직접 기다리지 않습니다. 미국장 마감 후 자동 수집된 저장 스냅샷이 준비되면 NASDAQ100과 S&amp;P500 지도가 바로 표시됩니다.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link href="/today" className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white">
+            TODAY로 돌아가기 →
+          </Link>
+          <Link href="/data" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-black text-slate-700">
+            투자 데이터 홈 →
           </Link>
         </div>
-      </main>
-    );
+      </div>
+    </main>
+  );
+}
+
+export default async function MarketMapPage() {
+  const [nasdaq100, sp500] = await Promise.all([
+    loadMarketMapSnapshot("nasdaq100"),
+    loadMarketMapSnapshot("sp500"),
+  ]);
+
+  if (!nasdaq100 || !sp500) {
+    return <PreparingState />;
   }
 
   return (

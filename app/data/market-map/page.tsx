@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import MarketMapBootstrap from "@/app/data/market-map/MarketMapBootstrap";
 import MarketMapExplorer from "@/app/data/market-map/MarketMapExplorer";
 import { loadMarketMapSnapshot } from "@/app/lib/marketMapSnapshotStore";
 
@@ -24,10 +25,14 @@ function PreparingState() {
     <main className="min-h-screen bg-[#f6f7f9] px-4 py-10 text-slate-900">
       <div className="mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">HOHAENG MARKET MAP</p>
-        <h1 className="mt-2 text-2xl font-black">시장지도 데이터를 준비하고 있습니다.</h1>
+        <h1 className="mt-2 text-2xl font-black">시장지도 최초 데이터를 만들고 있습니다.</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-          공개 화면에서는 외부 시세 API를 직접 기다리지 않습니다. 미국장 마감 후 자동 수집된 저장 스냅샷이 준비되면 NASDAQ100과 S&amp;P500 지도가 바로 표시됩니다.
+          공개 TODAY 화면은 이 작업을 기다리지 않습니다. MARKET MAP에 저장 스냅샷이 없는 최초 1회만
+          NASDAQ100과 S&amp;P500 장마감 데이터를 생성하고, 완료되면 이 화면이 자동으로 실제 지도로 바뀝니다.
         </p>
+
+        <MarketMapBootstrap />
+
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href="/today" className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white">
             TODAY로 돌아가기 →

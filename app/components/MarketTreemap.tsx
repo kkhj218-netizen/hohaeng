@@ -166,8 +166,10 @@ export default function MarketTreemap({
   return (
     <div>
       <div
-        className={`relative overflow-hidden rounded-2xl bg-slate-950 shadow-inner ${
-          compact ? "h-[300px] sm:h-[340px]" : "h-[520px] sm:h-[620px] lg:h-[680px]"
+        className={`relative w-full overflow-hidden rounded-2xl bg-slate-950 shadow-inner ${
+          compact
+            ? "h-[300px] sm:h-[340px]"
+            : "aspect-[5/4] sm:aspect-[16/10] lg:aspect-[16/9]"
         }`}
         role="img"
         aria-label="시가총액 크기와 등락률 색상으로 표시한 미국 주식 시장 히트맵"

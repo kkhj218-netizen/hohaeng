@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadMarketMapSnapshot, saveMarketMapSnapshot } from "@/app/lib/marketMapSnapshotStore";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
 import type {
   MarketMapIndexKey,
@@ -31,6 +32,10 @@ type NasdaqScreenerResponse = {
   data?: {
     rows?: NasdaqScreenerRow[];
   };
+};
+
+type GetSnapshotOptions = {
+  forceRefresh?: boolean;
 };
 
 const NASDAQ_100_URL =
@@ -178,8 +183,6 @@ async function fetchMembership(indexKey: MarketMapIndexKey): Promise<MembershipR
 }
 
 async function fetchNasdaqScreenerRows(): Promise<NasdaqScreenerRow[]> {
-  // 뉴욕 날짜를 캐시 키에 포함해 매일 새 스냅샷을 만든다.
-  // 05:30 UTC cron이 미국장 개장 전에 이 캐시를 미리 채운다.
   const sessionKey = newYorkDateKey();
   const url = `${NASDAQ_SCREENER_URL}&hohaeng_session=${encodeURIComponent(sessionKey)}`;
   const response = await fetch(url, {
@@ -229,13 +232,12 @@ async function latestMarketDate() {
   }
 }
 
-export async function getMarketMapSnapshot(indexKey: MarketMapIndexKey): Promise<MarketMapSnapshot> {
-  const [membership, screenerRows, marketDate] = await Promise.all([
-    fetchMembership(indexKey),
-    fetchNasdaqScreenerRows(),
-    latestMarketDate(),
-  ]);
-
+function buildSnapshot(
+  indexKey: MarketMapIndexKey,
+  membership: MembershipRow[],
+  screenerRows: NasdaqScreenerRow[],
+  marketDate: string | null,
+): MarketMapSnapshot {
   const screenerMap = new Map(
     screenerRows
       .filter((row) => row.symbol)
@@ -293,18 +295,53 @@ export async function getMarketMapSnapshot(indexKey: MarketMapIndexKey): Promise
     strongestSector: byPerformance[0] ?? null,
     weakestSector: byPerformance.at(-1) ?? null,
     sourceNote:
-      "구성종목은 공개 구성자료, 종가·등락률·시가총액·섹터는 NASDAQ Stock Screener의 최근 스냅샷을 사용합니다. 시총가중 평균은 실제 지수 수익률과 다를 수 있습니다.",
+      "구성종목은 공개 구성자료, 종가·등락률·시가총액·섹터는 NASDAQ Stock Screener의 최근 장마감 스냅샷을 사용합니다. 공개 화면은 저장된 완성 스냅샷을 우선 읽으며, 시총가중 평균은 실제 지수 수익률과 다를 수 있습니다.",
   };
+}
+
+async function buildFreshMarketMapSnapshot(indexKey: MarketMapIndexKey): Promise<MarketMapSnapshot> {
+  const [membership, screenerRows, marketDate] = await Promise.all([
+    fetchMembership(indexKey),
+    fetchNasdaqScreenerRows(),
+    latestMarketDate(),
+  ]);
+  return buildSnapshot(indexKey, membership, screenerRows, marketDate);
+}
+
+export async function getMarketMapSnapshot(
+  indexKey: MarketMapIndexKey,
+  options: GetSnapshotOptions = {},
+): Promise<MarketMapSnapshot> {
+  if (!options.forceRefresh) {
+    const stored = await loadMarketMapSnapshot(indexKey);
+    if (stored) return stored;
+  }
+
+  const snapshot = await buildFreshMarketMapSnapshot(indexKey);
+  try {
+    await saveMarketMapSnapshot(snapshot);
+  } catch (error) {
+    console.warn(`MARKET MAP ${indexKey} 스냅샷 저장 실패:`, error);
+  }
+  return snapshot;
 }
 
 export async function warmMarketMapCache() {
   const [nasdaq100, sp500] = await Promise.all([
-    getMarketMapSnapshot("nasdaq100"),
-    getMarketMapSnapshot("sp500"),
+    buildFreshMarketMapSnapshot("nasdaq100"),
+    buildFreshMarketMapSnapshot("sp500"),
   ]);
+
+  const [nasdaqStorage, sp500Storage] = await Promise.all([
+    saveMarketMapSnapshot(nasdaq100),
+    saveMarketMapSnapshot(sp500),
+  ]);
+
   return {
     nasdaq100Count: nasdaq100.totalCount,
     sp500Count: sp500.totalCount,
     marketDate: nasdaq100.marketDate ?? sp500.marketDate,
+    nasdaqStorage: nasdaqStorage.storage,
+    sp500Storage: sp500Storage.storage,
   };
 }

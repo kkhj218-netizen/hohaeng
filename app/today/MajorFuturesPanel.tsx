@@ -13,7 +13,7 @@ function formatPercent(value: number | null) {
 
 function formatValue(value: number) {
   const absolute = Math.abs(value);
-  const digits = absolute >= 10_000 ? 1 : absolute >= 1_000 ? 2 : absolute >= 10 ? 3 : 3;
+  const digits = absolute >= 10_000 ? 1 : absolute >= 1_000 ? 2 : 3;
   return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: digits }).format(value);
 }
 
@@ -77,12 +77,19 @@ export function MajorFuturesSkeleton() {
   );
 }
 
-export default async function MajorFuturesPanel() {
-  let futures: MajorFutureQuote[] = [];
-  try {
-    futures = await getMajorFuturesSnapshot();
-  } catch {
-    // 아래 상태 카드 유지
+export default async function MajorFuturesPanel({
+  futures: providedFutures,
+}: {
+  futures?: MajorFutureQuote[];
+} = {}) {
+  let futures: MajorFutureQuote[] = providedFutures ?? [];
+
+  if (providedFutures === undefined) {
+    try {
+      futures = await getMajorFuturesSnapshot();
+    } catch {
+      // 아래 상태 카드 유지
+    }
   }
 
   const indexFutures = futures.filter((item) => item.group === "index");
@@ -109,7 +116,7 @@ export default async function MajorFuturesPanel() {
 
       {futures.length === 0 ? (
         <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-500">
-          외부 선물 시세가 잠시 응답하지 않아 최신 장마감 값을 다시 확인 중입니다. 섹션은 유지되고 다음 갱신에서 자동 복구됩니다.
+          저장된 선물 장마감 값을 확인 중입니다. 다음 스냅샷 갱신에서 자동 복구됩니다.
         </p>
       ) : (
         <>

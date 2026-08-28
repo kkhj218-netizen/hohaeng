@@ -1,9 +1,13 @@
 import Link from "next/link";
-import { Suspense } from "react";
 
+import type { EarningsRiskSnapshot } from "@/app/lib/earningsRiskTypes";
 import EarningsRiskTodayCard from "@/app/today/EarningsRiskTodayCard";
 
-export default function MarketMapPreview() {
+export default function MarketMapPreview({
+  earningsRisk,
+}: {
+  earningsRisk?: EarningsRiskSnapshot | null;
+}) {
   return (
     <>
       <Link
@@ -32,11 +36,9 @@ export default function MarketMapPreview() {
         </div>
       </Link>
 
-      <Suspense fallback={null}>
-        <div className="mt-5">
-          <EarningsRiskTodayCard />
-        </div>
-      </Suspense>
+      <div className="mt-5">
+        <EarningsRiskTodayCard initialSnapshot={earningsRisk} />
+      </div>
     </>
   );
 }

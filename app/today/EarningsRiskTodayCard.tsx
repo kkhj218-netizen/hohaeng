@@ -22,10 +22,16 @@ function riskTone(event: EarningsRiskEvent) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
-export default function EarningsRiskTodayCard() {
-  const [snapshot, setSnapshot] = useState<EarningsRiskSnapshot | null>(null);
+export default function EarningsRiskTodayCard({
+  initialSnapshot,
+}: {
+  initialSnapshot?: EarningsRiskSnapshot | null;
+}) {
+  const [snapshot, setSnapshot] = useState<EarningsRiskSnapshot | null>(initialSnapshot ?? null);
 
   useEffect(() => {
+    if (initialSnapshot !== undefined) return;
+
     let cancelled = false;
     let controller: AbortController | null = null;
 
@@ -53,7 +59,7 @@ export default function EarningsRiskTodayCard() {
       window.clearTimeout(timer);
       controller?.abort();
     };
-  }, []);
+  }, [initialSnapshot]);
 
   if (!snapshot || snapshot.events.length === 0) return null;
 

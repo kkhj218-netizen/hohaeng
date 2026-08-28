@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
@@ -5,11 +6,12 @@ import { syncCpiEconomicEventDb } from "@/app/lib/economicEventEngine";
 import { getGlobalPolicyRates } from "@/app/lib/globalPolicyRates";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
 import { getMarketRiskRatesSnapshot } from "@/app/lib/marketRiskRates";
+import { warmTodaySnapshot } from "@/app/lib/todaySnapshot";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 function isAuthorized(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -42,6 +44,15 @@ export async function GET(request: NextRequest) {
       economicEventsWarning = error instanceof Error ? error.message : String(error);
     }
 
+    let todaySnapshot: Awaited<ReturnType<typeof warmTodaySnapshot>> | null = null;
+    let todaySnapshotWarning: string | null = null;
+    try {
+      todaySnapshot = await warmTodaySnapshot();
+      revalidatePath("/today");
+    } catch (error) {
+      todaySnapshotWarning = error instanceof Error ? error.message : String(error);
+    }
+
     const dates = [...marketClose.cash, ...marketClose.futures, ...futures]
       .map((item) => item.date)
       .filter(Boolean)
@@ -60,7 +71,9 @@ export async function GET(request: NextRequest) {
       marketRiskRateCount: riskRates.quotes.length,
       cpiEventDb: economicEvents,
       cpiEventDbWarning: economicEventsWarning,
-      schedule: "07:00 KST",
+      todaySnapshot,
+      todaySnapshotWarning,
+      schedule: "07:00 KST · market close + TODAY snapshot",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

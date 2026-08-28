@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import { loadTodaySnapshot } from "@/app/lib/todaySnapshotStore";
 import * as core from "./publicMarket";
 
 export type { PublicPost, PublicRelease } from "./publicMarket";
@@ -18,6 +19,12 @@ export {
   pickMetrics,
   publicCategoryLabel,
 } from "./publicMarket";
+
+const loadTodaySnapshotCached = unstable_cache(
+  loadTodaySnapshot,
+  ["hohaeng-public-today-snapshot-v1"],
+  { revalidate: 300 },
+);
 
 const loadPublicMarketDashboard = unstable_cache(
   async () => core.getPublicMarketDashboard(),
@@ -38,14 +45,28 @@ const loadLatestInvestmentPosts = unstable_cache(
 );
 
 /**
- * 공개 대시보드 전체 계산은 Supabase 다중 시계열 조회 + 시장시세 보강을 포함한다.
- * 방문자마다 다시 계산하지 않고 15분 동안 서버 Data Cache 결과를 공유한다.
+ * 공개 TODAY는 미리 저장된 완성 스냅샷을 우선 사용한다.
+ * 스냅샷이 아직 없는 초기 상태에서만 기존 15분 캐시 계산으로 fallback한다.
  */
 export async function getPublicMarketDashboard() {
+  try {
+    const snapshot = await loadTodaySnapshotCached();
+    if (snapshot?.dashboard) return snapshot.dashboard;
+  } catch (error) {
+    console.warn("TODAY dashboard snapshot read failed:", error);
+  }
+
   return loadPublicMarketDashboard();
 }
 
-/** 최신 투자 글은 시장 데이터보다 덜 자주 변하므로 30분 캐시한다. */
+/** 최신 투자 글도 TODAY 스냅샷을 우선 사용하고 없을 때만 기존 30분 캐시를 사용한다. */
 export async function getLatestInvestmentPosts(limit = 5) {
+  try {
+    const snapshot = await loadTodaySnapshotCached();
+    if (snapshot?.posts?.length) return snapshot.posts.slice(0, limit);
+  } catch (error) {
+    console.warn("TODAY post snapshot read failed:", error);
+  }
+
   return loadLatestInvestmentPosts(limit);
 }

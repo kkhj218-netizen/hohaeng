@@ -14,16 +14,8 @@
       "schedule": "0 22 * * *"
     },
     {
-      "path": "/api/cron/today-snapshot",
-      "schedule": "10 22 * * *"
-    },
-    {
       "path": "/api/cron/fred",
       "schedule": "30 23 * * *"
-    },
-    {
-      "path": "/api/cron/today-snapshot-final",
-      "schedule": "45 23 * * *"
     },
     {
       "path": "/api/cron/disclosures",

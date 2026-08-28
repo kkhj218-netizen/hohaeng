@@ -1,7 +1,14 @@
-import Link from "next/link";
+"use client";
 
-import { getEarningsRiskSnapshot } from "@/app/lib/earningsRisk";
-import type { EarningsRiskEvent } from "@/app/lib/earningsRiskTypes";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import type { EarningsRiskEvent, EarningsRiskSnapshot } from "@/app/lib/earningsRiskTypes";
+
+type EarningsApiResponse = {
+  ok?: boolean;
+  snapshot?: EarningsRiskSnapshot | null;
+};
 
 function dDay(event: EarningsRiskEvent) {
   if (event.daysAway <= 0) return "오늘";
@@ -15,8 +22,39 @@ function riskTone(event: EarningsRiskEvent) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
-export default async function EarningsRiskTodayCard() {
-  const snapshot = await getEarningsRiskSnapshot();
+export default function EarningsRiskTodayCard() {
+  const [snapshot, setSnapshot] = useState<EarningsRiskSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let controller: AbortController | null = null;
+
+    const timer = window.setTimeout(async () => {
+      controller = new AbortController();
+      const timeout = window.setTimeout(() => controller?.abort(), 2_500);
+
+      try {
+        const response = await fetch("/api/public/earnings-risk", {
+          signal: controller.signal,
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as EarningsApiResponse;
+        if (!cancelled && payload.snapshot) setSnapshot(payload.snapshot);
+      } catch {
+        // TODAY 본문 렌더링과 사용성을 절대 방해하지 않는다.
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }, 650);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, []);
+
   if (!snapshot || snapshot.events.length === 0) return null;
 
   const events = snapshot.events.slice(0, 4);

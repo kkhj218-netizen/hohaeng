@@ -3,7 +3,10 @@ import "server-only";
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
 import { getEarningsRiskSnapshot } from "@/app/lib/earningsRisk";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
-import { getLatestInvestmentPosts, getPublicMarketDashboard } from "@/app/lib/publicMarket";
+import {
+  getLiveLatestInvestmentPosts,
+  getLivePublicMarketDashboard,
+} from "@/app/lib/publicMarket";
 import { loadTodaySnapshot, saveTodaySnapshot } from "@/app/lib/todaySnapshotStore";
 import type { TodaySnapshot } from "@/app/lib/todaySnapshotTypes";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
@@ -22,8 +25,8 @@ function koreanToday() {
 export async function buildFreshTodaySnapshot(): Promise<TodaySnapshot> {
   const [dashboardResult, postsResult, marketResult, futuresResult, fearGreedResult, earningsResult] =
     await Promise.allSettled([
-      getPublicMarketDashboard(),
-      getLatestInvestmentPosts(5),
+      getLivePublicMarketDashboard(),
+      getLiveLatestInvestmentPosts(5),
       getUsMarketCloseDashboard(),
       getMajorFuturesSnapshot(),
       getCnnFearGreed(),

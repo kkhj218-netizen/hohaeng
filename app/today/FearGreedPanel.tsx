@@ -85,18 +85,10 @@ function Gauge({ reading }: { reading: CnnFearGreedReading }) {
       <div className="relative pt-5">
         <div className="flex h-3 overflow-hidden rounded-full">
           {BANDS.map((band) => (
-            <div
-              key={band.rating}
-              className={band.className}
-              style={{ width: `${band.width}%` }}
-            />
+            <div key={band.rating} className={band.className} style={{ width: `${band.width}%` }} />
           ))}
         </div>
-        <div
-          className="absolute top-0 -translate-x-1/2"
-          style={{ left: `${score}%` }}
-          aria-hidden="true"
-        >
+        <div className="absolute top-0 -translate-x-1/2" style={{ left: `${score}%` }} aria-hidden="true">
           <div className="mx-auto h-5 w-0.5 rounded-full bg-slate-950" />
           <div className="mx-auto -mt-0.5 h-2 w-2 rotate-45 bg-slate-950" />
         </div>
@@ -128,8 +120,12 @@ export function FearGreedSkeleton() {
   );
 }
 
-export default async function FearGreedPanel() {
-  const reading = await getCnnFearGreed();
+export default async function FearGreedPanel({
+  reading: providedReading,
+}: {
+  reading?: CnnFearGreedReading | null;
+} = {}) {
+  const reading = providedReading === undefined ? await getCnnFearGreed() : providedReading;
 
   if (!reading) {
     return (
@@ -137,22 +133,15 @@ export default async function FearGreedPanel() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-blue-600">MARKET SENTIMENT</p>
-            <h3 className="mt-1 text-base font-black text-slate-950">CNN Fear & Greed Index</h3>
+            <h3 className="mt-1 text-base font-black text-slate-950">CNN Fear &amp; Greed Index</h3>
           </div>
-          <a
-            href="https://www.cnn.com/markets/fear-and-greed"
-            target="_blank"
-            rel="noreferrer"
-            className="text-[10px] font-black text-blue-600"
-          >
+          <a href="https://www.cnn.com/markets/fear-and-greed" target="_blank" rel="noreferrer" className="text-[10px] font-black text-blue-600">
             CNN 원문 →
           </a>
         </div>
         <div className="mt-4 rounded-xl bg-slate-50 p-4">
-          <p className="text-sm font-black text-slate-700">CNN 데이터 응답을 확인 중입니다.</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            이 카드만 별도로 갱신되며 다른 TODAY 데이터 로딩에는 영향을 주지 않습니다.
-          </p>
+          <p className="text-sm font-black text-slate-700">저장된 CNN 데이터가 아직 없습니다.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">다음 TODAY 스냅샷 갱신에서 자동으로 다시 확인합니다.</p>
         </div>
       </section>
     );
@@ -163,15 +152,10 @@ export default async function FearGreedPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-wider text-blue-600">MARKET SENTIMENT</p>
-          <h3 className="mt-1 text-base font-black text-slate-950">CNN Fear & Greed Index</h3>
+          <h3 className="mt-1 text-base font-black text-slate-950">CNN Fear &amp; Greed Index</h3>
           <p className="mt-1 text-[10px] font-bold text-slate-400">{formatUpdatedAt(reading.timestamp)}</p>
         </div>
-        <a
-          href={reading.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-blue-600"
-        >
+        <a href={reading.sourceUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-blue-600">
           CNN 원문 →
         </a>
       </div>
@@ -190,9 +174,7 @@ export default async function FearGreedPanel() {
 
         <div>
           <Gauge reading={reading} />
-          <p className="mt-3 text-[10px] leading-4 text-slate-500">
-            점수가 낮을수록 공포, 높을수록 탐욕 구간입니다. 시장 심리 참고용이며 단독 매매 신호로 사용하지 않습니다.
-          </p>
+          <p className="mt-3 text-[10px] leading-4 text-slate-500">점수가 낮을수록 공포, 높을수록 탐욕 구간입니다. 시장 심리 참고용이며 단독 매매 신호로 사용하지 않습니다.</p>
         </div>
       </div>
 
@@ -203,9 +185,7 @@ export default async function FearGreedPanel() {
         <ComparisonCard label="1년 전" value={reading.previousYear} current={reading.score} />
       </div>
 
-      <p className="mt-3 text-[10px] leading-4 text-slate-400">
-        Source: CNN Business Fear & Greed Index · 호행처럼은 원 지표 값을 재계산하지 않고 표시만 합니다.
-      </p>
+      <p className="mt-3 text-[10px] leading-4 text-slate-400">Source: CNN Business Fear &amp; Greed Index · 호행처럼은 원 지표 값을 재계산하지 않고 표시만 합니다.</p>
     </section>
   );
 }

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { getCnnFearGreed } from "@/app/lib/cnnFearGreed";
 import { getEarningsRiskSnapshot } from "@/app/lib/earningsRisk";
 import { getMajorFuturesSnapshot } from "@/app/lib/majorFutures";
@@ -10,6 +12,12 @@ import {
 import { loadTodaySnapshot, saveTodaySnapshot } from "@/app/lib/todaySnapshotStore";
 import type { TodaySnapshot } from "@/app/lib/todaySnapshotTypes";
 import { getUsMarketCloseDashboard } from "@/app/lib/usMarketClose";
+
+const cachedTodaySnapshot = unstable_cache(
+  loadTodaySnapshot,
+  ["today-snapshot-persistent-v1"],
+  { revalidate: 300 },
+);
 
 function koreanToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -60,11 +68,11 @@ export async function buildFreshTodaySnapshot(): Promise<TodaySnapshot> {
 }
 
 export async function getTodaySnapshot(): Promise<TodaySnapshot | null> {
-  return loadTodaySnapshot();
+  return cachedTodaySnapshot();
 }
 
 export async function getTodaySnapshotOrBootstrap(): Promise<TodaySnapshot> {
-  const stored = await loadTodaySnapshot();
+  const stored = await cachedTodaySnapshot();
   if (stored) return stored;
   return buildFreshTodaySnapshot();
 }

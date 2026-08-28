@@ -64,14 +64,15 @@ export default function TodaySnapshotAdminPage() {
         <h1 className="mt-2 text-3xl font-black">TODAY Traffic-Safe Snapshot</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
           시장 대시보드·미국장 마감·주요 선물·Fear &amp; Greed·실적 위험·최신 글을 한 번 계산해 저장합니다.
-          공개 TODAY는 저장 결과를 우선 사용하므로 방문자마다 무거운 시장 계산이나 외부 API를 반복하지 않습니다.
+          공개 TODAY는 저장 결과와 서버 캐시를 우선 사용하므로 방문자마다 무거운 시장 계산이나 외부 API를 반복하지 않습니다.
         </p>
 
         <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-5">
           <h2 className="font-black">운영 원칙</h2>
           <div className="mt-3 space-y-2 text-sm leading-6 text-slate-400">
-            <p>• 07:10 KST: 미국장 마감 데이터 반영 후 1차 생성</p>
-            <p>• 공개 TODAY: 저장 스냅샷 우선 조회</p>
+            <p>• 07:00 KST: 미국장 마감 수집과 함께 TODAY 1차 스냅샷 생성</p>
+            <p>• FRED 수집 완료 후: 최신 경제지표를 반영해 TODAY 스냅샷 최종 갱신</p>
+            <p>• 공개 TODAY: 저장 스냅샷 + 5분 서버/페이지 캐시 우선</p>
             <p>• 스냅샷이 없을 때만 기존 안전 fallback 사용</p>
             <p>• 실적·MARKET MAP 수집 실패가 TODAY 본문을 막지 않음</p>
           </div>

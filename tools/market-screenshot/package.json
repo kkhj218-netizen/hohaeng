@@ -1,0 +1,12 @@
+{
+  "name": "hohaeng-market-screenshot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "node capture-market.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

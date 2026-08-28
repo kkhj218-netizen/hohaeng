@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/react';
 
 import EditorToolbarBase from './EditorToolbar';
 import { supabase } from '@/app/lib/supabase';
+import { optimizeEditorImage } from '@/app/lib/editorImageOptimization';
 
 type Props = {
   editor: Editor | null;
@@ -22,6 +23,11 @@ type Props = {
 type UploadedImage = {
   src: string;
   alt: string;
+};
+
+type UploadResult = {
+  uploadedImages: UploadedImage[];
+  failedFiles: string[];
 };
 
 function getFileExtension(file: File) {
@@ -53,6 +59,26 @@ function getFileExtension(file: File) {
   return 'jpg';
 }
 
+function normalizedClipboardImage(
+  file: File,
+  index: number
+) {
+  if (file.name && file.name !== 'image.png') {
+    return file;
+  }
+
+  const extension = getFileExtension(file);
+
+  return new File(
+    [file],
+    `screenshot-${Date.now()}-${index + 1}.${extension}`,
+    {
+      type: file.type || 'image/png',
+      lastModified: Date.now(),
+    }
+  );
+}
+
 export default function EditorToolbarMultiImage({
   editor,
   uploading,
@@ -66,8 +92,143 @@ export default function EditorToolbarMultiImage({
     setBatchUploading,
   ] = useState(false);
 
+  const [
+    pasteUploading,
+    setPasteUploading,
+  ] = useState(false);
+
   const busy =
-    uploading || batchUploading;
+    uploading ||
+    batchUploading ||
+    pasteUploading;
+
+  const uploadImageFiles = async (
+    files: File[],
+    prefix: 'batch' | 'paste'
+  ): Promise<UploadResult> => {
+    const uploadedImages: UploadedImage[] = [];
+    const failedFiles: string[] = [];
+
+    // 선택/붙여넣기 순서를 유지하기 위해 순차 업로드한다.
+    for (
+      let index = 0;
+      index < files.length;
+      index += 1
+    ) {
+      const originalFile = files[index];
+
+      try {
+        const optimized =
+          await optimizeEditorImage(
+            originalFile,
+            'content'
+          );
+
+        const uploadFile = optimized.file;
+        const extension =
+          getFileExtension(uploadFile);
+
+        const fileName =
+          `${prefix}-${Date.now()}-${index}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}.${extension}`;
+
+        const filePath =
+          `posts/${fileName}`;
+
+        const {
+          error: uploadError,
+        } =
+          await supabase.storage
+            .from('hohaeng')
+            .upload(
+              filePath,
+              uploadFile,
+              {
+                contentType:
+                  uploadFile.type ||
+                  undefined,
+              }
+            );
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data } =
+          supabase.storage
+            .from('hohaeng')
+            .getPublicUrl(filePath);
+
+        if (!data.publicUrl) {
+          throw new Error(
+            '공개 URL 생성 실패'
+          );
+        }
+
+        uploadedImages.push({
+          src: data.publicUrl,
+          alt: originalFile.name,
+        });
+      } catch (error) {
+        console.error(
+          '본문 사진 업로드 오류:',
+          originalFile.name,
+          error
+        );
+
+        failedFiles.push(
+          originalFile.name ||
+            `이미지 ${index + 1}`
+        );
+      }
+    }
+
+    return {
+      uploadedImages,
+      failedFiles,
+    };
+  };
+
+  const insertUploadedImages = (
+    uploadedImages: UploadedImage[],
+    position?: number
+  ) => {
+    if (
+      !editor ||
+      uploadedImages.length === 0
+    ) {
+      return;
+    }
+
+    const content = uploadedImages.map(
+      (image) => ({
+        type: 'image',
+        attrs: {
+          src: image.src,
+          alt: image.alt,
+          align: 'center',
+          displayWidth: 100,
+        },
+      })
+    );
+
+    const chain =
+      editor.chain().focus();
+
+    if (
+      typeof position === 'number'
+    ) {
+      chain.insertContentAt(
+        position,
+        content
+      );
+    } else {
+      chain.insertContent(content);
+    }
+
+    chain.run();
+  };
 
   // 기존 툴바의 파일 input은 그대로 재사용하면서
   // 본문 사진 선택창만 다중 선택이 가능하게 만든다.
@@ -81,6 +242,119 @@ export default function EditorToolbarMultiImage({
       input.multiple = true;
     }
   }, [editor, busy]);
+
+  // 캡처한 화면이나 복사한 이미지를 에디터에 바로 붙여넣으면
+  // 원본을 본문에 박지 않고 최적화 → Storage 업로드 → 이미지 블록 삽입 순서로 처리한다.
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const editorElement =
+      editor.view.dom;
+
+    const handlePaste = (
+      event: ClipboardEvent
+    ) => {
+      const clipboardData =
+        event.clipboardData;
+
+      if (!clipboardData) {
+        return;
+      }
+
+      const itemFiles =
+        Array.from(
+          clipboardData.items || []
+        )
+          .filter(
+            (item) =>
+              item.kind === 'file' &&
+              item.type.startsWith(
+                'image/'
+              )
+          )
+          .map((item) =>
+            item.getAsFile()
+          )
+          .filter(
+            (file): file is File =>
+              Boolean(file)
+          );
+
+      const fallbackFiles =
+        Array.from(
+          clipboardData.files || []
+        ).filter((file) =>
+          file.type.startsWith(
+            'image/'
+          )
+        );
+
+      const rawFiles =
+        itemFiles.length > 0
+          ? itemFiles
+          : fallbackFiles;
+
+      if (rawFiles.length === 0) {
+        return;
+      }
+
+      // ProseMirror가 PNG/data URL을 먼저 넣지 않도록 이미지 붙여넣기만 가로챈다.
+      event.preventDefault();
+      event.stopPropagation();
+
+      const insertionPosition =
+        editor.state.selection.from;
+
+      const files = rawFiles.map(
+        normalizedClipboardImage
+      );
+
+      void (async () => {
+        try {
+          setPasteUploading(true);
+
+          const {
+            uploadedImages,
+            failedFiles,
+          } = await uploadImageFiles(
+            files,
+            'paste'
+          );
+
+          insertUploadedImages(
+            uploadedImages,
+            insertionPosition
+          );
+
+          if (
+            failedFiles.length > 0
+          ) {
+            alert(
+              `${failedFiles.length}장의 붙여넣기 이미지를 업로드하지 못했습니다.\n\n${failedFiles.join('\n')}`
+            );
+          }
+        } finally {
+          setPasteUploading(false);
+        }
+      })();
+    };
+
+    editorElement.addEventListener(
+      'paste',
+      handlePaste,
+      true
+    );
+
+    return () => {
+      editorElement.removeEventListener(
+        'paste',
+        handlePaste,
+        true
+      );
+    };
+  }, [editor]);
 
   const handleMultiImageUpload =
     async (
@@ -144,105 +418,20 @@ export default function EditorToolbarMultiImage({
         );
       }
 
-      const uploadedImages:
-        UploadedImage[] = [];
-
-      const failedFiles:
-        string[] = [];
-
       try {
         setBatchUploading(true);
 
-        // 선택한 순서를 유지하기 위해 순차 업로드한다.
-        for (
-          let index = 0;
-          index < imageFiles.length;
-          index += 1
-        ) {
-          const file =
-            imageFiles[index];
+        const {
+          uploadedImages,
+          failedFiles,
+        } = await uploadImageFiles(
+          imageFiles,
+          'batch'
+        );
 
-          try {
-            const extension =
-              getFileExtension(
-                file
-              );
-
-            const fileName =
-              `batch-${Date.now()}-${index}-${Math.random()
-                .toString(36)
-                .slice(2, 8)}.${extension}`;
-
-            const filePath =
-              `posts/${fileName}`;
-
-            const {
-              error: uploadError,
-            } =
-              await supabase.storage
-                .from('hohaeng')
-                .upload(
-                  filePath,
-                  file
-                );
-
-            if (uploadError) {
-              throw uploadError;
-            }
-
-            const { data } =
-              supabase.storage
-                .from('hohaeng')
-                .getPublicUrl(
-                  filePath
-                );
-
-            if (
-              !data.publicUrl
-            ) {
-              throw new Error(
-                '공개 URL 생성 실패'
-              );
-            }
-
-            uploadedImages.push({
-              src: data.publicUrl,
-              alt: file.name,
-            });
-          } catch (error) {
-            console.error(
-              '본문 사진 업로드 오류:',
-              file.name,
-              error
-            );
-
-            failedFiles.push(
-              file.name
-            );
-          }
-        }
-
-        if (
-          uploadedImages.length > 0
-        ) {
-          editor
-            .chain()
-            .focus()
-            .insertContent(
-              uploadedImages.map(
-                (image) => ({
-                  type: 'image',
-                  attrs: {
-                    src: image.src,
-                    alt: image.alt,
-                    align: 'center',
-                    displayWidth: 100,
-                  },
-                })
-              )
-            )
-            .run();
-        }
+        insertUploadedImages(
+          uploadedImages
+        );
 
         if (
           failedFiles.length > 0

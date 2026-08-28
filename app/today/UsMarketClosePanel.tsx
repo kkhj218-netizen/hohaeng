@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { CnnFearGreedReading } from "@/app/lib/cnnFearGreed";
 import type { EarningsRiskSnapshot } from "@/app/lib/earningsRiskTypes";
 import { getMajorFuturesSnapshot, type MajorFutureQuote } from "@/app/lib/majorFutures";
+import { getTodaySnapshot } from "@/app/lib/todaySnapshot";
 import { getUsMarketCloseDashboard, type UsMarketCloseDashboard, type UsMarketCloseQuote } from "@/app/lib/usMarketClose";
 import FearGreedPanel from "@/app/today/FearGreedPanel";
 import IndexTradingCheckPanel from "@/app/today/IndexTradingCheckPanel";
@@ -97,8 +98,8 @@ function directionMeta(cash: number | null, future: number | null) {
 export default async function UsMarketClosePanel({
   market: providedMarket,
   majorFutures: providedFutures,
-  fearGreed,
-  earningsRisk,
+  fearGreed: providedFearGreed,
+  earningsRisk: providedEarningsRisk,
 }: {
   market?: UsMarketCloseDashboard | null;
   majorFutures?: MajorFutureQuote[];
@@ -107,11 +108,28 @@ export default async function UsMarketClosePanel({
 } = {}) {
   let market = providedMarket;
   let majorFutures = providedFutures;
+  let fearGreed = providedFearGreed;
+  let earningsRisk = providedEarningsRisk;
 
-  if (providedMarket === undefined || providedFutures === undefined) {
+  if (
+    providedMarket === undefined ||
+    providedFutures === undefined ||
+    providedFearGreed === undefined ||
+    providedEarningsRisk === undefined
+  ) {
+    const snapshot = await getTodaySnapshot();
+    if (snapshot) {
+      if (providedMarket === undefined) market = snapshot.marketClose;
+      if (providedFutures === undefined) majorFutures = snapshot.majorFutures;
+      if (providedFearGreed === undefined) fearGreed = snapshot.fearGreed;
+      if (providedEarningsRisk === undefined) earningsRisk = snapshot.earningsRisk;
+    }
+  }
+
+  if (market === undefined || majorFutures === undefined) {
     const [marketResult, futuresResult] = await Promise.all([
-      providedMarket === undefined ? getUsMarketCloseDashboard() : Promise.resolve(providedMarket),
-      providedFutures === undefined ? getMajorFuturesSnapshot() : Promise.resolve(providedFutures),
+      market === undefined ? getUsMarketCloseDashboard() : Promise.resolve(market),
+      majorFutures === undefined ? getMajorFuturesSnapshot() : Promise.resolve(majorFutures),
     ]);
     market = marketResult;
     majorFutures = futuresResult;

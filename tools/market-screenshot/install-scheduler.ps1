@@ -14,9 +14,11 @@ $action = New-ScheduledTaskAction `
     -Argument ('"' + $captureScript + '"') `
     -WorkingDirectory $scriptDir
 
+# 미국 월~금 정규장은 한국 시간으로 화~토 새벽에 마감합니다.
+# 오전 8:10이면 미국 서머타임/겨울시간 모두 장 마감 후 충분한 여유가 있습니다.
 $trigger = New-ScheduledTaskTrigger `
     -Weekly `
-    -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday `
+    -DaysOfWeek Tuesday, Wednesday, Thursday, Friday, Saturday `
     -At 8:10AM
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -29,11 +31,11 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "평일 오전 8시 10분 HOHAENG MARKET MAP NASDAQ100/S&P500 6장 자동 캡처" `
+    -Description "한국 시간 화~토 오전 8시 10분 HOHAENG MARKET MAP NASDAQ100/S&P500 6장 자동 캡처" `
     -Force | Out-Null
 
 Write-Host ""
 Write-Host "[HOHAENG] Windows 작업 스케줄러 등록 완료" -ForegroundColor Green
 Write-Host "작업 이름: $taskName"
-Write-Host "실행 시각: 평일 오전 8:10 (Windows 현지 시간)"
+Write-Host "실행 시각: 화~토 오전 8:10 (한국 Windows 시간 기준)"
 Write-Host "PC가 해당 시각에 꺼져 있으면 다음 사용 가능 시점에 실행되도록 설정했습니다."

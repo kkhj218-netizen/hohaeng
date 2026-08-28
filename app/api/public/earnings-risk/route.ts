@@ -11,7 +11,7 @@ export async function GET() {
     { ok: true, snapshot },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600",
+        "Cache-Control": "public, max-age=120, s-maxage=900, stale-while-revalidate=1800",
       },
     },
   );

@@ -10,6 +10,9 @@ import Highlight from '@tiptap/extension-highlight';
 import {
   EditorImage,
 } from '@/app/components/EditorImageBlock';
+import {
+  EditorImagePair,
+} from '@/app/components/EditorImagePairBlock';
 
 /**
  * 글쓰기와 글 수정 화면이 정확히 같은 Tiptap 스키마를 사용하게 합니다.
@@ -18,6 +21,7 @@ export function createEditorExtensions() {
   return [
     StarterKit,
     EditorImage,
+    EditorImagePair,
     TextStyleKit,
     TextAlign.configure({
       types: [

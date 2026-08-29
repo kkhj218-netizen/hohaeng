@@ -8,6 +8,7 @@ import {
 import Header from "@/app/components/Header";
 import MarketQuickNav from "@/app/components/MarketQuickNav";
 import PwaRegister from "@/app/components/PwaRegister";
+import SmartPwaPrompt from "@/app/components/SmartPwaPrompt";
 
 import "./globals.css";
 
@@ -132,6 +133,8 @@ export default function RootLayout({
         <div className="flex-1">
           {children}
         </div>
+
+        <SmartPwaPrompt />
       </body>
     </html>
   );

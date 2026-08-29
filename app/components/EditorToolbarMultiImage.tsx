@@ -30,6 +30,11 @@ type UploadResult = {
   failedFiles: string[];
 };
 
+type PendingLayoutChoice = {
+  uploadedImages: UploadedImage[];
+  position?: number;
+};
+
 function getFileExtension(file: File) {
   const extension = file.name
     .split('.')
@@ -96,6 +101,13 @@ export default function EditorToolbarMultiImage({
     pasteUploading,
     setPasteUploading,
   ] = useState(false);
+
+  const [
+    pendingLayoutChoice,
+    setPendingLayoutChoice,
+  ] = useState<PendingLayoutChoice | null>(
+    null
+  );
 
   const busy =
     uploading ||
@@ -230,6 +242,98 @@ export default function EditorToolbarMultiImage({
     chain.run();
   };
 
+  const insertUploadedImagePair = (
+    uploadedImages: UploadedImage[],
+    position?: number
+  ) => {
+    if (
+      !editor ||
+      uploadedImages.length !== 2
+    ) {
+      insertUploadedImages(
+        uploadedImages,
+        position
+      );
+      return;
+    }
+
+    const [first, second] =
+      uploadedImages;
+
+    const pairNode = {
+      type: 'imagePair',
+      attrs: {
+        src1: first.src,
+        alt1: first.alt,
+        src2: second.src,
+        alt2: second.alt,
+        layout: 'side-by-side',
+      },
+    };
+
+    const chain =
+      editor.chain().focus();
+
+    if (
+      typeof position === 'number'
+    ) {
+      chain.insertContentAt(
+        position,
+        pairNode
+      );
+    } else {
+      chain.insertContent(pairNode);
+    }
+
+    chain.run();
+  };
+
+  const insertOrChooseTwoImageLayout = (
+    uploadedImages: UploadedImage[],
+    position?: number
+  ) => {
+    if (
+      uploadedImages.length === 2
+    ) {
+      setPendingLayoutChoice({
+        uploadedImages,
+        position,
+      });
+      return;
+    }
+
+    insertUploadedImages(
+      uploadedImages,
+      position
+    );
+  };
+
+  const applyTwoImageLayout = (
+    layout: 'side-by-side' | 'stacked'
+  ) => {
+    const pending =
+      pendingLayoutChoice;
+
+    if (!pending) {
+      return;
+    }
+
+    setPendingLayoutChoice(null);
+
+    if (layout === 'side-by-side') {
+      insertUploadedImagePair(
+        pending.uploadedImages,
+        pending.position
+      );
+      return;
+    }
+
+    insertUploadedImages(
+      pending.uploadedImages,
+      pending.position
+    );
+  };
+
   // 기존 툴바의 파일 input은 그대로 재사용하면서
   // 본문 사진 선택창만 다중 선택이 가능하게 만든다.
   useEffect(() => {
@@ -323,7 +427,7 @@ export default function EditorToolbarMultiImage({
             'paste'
           );
 
-          insertUploadedImages(
+          insertOrChooseTwoImageLayout(
             uploadedImages,
             insertionPosition
           );
@@ -418,6 +522,9 @@ export default function EditorToolbarMultiImage({
         );
       }
 
+      const insertionPosition =
+        editor.state.selection.from;
+
       try {
         setBatchUploading(true);
 
@@ -429,8 +536,9 @@ export default function EditorToolbarMultiImage({
           'batch'
         );
 
-        insertUploadedImages(
-          uploadedImages
+        insertOrChooseTwoImageLayout(
+          uploadedImages,
+          insertionPosition
         );
 
         if (
@@ -447,14 +555,90 @@ export default function EditorToolbarMultiImage({
     };
 
   return (
-    <div ref={hostRef}>
-      <EditorToolbarBase
-        editor={editor}
-        uploading={busy}
-        onImageUpload={
-          handleMultiImageUpload
-        }
-      />
-    </div>
+    <>
+      <div ref={hostRef}>
+        <EditorToolbarBase
+          editor={editor}
+          uploading={busy}
+          onImageUpload={
+            handleMultiImageUpload
+          }
+        />
+      </div>
+
+      {pendingLayoutChoice ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="사진 두 장 배치 선택"
+        >
+          <div className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl sm:p-6">
+            <div className="mb-4">
+              <p className="text-lg font-black text-slate-950">
+                사진 2장을 어떻게 넣을까요?
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                나란히 배치는 PC에서는 2열, 모바일에서는 자동으로 위아래 1열로 바뀝니다.
+              </p>
+            </div>
+
+            <div className="mb-5 grid grid-cols-2 gap-2 overflow-hidden rounded-2xl bg-slate-100 p-2">
+              {pendingLayoutChoice.uploadedImages.map(
+                (image, index) => (
+                  <div
+                    key={`${image.src}-${index}`}
+                    className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl bg-white"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- 업로드 직후 배치 선택 미리보기입니다. */}
+                    <img
+                      src={image.src}
+                      alt={image.alt}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                )
+              )}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() =>
+                  applyTwoImageLayout(
+                    'side-by-side'
+                  )
+                }
+                className="rounded-2xl border-2 border-blue-600 bg-blue-50 px-4 py-4 text-left transition hover:bg-blue-100"
+              >
+                <span className="block text-base font-black text-blue-700">
+                  ▥ 나란히 배치
+                </span>
+                <span className="mt-1 block text-xs font-semibold leading-5 text-blue-600/80">
+                  PC 2열 · 모바일 자동 1열
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyTwoImageLayout(
+                    'stacked'
+                  )
+                }
+                className="rounded-2xl border-2 border-slate-200 bg-white px-4 py-4 text-left transition hover:bg-slate-50"
+              >
+                <span className="block text-base font-black text-slate-800">
+                  ☰ 세로 배치
+                </span>
+                <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">
+                  모든 화면에서 한 장씩 표시
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

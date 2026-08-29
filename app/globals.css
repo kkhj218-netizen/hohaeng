@@ -68,8 +68,118 @@ body {
   text-align: center;
 }
 
+/* 새 글 알림 영역은 기능은 남겨두고 화면에서만 숨깁니다. */
+section:has(#newsletter-title) {
+  display: none !important;
+}
+
 @media (max-width: 640px) {
   .rich-editor-content figure[data-editor-image] {
     width: 100% !important;
+  }
+
+  /* 관리자 글쓰기/수정 화면 모바일 최적화 */
+  main:has(.ProseMirror.rich-editor-content) {
+    width: 100%;
+    max-width: none;
+    padding: 0.75rem !important;
+    overflow-x: hidden;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) > div:first-child {
+    align-items: stretch;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) > div:first-child > div:last-child {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) > div:first-child > div:last-child button {
+    min-width: 0;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    white-space: nowrap;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) input,
+  main:has(.ProseMirror.rich-editor-content) textarea,
+  main:has(.ProseMirror.rich-editor-content) select,
+  main:has(.ProseMirror.rich-editor-content) button {
+    font-size: 16px;
+  }
+
+  /* 모바일에서는 툴바를 한 줄씩 가로 스크롤하여 본문 공간을 확보 */
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 {
+    top: 0.25rem !important;
+    max-width: calc(100vw - 1.5rem);
+    border-radius: 0.875rem 0.875rem 0 0;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 > div {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 button {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    flex: 0 0 auto;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 select,
+  main:has(.ProseMirror.rich-editor-content) .sticky.top-16 label {
+    flex: 0 0 auto;
+  }
+
+  /* 실제 본문 편집 영역 */
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content {
+    min-height: 65vh !important;
+    padding: 1.125rem 1rem 7rem !important;
+    font-size: 16px !important;
+    line-height: 1.8 !important;
+    border-radius: 0 0 0.875rem 0.875rem;
+    touch-action: manipulation;
+    overflow-wrap: anywhere;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content h2 {
+    font-size: 1.5rem !important;
+    margin-top: 2.25rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content h3 {
+    font-size: 1.25rem !important;
+    margin-top: 1.875rem !important;
+    margin-bottom: 0.875rem !important;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content h4 {
+    font-size: 1.125rem !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content blockquote {
+    padding: 1rem !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content ul,
+  main:has(.ProseMirror.rich-editor-content) .ProseMirror.rich-editor-content ol {
+    padding-left: 1.5rem !important;
   }
 }

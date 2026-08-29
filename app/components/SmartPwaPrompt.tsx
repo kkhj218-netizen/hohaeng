@@ -80,6 +80,23 @@ export default function SmartPwaPrompt() {
       return;
     }
 
+    const handleMarketMapClick = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const link = target?.closest<HTMLAnchorElement>("a[href]");
+      const href = link?.getAttribute("href") || "";
+
+      if (!href.includes("market-map")) return;
+      if (isStandaloneMode()) return;
+
+      const nextDismissedUntil = Number(window.localStorage.getItem(DISMISS_KEY) || "0");
+      if (nextDismissedUntil > Date.now()) return;
+
+      setVisible(true);
+      track("pwa_prompt_view", { trigger: "market_map_click", path: pathname });
+    };
+
+    document.addEventListener("click", handleMarketMapClick);
+
     const timer = window.setTimeout(() => {
       if (isStandaloneMode()) return;
       const nextDismissedUntil = Number(window.localStorage.getItem(DISMISS_KEY) || "0");
@@ -88,7 +105,10 @@ export default function SmartPwaPrompt() {
       track("pwa_prompt_view", { trigger: "30_seconds", path: pathname });
     }, 30_000);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      document.removeEventListener("click", handleMarketMapClick);
+      window.clearTimeout(timer);
+    };
   }, [isExcludedPath, pathname]);
 
   if (!visible || isExcludedPath) return null;

@@ -6,6 +6,7 @@ import {
 } from "next/font/google";
 
 import Header from "@/app/components/Header";
+import InvestmentPostPwaCta from "@/app/components/InvestmentPostPwaCta";
 import MarketQuickNav from "@/app/components/MarketQuickNav";
 import PwaRegister from "@/app/components/PwaRegister";
 import SmartPwaPrompt from "@/app/components/SmartPwaPrompt";
@@ -134,6 +135,7 @@ export default function RootLayout({
           {children}
         </div>
 
+        <InvestmentPostPwaCta />
         <SmartPwaPrompt />
       </body>
     </html>

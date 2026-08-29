@@ -123,58 +123,60 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-5xl items-center gap-2 px-4">
+    <header className="sticky top-0 z-[100] border-b border-slate-200 bg-white/95 backdrop-blur-md pointer-events-auto">
+      <div className="relative z-[101] mx-auto flex h-16 max-w-5xl items-center gap-2 px-4 pointer-events-auto">
         <Link
           href="/"
-          className="shrink-0 whitespace-nowrap text-xl font-bold tracking-tight text-blue-600"
+          className="relative z-[102] shrink-0 whitespace-nowrap text-xl font-bold tracking-tight text-blue-600 pointer-events-auto"
         >
           HOHAENG OS
         </Link>
 
-        <nav className="ml-2 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2 text-sm font-medium text-slate-700 sm:gap-3">
+        <nav className="relative z-[102] ml-2 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2 text-sm font-medium text-slate-700 sm:gap-3 pointer-events-auto">
           <Link
             href="/money"
-            className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
+            className="whitespace-nowrap px-2 py-1 hover:text-blue-600 pointer-events-auto"
           >
             🧮 계산기
           </Link>
 
           <Link
             href="/data"
-            className="whitespace-nowrap px-2 py-1 font-bold text-blue-600 hover:text-blue-700"
+            className="whitespace-nowrap px-2 py-1 font-bold text-blue-600 hover:text-blue-700 pointer-events-auto"
           >
             📊 투자데이터
           </Link>
 
           <Link
             href="/blog"
-            className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
+            className="whitespace-nowrap px-2 py-1 hover:text-blue-600 pointer-events-auto"
           >
             📰 블로그
           </Link>
 
           {categories.map((category) => (
-            <Link
+            <a
               key={category.id}
-              href={`/blog?category=${category.slug}`}
-              className="whitespace-nowrap px-2 py-1 hover:text-blue-600"
+              href={`/blog?category=${encodeURIComponent(category.slug)}`}
+              className="relative z-[103] shrink-0 whitespace-nowrap px-2 py-1 hover:text-blue-600 pointer-events-auto touch-manipulation"
             >
               {category.emoji || "📁"} {category.name}
-            </Link>
+            </a>
           ))}
         </nav>
 
         <Link
           href="/saved"
-          className="shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+          className="relative z-[102] shrink-0 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 pointer-events-auto"
           aria-label="내 관심 글 열기"
         >
           <span aria-hidden="true">♥</span>{" "}
           <span className="hidden lg:inline">관심 글</span>
         </Link>
 
-        <PwaInstallButton />
+        <div className="relative z-[102] pointer-events-auto">
+          <PwaInstallButton />
+        </div>
       </div>
     </header>
   );

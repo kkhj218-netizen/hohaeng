@@ -73,6 +73,17 @@ section:has(#newsletter-title) {
   display: none !important;
 }
 
+/* 블로그 첫 화면 핵심 가이드에서 연봉 가이드만 숨기고 나머지 2개만 노출 */
+section:has(a[href="/blog/post-log-1785841740573"]) a[href="/blog/post-log-1785841740573"] {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  section:has(a[href="/blog/post-log-1785841740573"]) > div.mt-5.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
 @media (max-width: 640px) {
   .rich-editor-content figure[data-editor-image] {
     width: 100% !important;

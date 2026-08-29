@@ -2,15 +2,21 @@
 
 import { useMemo, useState } from "react";
 
-type DiscoveryKey =
+export type DiscoveryKey =
   | "important"
   | "supply"
   | "shareholder"
   | "earnings"
   | "turnaround"
-  | "ownership";
+  | "ownership"
+  | "usImportant"
+  | "usEarnings"
+  | "usMajor"
+  | "usCapital"
+  | "usOwnership"
+  | "usProxy";
 
-type StatItem = {
+export type DiscoveryStatItem = {
   key: DiscoveryKey;
   label: string;
   value: number;
@@ -46,13 +52,12 @@ export type DiscoveryDetectedItem = {
 };
 
 type Props = {
-  stats: StatItem[];
-  companyLists: {
-    important: DiscoveryCompanyGroup[];
-    supply: DiscoveryCompanyGroup[];
-    shareholder: DiscoveryCompanyGroup[];
-  };
+  stats: DiscoveryStatItem[];
+  companyLists: Partial<Record<DiscoveryKey, DiscoveryCompanyGroup[]>>;
   detectedItems: DiscoveryDetectedItem[];
+  sourceLabel?: string;
+  idleTitle?: string;
+  idleHint?: string;
 };
 
 const INITIAL_VISIBLE = 30;
@@ -77,7 +82,13 @@ function detectedTypeTone(type: DiscoveryDetectedItem["type"]) {
   return "border-violet-200 bg-violet-50 text-violet-700";
 }
 
-function CompanyRow({ item }: { item: DiscoveryCompanyGroup }) {
+function CompanyRow({
+  item,
+  sourceLabel,
+}: {
+  item: DiscoveryCompanyGroup;
+  sourceLabel: string;
+}) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -106,14 +117,20 @@ function CompanyRow({ item }: { item: DiscoveryCompanyGroup }) {
           rel="noreferrer"
           className="text-xs font-black text-blue-600 hover:text-blue-500"
         >
-          최근 DART 원문 →
+          최근 {sourceLabel} 원문 →
         </a>
       </div>
     </article>
   );
 }
 
-function DetectedRow({ item }: { item: DiscoveryDetectedItem }) {
+function DetectedRow({
+  item,
+  sourceLabel,
+}: {
+  item: DiscoveryDetectedItem;
+  sourceLabel: string;
+}) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -140,24 +157,29 @@ function DetectedRow({ item }: { item: DiscoveryDetectedItem }) {
           rel="noreferrer"
           className="text-xs font-black text-blue-600 hover:text-blue-500"
         >
-          DART 원문 →
+          {sourceLabel} 원문 →
         </a>
       </div>
     </article>
   );
 }
 
-export default function InvestmentDiscoveryExplorer({ stats, companyLists, detectedItems }: Props) {
+export default function InvestmentDiscoveryExplorer({
+  stats,
+  companyLists,
+  detectedItems,
+  sourceLabel = "DART",
+  idleTitle = "이번 기준일에는 설정한 탐지 조건을 통과한 기업이 없습니다.",
+  idleHint = "위 숫자 카드를 누르면 중요 공시·공급계약·주주환원에 포함된 회사는 따로 확인할 수 있습니다.",
+}: Props) {
   const [selected, setSelected] = useState<DiscoveryKey | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   const selectedStat = stats.find((item) => item.key === selected) ?? null;
 
   const selectedCompanies = useMemo(() => {
-    if (selected === "important") return companyLists.important;
-    if (selected === "supply") return companyLists.supply;
-    if (selected === "shareholder") return companyLists.shareholder;
-    return [];
+    if (!selected) return [];
+    return companyLists[selected] ?? [];
   }, [companyLists, selected]);
 
   const selectedDetected = useMemo(() => {
@@ -252,7 +274,7 @@ export default function InvestmentDiscoveryExplorer({ stats, companyLists, detec
               <>
                 <div className="grid gap-2 md:grid-cols-2">
                   {visibleCompanies.map((item) => (
-                    <CompanyRow key={item.id} item={item} />
+                    <CompanyRow key={item.id} item={item} sourceLabel={sourceLabel} />
                   ))}
                 </div>
                 {selectedCompanies.length > INITIAL_VISIBLE && (
@@ -272,7 +294,7 @@ export default function InvestmentDiscoveryExplorer({ stats, companyLists, detec
             ) : selectedDetected.length > 0 ? (
               <div className="grid gap-2 md:grid-cols-2">
                 {selectedDetected.map((item) => (
-                  <DetectedRow key={item.id} item={item} />
+                  <DetectedRow key={item.id} item={item} sourceLabel={sourceLabel} />
                 ))}
               </div>
             ) : (
@@ -284,15 +306,13 @@ export default function InvestmentDiscoveryExplorer({ stats, companyLists, detec
         ) : detectedItems.length > 0 ? (
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {detectedItems.map((item) => (
-              <DetectedRow key={item.id} item={item} />
+              <DetectedRow key={item.id} item={item} sourceLabel={sourceLabel} />
             ))}
           </div>
         ) : (
           <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-            <p className="text-sm font-black text-slate-700">이번 기준일에는 설정한 탐지 조건을 통과한 기업이 없습니다.</p>
-            <p className="mt-1 text-xs text-slate-400">
-              위 숫자 카드를 누르면 중요 공시·공급계약·주주환원에 포함된 회사는 따로 확인할 수 있습니다.
-            </p>
+            <p className="text-sm font-black text-slate-700">{idleTitle}</p>
+            <p className="mt-1 text-xs text-slate-400">{idleHint}</p>
           </div>
         )}
       </div>

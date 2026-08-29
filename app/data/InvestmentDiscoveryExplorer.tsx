@@ -10,10 +10,13 @@ export type DiscoveryKey =
   | "turnaround"
   | "ownership"
   | "usImportant"
+  | "usContract"
+  | "usShareholder"
   | "usEarnings"
+  | "usTurnaround"
+  | "usOwnership"
   | "usMajor"
   | "usCapital"
-  | "usOwnership"
   | "usProxy";
 
 export type DiscoveryStatItem = {
@@ -40,7 +43,9 @@ export type DiscoveryDetectedItem = {
     | "turnaround"
     | "insider-increase"
     | "insider-decrease"
-    | "major-holder-change";
+    | "major-holder-change"
+    | "major-contract"
+    | "shareholder-return";
   company: string;
   stockCode: string;
   title: string;
@@ -69,6 +74,8 @@ function formatDate(value: string) {
 function detectedTypeLabel(type: DiscoveryDetectedItem["type"]) {
   if (type === "turnaround") return "흑자전환";
   if (type === "earnings-growth") return "실적 급증";
+  if (type === "major-contract") return "중요 계약";
+  if (type === "shareholder-return") return "주주환원";
   if (type === "insider-increase") return "보유 증가";
   if (type === "insider-decrease") return "보유 감소";
   return "대량보유 변화";
@@ -77,6 +84,8 @@ function detectedTypeLabel(type: DiscoveryDetectedItem["type"]) {
 function detectedTypeTone(type: DiscoveryDetectedItem["type"]) {
   if (type === "turnaround") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (type === "earnings-growth") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (type === "major-contract") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (type === "shareholder-return") return "border-rose-200 bg-rose-50 text-rose-700";
   if (type === "insider-increase") return "border-cyan-200 bg-cyan-50 text-cyan-700";
   if (type === "insider-decrease") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-violet-200 bg-violet-50 text-violet-700";
@@ -183,11 +192,17 @@ export default function InvestmentDiscoveryExplorer({
   }, [companyLists, selected]);
 
   const selectedDetected = useMemo(() => {
-    if (selected === "earnings") {
+    if (selected === "earnings" || selected === "usEarnings") {
       return detectedItems.filter((item) => item.type === "earnings-growth");
     }
-    if (selected === "turnaround") {
+    if (selected === "turnaround" || selected === "usTurnaround") {
       return detectedItems.filter((item) => item.type === "turnaround");
+    }
+    if (selected === "usContract") {
+      return detectedItems.filter((item) => item.type === "major-contract");
+    }
+    if (selected === "usShareholder") {
+      return detectedItems.filter((item) => item.type === "shareholder-return");
     }
     if (selected === "ownership") {
       return detectedItems.filter((item) =>

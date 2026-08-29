@@ -13,6 +13,7 @@ import {
   getDailyDisclosureFeed,
   type DisclosureItem,
 } from "@/app/lib/disclosureHub";
+import { getUsInvestmentDiscoveryDashboard } from "@/app/lib/usInvestmentDiscoveries";
 
 function formatDate(value: string | null) {
   return value ? value.replaceAll("-", ".") : "확인 중";
@@ -62,14 +63,11 @@ function groupCompanies(
   });
 }
 
-function uniqueCompanyCount(items: DisclosureItem[]) {
-  return new Set(items.map((item) => item.ticker || item.company)).size;
-}
-
 export default async function InvestmentDiscoveries() {
-  // 국내 탐지 대시보드가 내부에서 공시 피드를 먼저 사용하므로 완료 후 공통 피드를 읽는다.
-  // 같은 요청 안에서 OpenDART 수집이 불필요하게 중복되는 상황을 피한다.
-  const dashboard = await getInvestmentDiscoveryDashboard();
+  const [dashboard, usDashboard] = await Promise.all([
+    getInvestmentDiscoveryDashboard(),
+    getUsInvestmentDiscoveryDashboard(),
+  ]);
   const feed = await getDailyDisclosureFeed();
 
   const koreaItems = feed.korea.items;
@@ -112,19 +110,27 @@ export default async function InvestmentDiscoveries() {
 
   const usItems = feed.us.items;
   const usImportant = usItems.filter((item) => item.importance >= 70);
-  const usEarnings = usItems.filter((item) => item.category === "earnings");
-  const usMajor = usItems.filter((item) => item.category === "major");
-  const usCapital = usItems.filter((item) => item.category === "capital");
   const usOwnership = usItems.filter((item) => item.category === "ownership");
-  const usProxy = usItems.filter((item) => item.category === "proxy");
+  const usDetectedItems: DiscoveryDetectedItem[] = usDashboard.items.map((item) => ({
+    id: item.id,
+    type: item.type,
+    company: item.company,
+    stockCode: item.stockCode,
+    title: item.title,
+    summary: item.summary,
+    metricLabel: item.metricLabel,
+    metricValue: item.metricValue,
+    filingDate: item.filingDate,
+    sourceUrl: item.sourceUrl,
+  }));
 
   const usStats: DiscoveryStatItem[] = [
-    { key: "usImportant", label: "핵심 공시", value: usImportant.length, note: "중요도 70+" },
-    { key: "usEarnings", label: "실적·정기", value: usEarnings.length, note: "10-Q·10-K·20-F" },
-    { key: "usMajor", label: "주요 이벤트", value: usMajor.length, note: "8-K·6-K" },
-    { key: "usCapital", label: "자금조달", value: usCapital.length, note: "S-1·S-3·424B" },
-    { key: "usOwnership", label: "지분 변화", value: usOwnership.length, note: "13D·13G" },
-    { key: "usProxy", label: "주주총회", value: usProxy.length, note: "DEF 14A" },
+    { key: "usImportant", label: "중요 공시", value: usDashboard.stats.importantFilings, note: "전체 중요도 70+" },
+    { key: "usContract", label: "중요 계약", value: usDashboard.stats.majorContracts, note: "8-K Item 1.01 등" },
+    { key: "usShareholder", label: "주주환원", value: usDashboard.stats.shareholderReturns, note: "배당·자사주 매입" },
+    { key: "usEarnings", label: "실적 급증", value: usDashboard.stats.earningsSurge, note: "매출 +30% / 이익 +50%" },
+    { key: "usTurnaround", label: "흑자전환", value: usDashboard.stats.turnarounds, note: "영업이익 기준" },
+    { key: "usOwnership", label: "지분 변화", value: usDashboard.stats.ownershipChanges, note: "13D·13G 보고" },
   ];
 
   const koreaPanel: InvestmentDiscoveryPanel = {
@@ -160,31 +166,26 @@ export default async function InvestmentDiscoveries() {
     tabLabel: "🇺🇸 미국 SEC",
     tabNote: "미국 상장사 EDGAR 공시",
     description:
-      "최근 완료 미국 영업일 SEC 공시에서 10-Q·10-K·8-K·6-K·증권신고·대량보유 보고를 유형별로 정리합니다. 주가 전망이 아니라 SEC에 실제 제출된 공시 사실을 보여줍니다.",
+      "최근 완료 미국 영업일 SEC 공시에서 투자자가 다시 확인할 만한 실적·계약·주주환원·지분 변화를 규칙 기반으로 골라냅니다. 주가 전망이 아니라 SEC에 제출된 사실과 계산값을 보여줍니다.",
     detailHref: "/data/disclosures?market=us",
     detailLabel: "미국 전체 공시 보기",
     badges: [
-      `기준 ${formatDate(feed.us.sourceDate)}`,
-      `SEC 공시 ${usItems.length}건`,
-      `기업 ${uniqueCompanyCount(usItems)}곳`,
+      `기준 ${formatDate(usDashboard.sourceDate)}`,
+      `실적 후보 ${usDashboard.analyzed.earningsCandidates}건만 분석`,
+      `이벤트 후보 ${usDashboard.analyzed.eventCandidates}건만 분석`,
     ],
     stats: usStats,
     companyLists: {
       usImportant: groupCompanies(usImportant, "en"),
-      usEarnings: groupCompanies(usEarnings, "en"),
-      usMajor: groupCompanies(usMajor, "en"),
-      usCapital: groupCompanies(usCapital, "en"),
       usOwnership: groupCompanies(usOwnership, "en"),
-      usProxy: groupCompanies(usProxy, "en"),
     },
-    detectedItems: [],
+    detectedItems: usDetectedItems,
     sourceLabel: "SEC",
-    idleTitle: "미국 SEC 공시는 유형별로 정리했습니다.",
-    idleHint: "위 숫자 카드를 누르면 해당 공시를 제출한 기업과 SEC 원문을 바로 확인할 수 있습니다.",
-    available: feed.us.configured && !feed.us.error,
-    error: feed.us.error,
-    footnote:
-      "SEC EDGAR 공개 공시를 완료 영업일 기준으로 수집합니다. 10-Q·10-K·20-F·40-F·8-K·6-K·증권신고·13D/13G·DEF 14A처럼 투자자가 다시 확인할 만한 양식만 정리합니다.",
+    idleTitle: "이번 기준일에는 설정한 미국 탐지 조건을 통과한 기업이 없습니다.",
+    idleHint: "위 숫자 카드를 누르면 중요 공시와 13D·13G 지분 변화 기업은 따로 확인할 수 있습니다.",
+    available: usDashboard.configured && feed.us.configured && !usDashboard.error,
+    error: usDashboard.error,
+    footnote: usDashboard.costNote,
   };
 
   return <InvestmentDiscoveryMarketTabs korea={koreaPanel} us={usPanel} />;

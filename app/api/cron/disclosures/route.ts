@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { archiveDailyDisclosures } from "@/app/lib/disclosureArchive";
 import { getInvestmentDiscoveryDashboard } from "@/app/lib/dartInvestmentDiscoveries";
+import { getUsInvestmentDiscoveryDashboard } from "@/app/lib/usInvestmentDiscoveries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,9 +22,12 @@ export async function GET(request: Request) {
   try {
     const result = await archiveDailyDisclosures();
 
-    // 실제 사용자가 /data를 열기 전에 실적·지분 탐지까지 미리 계산해 캐시에 넣는다.
-    // 같은 공시 피드를 재사용하므로 사용자 첫 방문에서 무거운 OpenDART 분석을 기다릴 가능성을 줄인다.
-    const discovery = await getInvestmentDiscoveryDashboard();
+    // 실제 사용자가 /data를 열기 전에 국내·미국 투자 변화 탐지를 미리 계산해 캐시에 넣는다.
+    // 공시 수집이 끝난 뒤 두 분석을 병렬로 실행해 Cron 총 대기시간을 줄인다.
+    const [discovery, usDiscovery] = await Promise.all([
+      getInvestmentDiscoveryDashboard(),
+      getUsInvestmentDiscoveryDashboard(),
+    ]);
 
     return NextResponse.json({
       ok: result.error === null,
@@ -37,6 +41,9 @@ export async function GET(request: Request) {
       discoveryPrewarmed: discovery.configured,
       discoverySourceDate: discovery.sourceDate,
       discoveryItems: discovery.items.length,
+      usDiscoveryPrewarmed: usDiscovery.configured,
+      usDiscoverySourceDate: usDiscovery.sourceDate,
+      usDiscoveryItems: usDiscovery.items.length,
       error: result.error,
     });
   } catch (error) {

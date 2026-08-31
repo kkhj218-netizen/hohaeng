@@ -236,8 +236,7 @@ export default async function InvestmentDiscoveries() {
     idleTitle: "이번 기준일에는 설정한 미국 탐지 조건을 통과한 기업이 없습니다.",
     idleHint:
       "위 숫자 카드를 누르면 중요 공시와 13D·13G 지분 변화 기업은 따로 확인할 수 있습니다.",
-    available:
-      usDashboard.configured && feed.us.configured && !usDashboard.error,
+    available: usDashboard.configured && feed.us.configured,
     error: usDashboard.error || feed.us.error,
     footnote: usDashboard.costNote,
   };

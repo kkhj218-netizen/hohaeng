@@ -54,6 +54,13 @@ type AutoSaveStatus =
   | 'saved'
   | 'error';
 
+type SlugCheckStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'taken'
+  | 'error';
+
 type SaveTarget =
   | 'draft'
   | 'published'
@@ -63,6 +70,20 @@ type SaveOptions = {
   auto?: boolean;
   version?: number;
 };
+
+function normalizeSlug(
+  value: string
+) {
+  return value
+    .normalize('NFKC')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
+}
 
 function toDateTimeLocalValue(
   date: Date
@@ -174,6 +195,25 @@ export default function AdminWritePage() {
   const [
     ogImage,
     setOgImage,
+  ] = useState('');
+
+  // 새 글 전용 SEO slug
+  const [slug, setSlug] =
+    useState('');
+
+  const [
+    slugManuallyEdited,
+    setSlugManuallyEdited,
+  ] = useState(false);
+
+  const [
+    slugCheckStatus,
+    setSlugCheckStatus,
+  ] = useState<SlugCheckStatus>('idle');
+
+  const [
+    slugCheckMessage,
+    setSlugCheckMessage,
   ] = useState('');
 
   // 예약 발행 날짜·시간
@@ -310,6 +350,115 @@ export default function AdminWritePage() {
             : 'waiting'
       );
     }, []);
+
+  const checkSlugAvailability =
+    useCallback(
+      async (
+        value: string
+      ) => {
+        const normalized =
+          normalizeSlug(value);
+
+        if (!normalized) {
+          return false;
+        }
+
+        const {
+          data,
+          error,
+        } =
+          await supabase
+            .from('posts')
+            .select('id')
+            .eq(
+              'slug',
+              normalized
+            )
+            .limit(1);
+
+        if (error) {
+          throw error;
+        }
+
+        const matchedPost =
+          data?.[0];
+
+        return (
+          !matchedPost ||
+          matchedPost.id ===
+            currentPostIdRef.current
+        );
+      },
+      []
+    );
+
+  const handleSlugCheck =
+    useCallback(
+      async () => {
+        const normalized =
+          normalizeSlug(slug);
+
+        setSlug(normalized);
+
+        if (!normalized) {
+          setSlugCheckStatus(
+            'idle'
+          );
+          setSlugCheckMessage(
+            'Slug를 먼저 입력해주세요.'
+          );
+          return;
+        }
+
+        try {
+          setSlugCheckStatus(
+            'checking'
+          );
+          setSlugCheckMessage(
+            '중복 여부를 확인하고 있습니다...'
+          );
+
+          const available =
+            await checkSlugAvailability(
+              normalized
+            );
+
+          if (available) {
+            setSlugCheckStatus(
+              'available'
+            );
+            setSlugCheckMessage(
+              '✓ 사용할 수 있는 Slug입니다.'
+            );
+          } else {
+            setSlugCheckStatus(
+              'taken'
+            );
+            setSlugCheckMessage(
+              '⚠ 이미 사용 중인 Slug입니다. 다른 주소를 입력해주세요.'
+            );
+          }
+        } catch (
+          error
+        ) {
+          console.error(
+            'Slug 중복 확인 실패:',
+            error
+          );
+
+          setSlugCheckStatus(
+            'error'
+          );
+          setSlugCheckMessage(
+            '⚠ 중복 확인에 실패했습니다. 잠시 후 다시 확인해주세요.'
+          );
+        }
+      },
+      [
+        checkSlugAvailability,
+        slug,
+      ]
+    );
 
   // =========================================================
   // 카테고리 + 세부주제 불러오기
@@ -811,6 +960,30 @@ export default function AdminWritePage() {
           return;
         }
 
+        const normalizedSlug =
+          normalizeSlug(slug);
+
+        if (
+          isFinalAction &&
+          !normalizedSlug
+        ) {
+          publishingRef.current =
+            false;
+
+          setSlugCheckStatus(
+            'idle'
+          );
+          setSlugCheckMessage(
+            '공개 또는 예약 발행 전에 SEO용 Slug를 입력해주세요.'
+          );
+
+          alert(
+            '공개 또는 예약 발행 전에 SEO용 Slug를 입력해주세요.'
+          );
+
+          return;
+        }
+
         let scheduledAtIso:
           string |
           null = null;
@@ -875,6 +1048,7 @@ export default function AdminWritePage() {
         const hasMeaningfulContent =
           Boolean(
             title.trim() ||
+            slug.trim() ||
             subcategory.trim() ||
             description.trim() ||
             seoTitle.trim() ||
@@ -896,6 +1070,99 @@ export default function AdminWritePage() {
           return;
         }
 
+        let slugToPersist =
+          normalizedSlug;
+
+        let shouldPersistSlug =
+          Boolean(normalizedSlug);
+
+        if (normalizedSlug) {
+          try {
+            const available =
+              await checkSlugAvailability(
+                normalizedSlug
+              );
+
+            if (available) {
+              setSlugCheckStatus(
+                'available'
+              );
+              setSlugCheckMessage(
+                '✓ 사용할 수 있는 Slug입니다.'
+              );
+            } else {
+              setSlugCheckStatus(
+                'taken'
+              );
+              setSlugCheckMessage(
+                '⚠ 이미 사용 중인 Slug입니다. 다른 주소를 입력해주세요.'
+              );
+
+              if (isFinalAction) {
+                publishingRef.current =
+                  false;
+
+                alert(
+                  '이미 사용 중인 Slug입니다. 다른 주소를 입력해주세요.'
+                );
+
+                return;
+              }
+
+              // 초안 자동저장은 본문을 살리되,
+              // 중복된 slug로 기존 주소를 덮어쓰지는 않는다.
+              shouldPersistSlug =
+                false;
+            }
+          } catch (
+            error
+          ) {
+            console.error(
+              'Slug 확인 실패:',
+              error
+            );
+
+            setSlugCheckStatus(
+              'error'
+            );
+            setSlugCheckMessage(
+              '⚠ Slug 확인에 실패했습니다. 공개 전 다시 확인해주세요.'
+            );
+
+            if (isFinalAction) {
+              publishingRef.current =
+                false;
+
+              alert(
+                'Slug 중복 여부를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.'
+              );
+
+              return;
+            }
+
+            shouldPersistSlug =
+              false;
+          }
+        }
+
+        // 최초 초안은 제목/slug가 비어 있거나 중복이어도 저장되도록
+        // 임시 주소를 사용한다. 공개 전에 입력한 SEO slug로 교체된다.
+        if (
+          !currentPostIdRef.current &&
+          !shouldPersistSlug
+        ) {
+          slugToPersist =
+            `draft-${category}-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(
+                2,
+                7
+              )}`;
+
+          shouldPersistSlug =
+            true;
+        }
+
         // 초안은 제목이 없어도 저장 가능
         const savedTitle =
           title.trim() ||
@@ -911,6 +1178,9 @@ export default function AdminWritePage() {
           JSON.stringify({
             title:
               savedTitle,
+            slug:
+              normalizedSlug ||
+              null,
             content:
               htmlContent,
             category,
@@ -1031,6 +1301,14 @@ export default function AdminWritePage() {
 
             updated_at:
               now,
+
+            ...(shouldPersistSlug &&
+            slugToPersist
+              ? {
+                  slug:
+                    slugToPersist,
+                }
+              : {}),
           };
 
           let savedPostId =
@@ -1074,11 +1352,15 @@ export default function AdminWritePage() {
 
             savedSlug =
               updatedPost.slug;
+
+            currentSlugRef.current =
+              updatedPost.slug;
+
+            setCurrentSlug(
+              updatedPost.slug
+            );
           } else {
             // 최초 저장이면 INSERT
-            const generatedSlug =
-              `post-${category}-${Date.now()}`;
-
             const {
               data:
                 insertedPost,
@@ -1088,12 +1370,7 @@ export default function AdminWritePage() {
               await supabase
                 .from('posts')
                 .insert([
-                  {
-                    ...postPayload,
-
-                    slug:
-                      generatedSlug,
-                  },
+                  postPayload,
                 ])
                 .select(
                   'id, slug'
@@ -1261,6 +1538,17 @@ export default function AdminWritePage() {
             ''
           );
 
+          setSlug('');
+          setSlugManuallyEdited(
+            false
+          );
+          setSlugCheckStatus(
+            'idle'
+          );
+          setSlugCheckMessage(
+            ''
+          );
+
           setScheduledAt(
             ''
           );
@@ -1372,6 +1660,7 @@ export default function AdminWritePage() {
       [
         category,
         categories,
+        checkSlugAvailability,
         clearAutoSaveTimer,
         description,
         editor,
@@ -1380,6 +1669,7 @@ export default function AdminWritePage() {
         router,
         scheduledAt,
         seoTitle,
+        slug,
         subcategory,
         title,
       ]
@@ -1725,14 +2015,155 @@ export default function AdminWritePage() {
             placeholder="제목을 입력하세요"
             value={title}
             onChange={(e) => {
+              const nextTitle =
+                e.target.value;
+
               setTitle(
-                e.target.value
+                nextTitle
               );
+
+              if (
+                !slugManuallyEdited
+              ) {
+                setSlug(
+                  normalizeSlug(
+                    nextTitle
+                  )
+                );
+                setSlugCheckStatus(
+                  'idle'
+                );
+                setSlugCheckMessage(
+                  ''
+                );
+              }
 
               markChanged();
             }}
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 font-bold text-lg"
           />
+
+        </div>
+
+        <div className="rounded-2xl border border-blue-900/70 bg-blue-950/20 p-4">
+
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <label className="text-xs font-black text-blue-300">
+              SEO 주소 Slug · 새 글 전용
+            </label>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSlug(
+                  normalizeSlug(
+                    title
+                  )
+                );
+                setSlugManuallyEdited(
+                  false
+                );
+                setSlugCheckStatus(
+                  'idle'
+                );
+                setSlugCheckMessage(
+                  ''
+                );
+                markChanged();
+              }}
+              disabled={!title.trim()}
+              className="text-xs font-bold text-blue-400 hover:text-blue-300 disabled:opacity-40"
+            >
+              ↻ 제목에서 자동 생성
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 flex items-center rounded-xl border border-slate-800 bg-slate-950 overflow-hidden focus-within:border-blue-500">
+              <span className="hidden md:block pl-4 text-xs text-slate-500 whitespace-nowrap">
+                /blog/
+              </span>
+
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => {
+                  setSlug(
+                    normalizeSlug(
+                      e.target.value
+                    )
+                  );
+                  setSlugManuallyEdited(
+                    true
+                  );
+                  setSlugCheckStatus(
+                    'idle'
+                  );
+                  setSlugCheckMessage(
+                    ''
+                  );
+                  markChanged();
+                }}
+                placeholder="예: futures-margin"
+                maxLength={80}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full bg-transparent px-4 py-3 text-white focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                void handleSlugCheck()
+              }
+              disabled={
+                !slug.trim() ||
+                slugCheckStatus ===
+                  'checking'
+              }
+              className="px-4 py-3 rounded-xl border border-blue-800 bg-blue-950/50 hover:bg-blue-900/50 disabled:opacity-40 text-sm font-bold text-blue-200"
+            >
+              {slugCheckStatus ===
+              'checking'
+                ? '확인 중...'
+                : '중복 확인'}
+            </button>
+          </div>
+
+          <p className="mt-2 text-xs text-slate-400 leading-5 break-all">
+            실제 주소: <span className="font-bold text-slate-200">https://hohaeng.vercel.app/blog/{slug || '여기에-slug'}</span>
+          </p>
+
+          <p className="mt-1 text-xs text-slate-500 leading-5">
+            제목에서 자동 생성되며 직접 수정할 수 있습니다. 검색 노출을 위해 가능하면 짧은 영문 키워드 형태를 권장합니다. 기존에 발행된 글의 주소는 이 기능으로 변경되지 않습니다.
+          </p>
+
+          {slugCheckMessage && (
+            <p
+              className={
+                slugCheckStatus ===
+                  'available'
+                  ? 'mt-2 text-xs font-bold text-emerald-300'
+                  : slugCheckStatus ===
+                      'taken' ||
+                    slugCheckStatus ===
+                      'error'
+                    ? 'mt-2 text-xs font-bold text-amber-300'
+                    : 'mt-2 text-xs font-bold text-slate-400'
+              }
+            >
+              {slugCheckMessage}
+            </p>
+          )}
+
+          {currentPostId &&
+            currentSlug && (
+              <p className="mt-2 text-[11px] text-slate-500 break-all">
+                현재 초안에 저장된 주소: /blog/{currentSlug}
+              </p>
+            )}
 
         </div>
 

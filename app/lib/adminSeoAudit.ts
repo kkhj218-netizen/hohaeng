@@ -14,11 +14,26 @@ export type SeoAuditSourcePost = {
   status: string | null;
 };
 
+export type SeoAuditTargetKind =
+  | 'h1'
+  | 'missing-alt'
+  | 'broken-link'
+  | 'long-paragraph'
+  | 'editor';
+
+export type SeoAuditTarget = {
+  kind: SeoAuditTargetKind;
+  index: number;
+  preview: string;
+  value?: string;
+};
+
 export type SeoAuditIssue = {
   id: string;
   severity: SeoIssueSeverity;
   label: string;
   detail: string;
+  targets?: SeoAuditTarget[];
 };
 
 export type SeoAuditResult = {
@@ -56,6 +71,12 @@ function countMatches(value: string, pattern: RegExp) {
   return [...value.matchAll(pattern)].length;
 }
 
+function shorten(value: string, max = 120) {
+  const clean = stripHtml(value);
+  if (!clean) return '';
+  return clean.length > max ? `${clean.slice(0, max - 1).trim()}…` : clean;
+}
+
 function extractInternalLinks(content: string) {
   const results: string[] = [];
   const hrefPattern = /href=["']([^"']+)["']/gi;
@@ -68,22 +89,72 @@ function extractInternalLinks(content: string) {
   return results;
 }
 
-function getMissingAltCount(content: string) {
-  let missing = 0;
+function getH1Targets(content: string): SeoAuditTarget[] {
+  return [...content.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)].map((match, index) => ({
+    kind: 'h1',
+    index,
+    preview: shorten(match[1]) || `본문 H1 ${index + 1}`,
+  }));
+}
+
+function getMissingAltTargets(content: string): SeoAuditTarget[] {
+  const targets: SeoAuditTarget[] = [];
   for (const match of content.matchAll(/<img\b[^>]*>/gi)) {
     const tag = match[0];
     const alt = tag.match(/\balt=["']([^"']*)["']/i)?.[1]?.trim();
-    if (!alt) missing += 1;
+    if (alt) continue;
+    const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1]?.trim() || '';
+    let fileName = '';
+    if (src) {
+      try {
+        fileName = decodeURIComponent(src.split('/').pop()?.split('?')[0] || '');
+      } catch {
+        fileName = src.split('/').pop()?.split('?')[0] || '';
+      }
+    }
+    targets.push({
+      kind: 'missing-alt',
+      index: targets.length,
+      preview: fileName ? `ALT 없음 · ${fileName}` : `ALT 없는 이미지 ${targets.length + 1}`,
+      value: src || undefined,
+    });
   }
-  return missing;
+  return targets;
 }
 
-function getLongParagraphCount(content: string) {
-  let count = 0;
-  for (const match of content.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
-    if (stripHtml(match[1]).length >= 450) count += 1;
+function getBrokenInternalLinkTargets(content: string, knownSlugs: Set<string>): SeoAuditTarget[] {
+  const targets: SeoAuditTarget[] = [];
+  const linkPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  for (const match of content.matchAll(linkPattern)) {
+    const href = match[1]?.trim();
+    if (!href) continue;
+    const local = href.match(/(?:https?:\/\/[^/]+)?\/blog\/([^?#"']+)/i);
+    if (!local?.[1]) continue;
+    const slug = decodeURIComponent(local[1].replace(/\/$/, ''));
+    if (knownSlugs.has(slug)) continue;
+    const anchorText = shorten(match[2], 90);
+    targets.push({
+      kind: 'broken-link',
+      index: targets.length,
+      preview: anchorText ? `${anchorText} → /blog/${slug}` : `/blog/${slug}`,
+      value: href,
+    });
   }
-  return count;
+  return targets;
+}
+
+function getLongParagraphTargets(content: string): SeoAuditTarget[] {
+  const targets: SeoAuditTarget[] = [];
+  for (const match of content.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const text = stripHtml(match[1]);
+    if (text.length < 450) continue;
+    targets.push({
+      kind: 'long-paragraph',
+      index: targets.length,
+      preview: shorten(match[1]),
+    });
+  }
+  return targets;
 }
 
 function pushIssue(
@@ -92,8 +163,9 @@ function pushIssue(
   severity: SeoIssueSeverity,
   label: string,
   detail: string,
+  targets?: SeoAuditTarget[],
 ) {
-  issues.push({ id, severity, label, detail });
+  issues.push({ id, severity, label, detail, ...(targets?.length ? { targets } : {}) });
 }
 
 export function auditSeoPosts(posts: SeoAuditSourcePost[]): Record<string, SeoAuditResult> {
@@ -120,15 +192,17 @@ export function auditSeoPosts(posts: SeoAuditSourcePost[]): Record<string, SeoAu
       const h1Count = countMatches(content, /<h1\b[^>]*>/gi);
       const h2Count = countMatches(content, /<h2\b[^>]*>/gi);
       const imageCount = countMatches(content, /<img\b[^>]*>/gi);
-      const missingAlt = getMissingAltCount(content);
+      const h1Targets = getH1Targets(content);
+      const missingAltTargets = getMissingAltTargets(content);
       const internalLinks = extractInternalLinks(content);
+      const brokenLinkTargets = getBrokenInternalLinkTargets(content, knownSlugs);
       const brokenInternalLinks = [...new Set(internalLinks.filter((item) => !knownSlugs.has(item)))];
-      const longParagraphs = getLongParagraphCount(content);
+      const longParagraphTargets = getLongParagraphTargets(content);
 
       if (textLength < 600) {
-        pushIssue(issues, 'body-too-short', 'error', '본문 분량이 너무 짧습니다.', `현재 약 ${textLength.toLocaleString('ko-KR')}자입니다. 핵심 설명·예시·근거를 보강해 최소 600자 이상으로 늘려보세요.`);
+        pushIssue(issues, 'body-too-short', 'error', '본문 분량이 너무 짧습니다.', `현재 약 ${textLength.toLocaleString('ko-KR')}자입니다. 핵심 설명·예시·근거를 보강해 최소 600자 이상으로 늘려보세요.`, [{ kind: 'editor', index: 0, preview: '본문 전체' }]);
       } else if (textLength < 1200) {
-        pushIssue(issues, 'body-short', 'warning', '본문 분량을 조금 더 보강할 수 있습니다.', `현재 약 ${textLength.toLocaleString('ko-KR')}자입니다. 검색 의도를 충분히 해결하는 설명이 있는지 확인해보세요.`);
+        pushIssue(issues, 'body-short', 'warning', '본문 분량을 조금 더 보강할 수 있습니다.', `현재 약 ${textLength.toLocaleString('ko-KR')}자입니다. 검색 의도를 충분히 해결하는 설명이 있는지 확인해보세요.`, [{ kind: 'editor', index: 0, preview: '본문 전체' }]);
       }
 
       if (!seoTitle) {
@@ -148,23 +222,30 @@ export function auditSeoPosts(posts: SeoAuditSourcePost[]): Record<string, SeoAu
       }
 
       if (h1Count > 0) {
-        pushIssue(issues, 'body-h1', 'warning', '본문 안에 H1 제목이 있습니다.', '페이지 제목이 이미 H1 역할을 하므로 본문 소제목은 H2부터 사용하는 편이 안전합니다.');
+        pushIssue(
+          issues,
+          'body-h1',
+          'warning',
+          `본문 안에 H1 제목이 ${h1Count}개 있습니다.`,
+          '페이지 제목이 이미 H1 역할을 하므로 본문 소제목은 H2부터 사용하는 편이 안전합니다. 아래에서 실제 문장을 확인할 수 있습니다.',
+          h1Targets,
+        );
       }
 
       if (textLength >= 800 && h2Count < 2) {
-        pushIssue(issues, 'few-h2', 'warning', '소제목 구조가 부족합니다.', `본문이 ${textLength.toLocaleString('ko-KR')}자인데 H2가 ${h2Count}개입니다. 내용을 2~4개의 핵심 소제목으로 나눠보세요.`);
+        pushIssue(issues, 'few-h2', 'warning', '소제목 구조가 부족합니다.', `본문이 ${textLength.toLocaleString('ko-KR')}자인데 H2가 ${h2Count}개입니다. 내용을 2~4개의 핵심 소제목으로 나눠보세요.`, [{ kind: 'editor', index: 0, preview: '본문 전체' }]);
       }
 
-      if (missingAlt > 0) {
-        pushIssue(issues, 'missing-alt', 'warning', 'ALT가 없는 이미지가 있습니다.', `이미지 ${imageCount}장 중 ${missingAlt}장에 대체 텍스트가 없습니다. 이미지가 무엇을 보여주는지 짧게 적어주세요.`);
+      if (missingAltTargets.length > 0) {
+        pushIssue(issues, 'missing-alt', 'warning', 'ALT가 없는 이미지가 있습니다.', `이미지 ${imageCount}장 중 ${missingAltTargets.length}장에 대체 텍스트가 없습니다. 이미지가 무엇을 보여주는지 짧게 적어주세요.`, missingAltTargets);
       }
 
       if (textLength >= 900 && internalLinks.length === 0) {
-        pushIssue(issues, 'no-internal-links', 'warning', '내부 링크가 없습니다.', '관련된 호행처럼 글이나 계산기·데이터 페이지를 1~3개 자연스럽게 연결해보세요.');
+        pushIssue(issues, 'no-internal-links', 'warning', '내부 링크가 없습니다.', '관련된 호행처럼 글이나 계산기·데이터 페이지를 1~3개 자연스럽게 연결해보세요.', [{ kind: 'editor', index: 0, preview: '본문 전체' }]);
       }
 
       if (brokenInternalLinks.length > 0) {
-        pushIssue(issues, 'broken-internal-links', 'error', '깨진 내부 링크가 있습니다.', `존재하지 않는 /blog/ 링크 ${brokenInternalLinks.length}개를 확인하세요: ${brokenInternalLinks.slice(0, 2).join(', ')}`);
+        pushIssue(issues, 'broken-internal-links', 'error', '깨진 내부 링크가 있습니다.', `존재하지 않는 /blog/ 링크 ${brokenInternalLinks.length}개를 확인하세요: ${brokenInternalLinks.slice(0, 2).join(', ')}`, brokenLinkTargets);
       }
 
       if (/^post-[a-z0-9-]+-\d{10,}$/i.test(slug)) {
@@ -179,8 +260,8 @@ export function auditSeoPosts(posts: SeoAuditSourcePost[]): Record<string, SeoAu
         pushIssue(issues, 'duplicate-meta', 'warning', '다른 글과 메타 설명이 같습니다.', '각 글의 검색 의도에 맞게 고유한 메타 설명을 작성하세요.');
       }
 
-      if (longParagraphs > 0) {
-        pushIssue(issues, 'long-paragraphs', 'warning', '너무 긴 문단이 있습니다.', `${longParagraphs}개 문단이 450자 이상입니다. 모바일 가독성을 위해 문단을 나누거나 소제목·목록을 활용해보세요.`);
+      if (longParagraphTargets.length > 0) {
+        pushIssue(issues, 'long-paragraphs', 'warning', '너무 긴 문단이 있습니다.', `${longParagraphTargets.length}개 문단이 450자 이상입니다. 모바일 가독성을 위해 문단을 나누거나 소제목·목록을 활용해보세요.`, longParagraphTargets);
       }
 
       if (!post.og_image) {
@@ -202,7 +283,7 @@ export function auditSeoPosts(posts: SeoAuditSourcePost[]): Record<string, SeoAu
           textLength,
           h2Count,
           imageCount,
-          missingAltCount: missingAlt,
+          missingAltCount: missingAltTargets.length,
           internalLinkCount: internalLinks.length,
         } satisfies SeoAuditResult,
       ];

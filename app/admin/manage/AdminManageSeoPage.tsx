@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { supabase } from '@/app/lib/supabase';
+import SeoIssueActionCard from './SeoIssueActionCard';
 import {
   auditSeoPosts,
   type SeoAuditResult,
   type SeoAuditSourcePost,
   type SeoAuditStatus,
-  type SeoIssueSeverity,
 } from '@/app/lib/adminSeoAudit';
 
 type PostStatus = 'draft' | 'published';
@@ -97,12 +97,6 @@ function seoLabel(audit: SeoAuditResult | undefined) {
   if (audit.status === 'good') return { text: 'SEO 양호', icon: '🟢', className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' };
   if (audit.status === 'improve') return { text: 'SEO 보완', icon: '🟡', className: 'border-amber-500/25 bg-amber-500/10 text-amber-300' };
   return { text: 'SEO 수정 필요', icon: '🔴', className: 'border-red-500/25 bg-red-500/10 text-red-300' };
-}
-
-function severityStyle(severity: SeoIssueSeverity) {
-  if (severity === 'error') return { icon: '🔴', box: 'border-red-500/20 bg-red-500/5', title: 'text-red-300' };
-  if (severity === 'warning') return { icon: '🟡', box: 'border-amber-500/20 bg-amber-500/5', title: 'text-amber-200' };
-  return { icon: 'ℹ️', box: 'border-blue-500/20 bg-blue-500/5', title: 'text-blue-200' };
 }
 
 export default function AdminManageSeoPage() {
@@ -411,15 +405,19 @@ export default function AdminManageSeoPage() {
                             <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm font-bold text-emerald-300">✅ 현재 검사 기준에서 수정이 필요한 SEO 항목이 없습니다.</div>
                           ) : (
                             <div className="mt-3 grid gap-2">
-                              {audit.issues.map((issue) => {
-                                const style = severityStyle(issue.severity);
-                                return <div key={issue.id} className={`rounded-xl border p-3 ${style.box}`}><div className="flex gap-2"><span>{style.icon}</span><div><p className={`text-sm font-black ${style.title}`}>{issue.label}</p><p className="mt-1 text-xs leading-5 text-slate-400">{issue.detail}</p></div></div></div>;
-                              })}
+                              {audit.issues.map((issue) => (
+                                <SeoIssueActionCard
+                                  key={issue.id}
+                                  postId={post.id}
+                                  issue={issue}
+                                  onFixed={loadSeoAudits}
+                                />
+                              ))}
                             </div>
                           )}
 
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-[11px] text-slate-500">수정 후 이 화면의 ‘SEO 다시 검사’를 누르면 즉시 재진단됩니다.</p>
+                            <p className="text-[11px] text-slate-500">‘📍 위치 보기’를 누르면 수정 화면에서 문제 부분으로 자동 이동해 노란색으로 표시합니다. 수정 후 ‘SEO 다시 검사’를 누르면 즉시 재진단됩니다.</p>
                             <Link href={`/admin/edit/${post.id}`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-500">✏️ 이 글 수정하기 →</Link>
                           </div>
                         </>

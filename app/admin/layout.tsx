@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 
+import AdminSeoLocator from './AdminSeoLocator';
+
 export const metadata: Metadata = {
   title: '호행처럼 관리자',
   robots: {
@@ -15,5 +17,10 @@ export const metadata: Metadata = {
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <AdminSeoLocator />
+      {children}
+    </>
+  );
 }

@@ -68,6 +68,108 @@ export type BlogDeferredData = {
 const BLOG_POST_REVALIDATE_SECONDS = 300;
 const BLOG_TAXONOMY_REVALIDATE_SECONDS = 3600;
 
+const SEO_PRESERVE_COPY_CATEGORY_NAMES = new Set([
+  "투자 이론",
+  "시황 및 시장",
+]);
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function normalizeSeoDescription(value: string | null | undefined) {
+  const normalized = value?.replace(/\s+/g, " ").trim() || "";
+
+  if (!normalized) return null;
+  if (normalized.length <= 155) return normalized;
+
+  return `${normalized.slice(0, 152).trimEnd()}...`;
+}
+
+/**
+ * 투자 이론·시황 글은 작성자의 문장을 바꾸지 않고 SEO 구조만 정리한다.
+ *
+ * - 페이지 제목이 이미 H1이므로 본문 안의 H1은 H2로만 변경
+ * - 본문 이미지의 빈 alt를 보완하고 지연 로딩 적용
+ * - 넓은 표는 모바일에서 가로 스크롤 가능하게 감쌈
+ *
+ * DB 원문은 수정하지 않고 공개 페이지에 렌더링할 때만 적용한다.
+ */
+function optimizeInvestmentPostHtml(
+  html: string | null,
+  postTitle: string,
+) {
+  if (!html) return html;
+
+  const imageAlt = escapeHtmlAttribute(`${postTitle} 관련 이미지`);
+
+  return html
+    .replace(/<h1(\b[^>]*)>/gi, "<h2$1>")
+    .replace(/<\/h1>/gi, "</h2>")
+    .replace(/<img\b([^>]*)>/gi, (match, rawAttributes: string) => {
+      let attributes = rawAttributes;
+
+      if (!/\balt\s*=/.test(attributes)) {
+        attributes += ` alt="${imageAlt}"`;
+      } else {
+        attributes = attributes.replace(
+          /\balt\s*=\s*(["'])\s*\1/i,
+          `alt="${imageAlt}"`,
+        );
+      }
+
+      if (!/\bloading\s*=/.test(attributes)) {
+        attributes += ' loading="lazy"';
+      }
+
+      if (!/\bdecoding\s*=/.test(attributes)) {
+        attributes += ' decoding="async"';
+      }
+
+      return `<img${attributes}>`;
+    })
+    .replace(
+      /<table\b([^>]*)>/gi,
+      '<div style="max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch"><table$1>',
+    )
+    .replace(/<\/table>/gi, "</table></div>");
+}
+
+async function applyPreserveCopySeoOptimization(
+  post: BlogPostPagePost | null,
+): Promise<BlogPostPagePost | null> {
+  if (!post?.category) return post;
+
+  const { data: categoryData, error: categoryError } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("slug", post.category)
+    .maybeSingle();
+
+  if (categoryError) {
+    console.error("SEO 대상 카테고리 확인 오류:", categoryError);
+    return post;
+  }
+
+  const categoryName = categoryData?.name?.trim() || "";
+
+  if (!SEO_PRESERVE_COPY_CATEGORY_NAMES.has(categoryName)) {
+    return post;
+  }
+
+  return {
+    ...post,
+    content: optimizeInvestmentPostHtml(post.content, post.title),
+    meta_description:
+      normalizeSeoDescription(post.meta_description || post.description) ||
+      post.meta_description,
+  };
+}
+
 const loadPublishedBlogPost = unstable_cache(
   async (slug: string): Promise<BlogPostPagePost | null> => {
     const { data, error } = await supabase
@@ -84,9 +186,10 @@ const loadPublishedBlogPost = unstable_cache(
       return null;
     }
 
-    return (data as BlogPostPagePost | null) ?? null;
+    const post = (data as BlogPostPagePost | null) ?? null;
+    return applyPreserveCopySeoOptimization(post);
   },
-  ["hohaeng-published-blog-post-v1"],
+  ["hohaeng-published-blog-post-v2"],
   { revalidate: BLOG_POST_REVALIDATE_SECONDS },
 );
 

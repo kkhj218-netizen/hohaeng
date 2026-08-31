@@ -6,14 +6,8 @@ import {
   type DiscoveryDetectedItem,
   type DiscoveryStatItem,
 } from "@/app/data/InvestmentDiscoveryExplorer";
-import {
-  getInvestmentDiscoveryDashboard,
-} from "@/app/lib/dartInvestmentDiscoveries";
-import {
-  getDailyDisclosureFeed,
-  type DisclosureItem,
-} from "@/app/lib/disclosureHub";
-import { getUsInvestmentDiscoveryDashboard } from "@/app/lib/usInvestmentDiscoveries";
+import { type DisclosureItem } from "@/app/lib/disclosureHub";
+import { getSafeInvestmentDiscoveryBundle } from "@/app/lib/safeInvestmentDiscoveries";
 
 function formatDate(value: string | null) {
   return value ? value.replaceAll("-", ".") : "확인 중";
@@ -64,11 +58,8 @@ function groupCompanies(
 }
 
 export default async function InvestmentDiscoveries() {
-  const [dashboard, usDashboard] = await Promise.all([
-    getInvestmentDiscoveryDashboard(),
-    getUsInvestmentDiscoveryDashboard(),
-  ]);
-  const feed = await getDailyDisclosureFeed();
+  const { dashboard, usDashboard, feed } =
+    await getSafeInvestmentDiscoveryBundle();
 
   const koreaItems = feed.korea.items;
   const importantItems = koreaItems.filter((item) => item.importance >= 70);
@@ -87,12 +78,42 @@ export default async function InvestmentDiscoveries() {
   });
 
   const koreaStats: DiscoveryStatItem[] = [
-    { key: "important", label: "중요 공시", value: dashboard.stats.importantFilings, note: "전체 중요도 70+" },
-    { key: "supply", label: "공급계약", value: dashboard.stats.supplyContracts, note: "단일판매·공급계약" },
-    { key: "shareholder", label: "주주환원", value: dashboard.stats.shareholderReturns, note: "자사주·소각·배당" },
-    { key: "earnings", label: "실적 급증", value: dashboard.stats.earningsSurge, note: "매출 +30% / 이익 +50%" },
-    { key: "turnaround", label: "흑자전환", value: dashboard.stats.turnarounds, note: "영업이익 기준" },
-    { key: "ownership", label: "지분 변화", value: dashboard.stats.ownershipChanges, note: "임원·주요주주·5% 보고" },
+    {
+      key: "important",
+      label: "중요 공시",
+      value: dashboard.stats.importantFilings,
+      note: "전체 중요도 70+",
+    },
+    {
+      key: "supply",
+      label: "공급계약",
+      value: dashboard.stats.supplyContracts,
+      note: "단일판매·공급계약",
+    },
+    {
+      key: "shareholder",
+      label: "주주환원",
+      value: dashboard.stats.shareholderReturns,
+      note: "자사주·소각·배당",
+    },
+    {
+      key: "earnings",
+      label: "실적 급증",
+      value: dashboard.stats.earningsSurge,
+      note: "매출 +30% / 이익 +50%",
+    },
+    {
+      key: "turnaround",
+      label: "흑자전환",
+      value: dashboard.stats.turnarounds,
+      note: "영업이익 기준",
+    },
+    {
+      key: "ownership",
+      label: "지분 변화",
+      value: dashboard.stats.ownershipChanges,
+      note: "임원·주요주주·5% 보고",
+    },
   ];
 
   const detectedItems: DiscoveryDetectedItem[] = dashboard.items.map((item) => ({
@@ -125,12 +146,42 @@ export default async function InvestmentDiscoveries() {
   }));
 
   const usStats: DiscoveryStatItem[] = [
-    { key: "usImportant", label: "중요 공시", value: usDashboard.stats.importantFilings, note: "전체 중요도 70+" },
-    { key: "usContract", label: "중요 계약", value: usDashboard.stats.majorContracts, note: "8-K Item 1.01 등" },
-    { key: "usShareholder", label: "주주환원", value: usDashboard.stats.shareholderReturns, note: "배당·자사주 매입" },
-    { key: "usEarnings", label: "실적 급증", value: usDashboard.stats.earningsSurge, note: "매출 +30% / 이익 +50%" },
-    { key: "usTurnaround", label: "흑자전환", value: usDashboard.stats.turnarounds, note: "영업이익 기준" },
-    { key: "usOwnership", label: "지분 변화", value: usDashboard.stats.ownershipChanges, note: "13D·13G 보고" },
+    {
+      key: "usImportant",
+      label: "중요 공시",
+      value: usDashboard.stats.importantFilings,
+      note: "전체 중요도 70+",
+    },
+    {
+      key: "usContract",
+      label: "중요 계약",
+      value: usDashboard.stats.majorContracts,
+      note: "8-K Item 1.01 등",
+    },
+    {
+      key: "usShareholder",
+      label: "주주환원",
+      value: usDashboard.stats.shareholderReturns,
+      note: "배당·자사주 매입",
+    },
+    {
+      key: "usEarnings",
+      label: "실적 급증",
+      value: usDashboard.stats.earningsSurge,
+      note: "매출 +30% / 이익 +50%",
+    },
+    {
+      key: "usTurnaround",
+      label: "흑자전환",
+      value: usDashboard.stats.turnarounds,
+      note: "영업이익 기준",
+    },
+    {
+      key: "usOwnership",
+      label: "지분 변화",
+      value: usDashboard.stats.ownershipChanges,
+      note: "13D·13G 보고",
+    },
   ];
 
   const koreaPanel: InvestmentDiscoveryPanel = {
@@ -155,9 +206,10 @@ export default async function InvestmentDiscoveries() {
     detectedItems,
     sourceLabel: "DART",
     idleTitle: "이번 기준일에는 설정한 탐지 조건을 통과한 기업이 없습니다.",
-    idleHint: "위 숫자 카드를 누르면 중요 공시·공급계약·주주환원에 포함된 회사는 따로 확인할 수 있습니다.",
+    idleHint:
+      "위 숫자 카드를 누르면 중요 공시·공급계약·주주환원에 포함된 회사는 따로 확인할 수 있습니다.",
     available: dashboard.configured && feed.korea.configured,
-    error: feed.korea.error,
+    error: dashboard.error || feed.korea.error,
     footnote: dashboard.costNote,
   };
 
@@ -182,9 +234,10 @@ export default async function InvestmentDiscoveries() {
     detectedItems: usDetectedItems,
     sourceLabel: "SEC",
     idleTitle: "이번 기준일에는 설정한 미국 탐지 조건을 통과한 기업이 없습니다.",
-    idleHint: "위 숫자 카드를 누르면 중요 공시와 13D·13G 지분 변화 기업은 따로 확인할 수 있습니다.",
-    available: usDashboard.configured && feed.us.configured && !usDashboard.error,
-    error: usDashboard.error,
+    idleHint:
+      "위 숫자 카드를 누르면 중요 공시와 13D·13G 지분 변화 기업은 따로 확인할 수 있습니다.",
+    available: usDashboard.configured && feed.us.configured,
+    error: usDashboard.error || feed.us.error,
     footnote: usDashboard.costNote,
   };
 

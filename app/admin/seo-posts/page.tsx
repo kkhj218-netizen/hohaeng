@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 
 type PostStatus = 'draft' | 'published';
+type StatusFilter = 'published' | 'draft' | 'all';
 
 type Post = {
   id: string;
@@ -30,9 +31,6 @@ type Category = {
   is_active: boolean;
 };
 
-type CategoryFilter = 'all' | 'theory' | 'market';
-type StatusFilter = 'published' | 'draft' | 'all';
-
 type Audit = {
   score: number;
   seoTitle: string;
@@ -50,7 +48,12 @@ type Audit = {
   needsApply: boolean;
 };
 
-const TARGET_CATEGORY_NAMES = new Set(['투자 이론', '시황 및 시장']);
+const UNCATEGORIZED = '__uncategorized__';
+
+const FALLBACK_CATEGORY_NAMES: Record<string, string> = {
+  market: '시황 및 시장',
+  'investment-data': '투자 데이터',
+};
 
 const TITLE_STOP_WORDS = new Set([
   '이란',
@@ -130,17 +133,41 @@ function getFirstParagraphText(html: string | null | undefined) {
 
 function buildSeoTitle(post: Post, categoryName: string) {
   const current = normalizeWhitespace(post.seo_title);
-  const base = current || normalizeWhitespace(post.title);
+  let base = current || normalizeWhitespace(post.title);
 
   if (
     categoryName === '시황 및 시장' &&
     !/(시황|증시|시장)/.test(base) &&
     base.length <= 42
   ) {
-    return truncateText(`${base} | 미국 증시 시황`, 60);
+    base = `${base} | 미국 증시 시황`;
   }
 
   return truncateText(base, 60);
+}
+
+function getMetaSuffix(categoryName: string) {
+  if (categoryName === '시황 및 시장') {
+    return '주요 지수와 시장 움직임, 핵심 이슈를 한눈에 확인할 수 있게 정리했습니다.';
+  }
+
+  if (categoryName === '투자 이론') {
+    return '핵심 개념과 구조, 투자할 때 알아둘 포인트를 이해하기 쉽게 정리했습니다.';
+  }
+
+  if (categoryName === '투자 데이터') {
+    return '투자 판단에 참고할 수 있도록 핵심 지표와 데이터의 의미를 보기 쉽게 정리했습니다.';
+  }
+
+  if (categoryName === '마인드셋') {
+    return '생각의 핵심과 실제로 적용할 수 있는 포인트를 읽기 쉽게 정리했습니다.';
+  }
+
+  if (categoryName === '호행의 일지') {
+    return '직접 경험하고 기록한 내용을 중심으로 과정과 생각을 정리했습니다.';
+  }
+
+  return '핵심 내용과 알아둘 포인트를 한눈에 이해할 수 있도록 정리했습니다.';
 }
 
 function buildMetaDescription(post: Post, categoryName: string) {
@@ -157,13 +184,8 @@ function buildMetaDescription(post: Post, categoryName: string) {
   let candidate = source;
 
   if (candidate.length < 70) {
-    const suffix =
-      categoryName === '시황 및 시장'
-        ? '주요 지수와 시장 움직임, 핵심 이슈를 한눈에 확인할 수 있게 정리했습니다.'
-        : '핵심 개념과 구조, 투자할 때 알아둘 포인트를 이해하기 쉽게 정리했습니다.';
-
     candidate = normalizeWhitespace(
-      `${post.title}. ${candidate} ${suffix}`
+      `${post.title}. ${candidate} ${getMetaSuffix(categoryName)}`
     );
   }
 
@@ -192,19 +214,43 @@ function addImageSeoAttributes(tag: string, title: string) {
   return next;
 }
 
+function addMobileTableAttributes(tag: string) {
+  if (/\bdata-hohaeng-mobile-table\s*=/i.test(tag)) {
+    return tag;
+  }
+
+  const mobileStyle =
+    'display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;';
+
+  let next = tag.replace(
+    /^<table\b/i,
+    '<table data-hohaeng-mobile-table="1"'
+  );
+
+  const styleMatch = next.match(/\bstyle\s*=\s*(["'])(.*?)\1/i);
+
+  if (!styleMatch) {
+    return next.replace(
+      /^<table\b/i,
+      `<table style="${mobileStyle}"`
+    );
+  }
+
+  const existing = styleMatch[2].trim();
+  const separator = existing && !existing.endsWith(';') ? ';' : '';
+  const merged = `${existing}${separator}${mobileStyle}`;
+
+  return next.replace(styleMatch[0], `style="${escapeAttribute(merged)}"`);
+}
+
 function optimizeContentSafely(content: string | null, title: string) {
   if (!content) return '';
 
   return content
     .replace(/<h1(\b[^>]*)>/gi, '<h2$1>')
     .replace(/<\/h1>/gi, '</h2>')
-    .replace(/<img\b[^>]*>/gi, (tag) => addImageSeoAttributes(tag, title));
-}
-
-function getCategoryKind(categoryName: string): CategoryFilter {
-  if (categoryName === '시황 및 시장') return 'market';
-  if (categoryName === '투자 이론') return 'theory';
-  return 'all';
+    .replace(/<img\b[^>]*>/gi, (tag) => addImageSeoAttributes(tag, title))
+    .replace(/<table\b[^>]*>/gi, (tag) => addMobileTableAttributes(tag));
 }
 
 function tokenizeTitle(title: string) {
@@ -319,8 +365,10 @@ export default function AdminSeoPostsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
-  const [categoryNames, setCategoryNames] = useState<Record<string, string>>({});
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [categoryNames, setCategoryNames] = useState<Record<string, string>>({
+    ...FALLBACK_CATEGORY_NAMES,
+  });
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('published');
   const [query, setQuery] = useState('');
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -334,7 +382,7 @@ export default function AdminSeoPostsPage() {
       supabase
         .from('categories')
         .select('slug, name, is_active')
-        .eq('is_active', true),
+        .order('name', { ascending: true }),
       supabase
         .from('posts')
         .select(
@@ -347,29 +395,15 @@ export default function AdminSeoPostsPage() {
     if (postResult.error) throw postResult.error;
 
     const categories = (categoryResult.data || []) as Category[];
-    const names = Object.fromEntries(
-      categories.map((category) => [category.slug, category.name])
-    ) as Record<string, string>;
-
-    const targetSlugs = new Set(
-      categories
-        .filter((category) => TARGET_CATEGORY_NAMES.has(category.name))
-        .map((category) => category.slug)
-    );
-
-    // 시황 카테고리는 사이트에서 필수 카테고리로 보정될 수 있으므로 fallback 유지
-    targetSlugs.add('market');
-
-    const targetPosts = ((postResult.data || []) as Post[]).filter((post) => {
-      const categoryName = post.category ? names[post.category] : '';
-      return (
-        TARGET_CATEGORY_NAMES.has(categoryName) ||
-        (post.category ? targetSlugs.has(post.category) : false)
-      );
-    });
+    const names = {
+      ...FALLBACK_CATEGORY_NAMES,
+      ...Object.fromEntries(
+        categories.map((category) => [category.slug, category.name])
+      ),
+    } as Record<string, string>;
 
     setCategoryNames(names);
-    setPosts(targetPosts);
+    setPosts((postResult.data || []) as Post[]);
   }, []);
 
   useEffect(() => {
@@ -388,7 +422,7 @@ export default function AdminSeoPostsPage() {
       } catch (error: any) {
         console.error('SEO 자동관리 불러오기 오류:', error);
         setLoadError(
-          `투자글을 불러오지 못했습니다. ${error?.message || '잠시 후 다시 시도해주세요.'}`
+          `글을 불러오지 못했습니다. ${error?.message || '잠시 후 다시 시도해주세요.'}`
         );
       } finally {
         setLoading(false);
@@ -401,14 +435,13 @@ export default function AdminSeoPostsPage() {
   const rows = useMemo(
     () =>
       posts.map((post) => {
-        const categoryName =
-          (post.category && categoryNames[post.category]) ||
-          (post.category === 'market' ? '시황 및 시장' : post.category || '미분류');
+        const categoryName = post.category
+          ? categoryNames[post.category] || post.category
+          : '미분류';
 
         return {
           post,
           categoryName,
-          categoryKind: getCategoryKind(categoryName),
           audit: buildAudit(post, categoryName),
           linkCandidates: getLinkCandidates(post, posts),
         };
@@ -416,15 +449,35 @@ export default function AdminSeoPostsPage() {
     [categoryNames, posts]
   );
 
+  const categoryOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    for (const { post, categoryName } of rows) {
+      if (post.category) {
+        map.set(post.category, categoryName);
+      } else {
+        map.set(UNCATEGORIZED, '미분류');
+      }
+    }
+
+    return Array.from(map.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], 'ko-KR')
+    );
+  }, [rows]);
+
   const filteredRows = useMemo(() => {
     const normalizedQuery = normalizeWhitespace(query).toLowerCase();
 
-    return rows.filter(({ post, categoryKind }) => {
-      if (categoryFilter !== 'all' && categoryKind !== categoryFilter) return false;
+    return rows.filter(({ post, categoryName }) => {
+      if (categoryFilter !== 'all') {
+        if (categoryFilter === UNCATEGORIZED && post.category) return false;
+        if (categoryFilter !== UNCATEGORIZED && post.category !== categoryFilter) return false;
+      }
+
       if (statusFilter !== 'all' && post.status !== statusFilter) return false;
 
       if (normalizedQuery) {
-        const haystack = `${post.title} ${post.slug} ${post.subcategory || ''}`.toLowerCase();
+        const haystack = `${post.title} ${post.slug} ${post.subcategory || ''} ${categoryName}`.toLowerCase();
         if (!haystack.includes(normalizedQuery)) return false;
       }
 
@@ -495,7 +548,7 @@ export default function AdminSeoPostsPage() {
     }
 
     const confirmed = window.confirm(
-      `현재 목록의 ${targets.length}개 글에 안전 SEO를 적용할까요?\n\n제목·본문 문장·slug는 바꾸지 않고 SEO 제목, 메타 설명, H1 구조, 이미지 alt/로딩만 정리합니다.`
+      `현재 목록의 ${targets.length}개 글에 안전 SEO를 적용할까요?\n\n글 제목·본문 문장·숫자·URL/slug는 바꾸지 않고 SEO 제목, 메타 설명, H1 구조, 이미지 alt/로딩, 모바일 표만 정리합니다.`
     );
 
     if (!confirmed) return;
@@ -527,7 +580,7 @@ export default function AdminSeoPostsPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
-        <p className="font-bold">투자글 SEO 상태를 불러오는 중...</p>
+        <p className="font-bold">전체 글 SEO 상태를 불러오는 중...</p>
       </main>
     );
   }
@@ -539,10 +592,10 @@ export default function AdminSeoPostsPage() {
           <div>
             <p className="mb-1 text-xs font-black text-emerald-400">HOHAENG SEO OS</p>
             <h1 className="text-2xl font-black text-white sm:text-3xl">
-              🔎 투자글 SEO 자동관리
+              🔎 전체 글 SEO 자동관리
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              투자 이론·시황 글만 진단합니다. 기존 제목, 본문 문장, URL/slug는 그대로 두고
+              모든 카테고리의 글을 진단합니다. 기존 글 제목, 본문 문장, 숫자, URL/slug는 그대로 두고
               검색엔진 구조와 모바일 읽기 요소만 안전하게 정리합니다.
             </p>
           </div>
@@ -567,7 +620,8 @@ export default function AdminSeoPostsPage() {
 
         <div className="mb-6 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm leading-6 text-emerald-100">
           <strong>안전 적용 범위:</strong> SEO 제목·메타 설명 정리, 본문 내부 H1→H2,
-          이미지 빈 alt 보완, lazy loading/async decoding. <strong>본문 문장·숫자·투자 의견·slug는 변경하지 않습니다.</strong>
+          이미지 빈 alt 보완, lazy loading/async decoding, 모바일 표 가로 스크롤.
+          <strong> 글 제목·본문 문장·숫자·의견·URL/slug는 변경하지 않습니다.</strong>
           내부링크는 후보만 보여주고 자동 삽입하지 않습니다.
         </div>
 
@@ -584,7 +638,7 @@ export default function AdminSeoPostsPage() {
         )}
 
         <div className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          <StatCard label="대상 글" value={counts.total} tone="text-white" />
+          <StatCard label="전체 대상 글" value={counts.total} tone="text-white" />
           <StatCard label="추가 적용 필요" value={counts.needsApply} tone="text-amber-300" />
           <StatCard label="SEO 90점+" value={counts.good} tone="text-emerald-300" />
           <StatCard label="본문 H1 발견" value={counts.duplicateH1} tone="text-violet-300" />
@@ -596,18 +650,21 @@ export default function AdminSeoPostsPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="제목·slug 검색"
+            placeholder="제목·slug·카테고리 검색"
             className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
           />
 
           <select
             value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
+            onChange={(event) => setCategoryFilter(event.target.value)}
             className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
           >
-            <option value="all">투자 이론 + 시황 전체</option>
-            <option value="theory">투자 이론만</option>
-            <option value="market">시황 및 시장만</option>
+            <option value="all">모든 카테고리</option>
+            {categoryOptions.map(([slug, name]) => (
+              <option key={slug} value={slug}>
+                {name}
+              </option>
+            ))}
           </select>
 
           <select
@@ -627,7 +684,7 @@ export default function AdminSeoPostsPage() {
 
         {filteredRows.length === 0 ? (
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-400">
-            조건에 맞는 투자글이 없습니다.
+            조건에 맞는 글이 없습니다.
           </div>
         ) : (
           <div className="space-y-5">
@@ -755,7 +812,7 @@ export default function AdminSeoPostsPage() {
                   </div>
 
                   <p className="mt-4 text-xs leading-5 text-slate-500">
-                    본문 글자 약 {audit.textLength.toLocaleString('ko-KR')}자 · 표가 있는 경우 공개 화면에서 모바일 가로 스크롤로 표시됩니다.
+                    본문 글자 약 {audit.textLength.toLocaleString('ko-KR')}자 · 표는 적용 후 모바일에서 가로 스크롤이 가능하도록 보정됩니다.
                   </p>
                 </div>
               </article>

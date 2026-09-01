@@ -90,6 +90,14 @@ function normalizeSeoDescription(value: string | null | undefined) {
   return `${normalized.slice(0, 152).trimEnd()}...`;
 }
 
+function decodeBlogSlug(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /**
  * 투자 이론·시황 글은 작성자의 문장을 바꾸지 않고 SEO 구조만 정리한다.
  *
@@ -170,30 +178,47 @@ async function applyPreserveCopySeoOptimization(
   };
 }
 
-const loadPublishedBlogPost = unstable_cache(
-  async (slug: string): Promise<BlogPostPagePost | null> => {
-    const { data, error } = await supabase
-      .from("posts")
-      .select(
-        "id, title, slug, content, category, subcategory, description, created_at, published_at, updated_at, status, seo_title, meta_description, og_image",
-      )
-      .eq("slug", slug)
-      .eq("status", "published")
-      .maybeSingle();
+async function queryPublishedBlogPost(
+  slug: string,
+): Promise<BlogPostPagePost | null> {
+  const decodedSlug = decodeBlogSlug(slug);
+  const { data, error } = await supabase
+    .from("posts")
+    .select(
+      "id, title, slug, content, category, subcategory, description, created_at, published_at, updated_at, status, seo_title, meta_description, og_image",
+    )
+    .eq("slug", decodedSlug)
+    .eq("status", "published")
+    .maybeSingle();
 
-    if (error) {
-      console.error("Supabase 글 상세 불러오기 오류:", error);
-      return null;
-    }
+  if (error) {
+    console.error("Supabase 글 상세 불러오기 오류:", error);
+    return null;
+  }
 
-    const post = (data as BlogPostPagePost | null) ?? null;
-    return applyPreserveCopySeoOptimization(post);
-  },
-  ["hohaeng-published-blog-post-v2"],
+  const post = (data as BlogPostPagePost | null) ?? null;
+  return applyPreserveCopySeoOptimization(post);
+}
+
+const loadPublishedBlogPostCached = unstable_cache(
+  queryPublishedBlogPost,
+  ["hohaeng-published-blog-post-v3"],
   { revalidate: BLOG_POST_REVALIDATE_SECONDS },
 );
 
-export const getPublishedBlogPost = cache(loadPublishedBlogPost);
+export const getPublishedBlogPost = cache(
+  async (slug: string): Promise<BlogPostPagePost | null> => {
+    const cachedPost = await loadPublishedBlogPostCached(slug);
+
+    if (cachedPost) {
+      return cachedPost;
+    }
+
+    // 초안 상태에서 공개 URL이 미리 요청되면 "없음" 결과가 캐시될 수 있다.
+    // 새로 발행된 글이 그 캐시 때문에 404가 되지 않도록 null일 때만 DB를 즉시 재확인한다.
+    return queryPublishedBlogPost(slug);
+  },
+);
 
 const loadBlogCategory = unstable_cache(
   async (slug: string): Promise<BlogCategory | null> => {

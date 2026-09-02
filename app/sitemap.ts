@@ -6,7 +6,7 @@ import { TOOLS } from "@/app/tools";
 
 export const dynamic = "force-dynamic";
 
-const STATIC_LAST_MODIFIED = "2026-08-23T22:00:00+09:00";
+const STATIC_LAST_MODIFIED = "2026-09-03T02:35:00+09:00";
 
 type SitemapPost = {
   slug: string | null;

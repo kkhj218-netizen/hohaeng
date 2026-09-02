@@ -27,9 +27,9 @@ export async function generateMetadata({
   const params = await searchParams;
   const isFiltered = Object.keys(params).length > 0;
 
-  const title = '호행처럼 블로그 | 돈·직장·투자·삶의 실제 기록';
+  const title = '투자 공부·시장 분석 글 | 호행처럼';
   const description =
-    '연봉과 직장생활, 투자, 돈 관리와 호행처럼의 실제 성장 기록을 주제별로 읽어보세요.';
+    '미국증시 시황, 금리·물가·고용 지표, 투자 데이터와 시장 해석을 연결해 공부할 수 있는 글을 모았습니다.';
 
   return {
     title,
@@ -645,7 +645,7 @@ export default async function BlogListPage({
         <Breadcrumbs
           items={[
             { name: '홈', href: '/' },
-            { name: '블로그', href: '/blog' },
+            { name: '투자 공부', href: '/blog' },
           ]}
           className="mb-7"
         />
@@ -656,19 +656,19 @@ export default async function BlogListPage({
 
         <div className="mb-8">
           <p className="text-xs font-black text-blue-600 tracking-[0.16em] mb-2">
-            HOHAENG BLOG
+            HOHAENG INVESTMENT GUIDE
           </p>
 
           <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-[-0.03em]">
             {currentCategory
               ? `${currentCategory.emoji || '📁'} ${currentCategory.name}`
-              : '호행처럼 블로그'}
+              : '투자 공부·시장 분석 글'}
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 mt-3">
             {currentCategory
               ? `${currentCategory.name} 주제의 공개 글을 모았습니다.`
-              : '돈·직장·투자·삶을 더 나은 방향으로 바꾸는 기록과 가이드를 모았습니다.'}
+              : '미국증시 시황과 금리·물가·고용 지표를 시장 흐름과 연결해서 읽어보세요.'}
           </p>
 
           <p className="text-xs text-slate-400 mt-2">

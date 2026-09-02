@@ -29,10 +29,10 @@ export const metadata: Metadata = {
   ),
 
   title:
-    "호행처럼 - 스마트한 금융 & 라이프 가이드",
+    "호행처럼 - 오늘 시장·투자 데이터·투자 공부",
 
   description:
-    "돈과 시간을 아껴주는 스마트한 수치 가이드",
+    "미국증시, 시장지도, 경제일정, 실적 위험과 금리·물가·고용 데이터를 확인하고 투자 공부와 실제 기록까지 이어가는 개인 투자자의 시장 OS",
 
   applicationName: "호행처럼",
   creator: "호행처럼",
@@ -72,7 +72,6 @@ export const metadata: Metadata = {
     telephone: false,
   },
 
-  // RSS 자동발견
   alternates: {
     types: {
       "application/rss+xml":
@@ -101,7 +100,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-slate-950 text-slate-100 flex flex-col`}
       >
-        {/* Google AdSense: 핵심 UI와 데이터가 먼저 그려진 뒤 로드 */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1531409891320331"
@@ -109,7 +107,6 @@ export default function RootLayout({
           strategy="lazyOnload"
         />
 
-        {/* Google Analytics 4 */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-PRGFZWYJ0S"
           strategy="afterInteractive"

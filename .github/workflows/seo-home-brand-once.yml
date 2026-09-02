@@ -1,0 +1,85 @@
+name: SEO home brand one-time patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/seo-home-brand-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch blog role and sitemap freshness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          blog = Path('app/blog/page.tsx')
+          text = blog.read_text()
+
+          replacements = [
+              (
+                  "const title = '호행처럼 블로그 | 돈·직장·투자·삶의 실제 기록';",
+                  "const title = '투자 공부·시장 분석 글 | 호행처럼';",
+              ),
+              (
+                  "    '연봉과 직장생활, 투자, 돈 관리와 호행처럼의 실제 성장 기록을 주제별로 읽어보세요.';",
+                  "    '미국증시 시황, 금리·물가·고용 지표, 투자 데이터와 시장 해석을 연결해 공부할 수 있는 글을 모았습니다.';",
+              ),
+              (
+                  "            { name: '블로그', href: '/blog' },",
+                  "            { name: '투자 공부', href: '/blog' },",
+              ),
+              (
+                  "            HOHAENG BLOG",
+                  "            HOHAENG INVESTMENT GUIDE",
+              ),
+              (
+                  ": '호행처럼 블로그'}",
+                  ": '투자 공부·시장 분석 글'}",
+              ),
+              (
+                  ": '돈·직장·투자·삶을 더 나은 방향으로 바꾸는 기록과 가이드를 모았습니다.'}",
+                  ": '미국증시 시황과 금리·물가·고용 지표를 시장 흐름과 연결해서 읽어보세요.'}",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'Missing expected blog text: {old}')
+              text = text.replace(old, new, 1)
+
+          blog.write_text(text)
+
+          sitemap = Path('app/sitemap.ts')
+          sitemap_text = sitemap.read_text()
+          old_date = 'const STATIC_LAST_MODIFIED = "2026-08-23T22:00:00+09:00";'
+          new_date = 'const STATIC_LAST_MODIFIED = "2026-09-03T02:35:00+09:00";'
+          if old_date not in sitemap_text:
+              raise SystemExit('Missing expected sitemap lastModified value')
+          sitemap.write_text(sitemap_text.replace(old_date, new_date, 1))
+          PY
+
+      - name: Remove one-time workflow
+        run: rm .github/workflows/seo-home-brand-once.yml
+
+      - name: Commit SEO patch
+        run: |
+          git config user.name "hohaeng-seo-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/blog/page.tsx app/sitemap.ts .github/workflows/seo-home-brand-once.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "SEO: make home the brand representative"
+            git push origin main
+          fi

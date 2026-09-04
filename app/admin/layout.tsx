@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import AdminEditSlugControl from './AdminEditSlugControl';
 import AdminSeoLocator from './AdminSeoLocator';
 
 export const metadata: Metadata = {
@@ -21,6 +22,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <>
       <AdminSeoLocator />
+      <AdminEditSlugControl />
       {children}
       <Link
         href="/admin/seo-posts"

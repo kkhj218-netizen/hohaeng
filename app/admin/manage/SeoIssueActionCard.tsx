@@ -29,6 +29,14 @@ function targetHref(postId: string, issueId: string, target: SeoAuditTarget) {
   return `/admin/edit/${postId}?${params.toString()}`;
 }
 
+function slugHref(postId: string, issueId: string) {
+  const params = new URLSearchParams({
+    openSlug: '1',
+    seoIssue: issueId,
+  });
+  return `/admin/edit/${postId}?${params.toString()}`;
+}
+
 function convertNthH1ToH2(content: string, targetIndex: number) {
   let currentIndex = 0;
   let changed = false;
@@ -51,6 +59,7 @@ export default function SeoIssueActionCard({ postId, issue, onFixed }: Props) {
   const style = severityStyle(issue.severity);
   const [fixingIndex, setFixingIndex] = useState<number | null>(null);
   const targets = issue.targets || [];
+  const isSlugIssue = issue.id.startsWith('slug-');
 
   const convertH1 = async (target: SeoAuditTarget) => {
     const confirmed = window.confirm(`이 H1을 H2로 변경할까요?\n\n${target.preview}`);
@@ -98,7 +107,16 @@ export default function SeoIssueActionCard({ postId, issue, onFixed }: Props) {
           <p className={`text-sm font-black ${style.title}`}>{issue.label}</p>
           <p className="mt-1 text-xs leading-5 text-slate-400">{issue.detail}</p>
 
-          {targets.length > 0 ? (
+          {isSlugIssue ? (
+            <div className="mt-3">
+              <Link
+                href={slugHref(postId, issue.id)}
+                className="inline-flex rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-[11px] font-black text-blue-200 hover:bg-blue-500/20"
+              >
+                🔗 SEO 주소 수정
+              </Link>
+            </div>
+          ) : targets.length > 0 ? (
             <div className="mt-3 grid gap-2">
               {targets.slice(0, 8).map((target, targetPosition) => {
                 const isH1 = issue.id === 'body-h1' && target.kind === 'h1';

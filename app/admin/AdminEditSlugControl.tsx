@@ -4,20 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { supabase } from '@/app/lib/supabase';
+import {
+  buildSeoSlugSuggestions,
+  normalizeSeoSlug,
+} from '@/app/lib/seoSlugSuggestions';
 
 type SlugStatus = 'idle' | 'checking' | 'available' | 'taken' | 'error';
-
-function normalizeSlug(value: string) {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .trim()
-    .replace(/[\s_]+/g, '-')
-    .replace(/[^\p{L}\p{N}-]+/gu, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80);
-}
 
 export default function AdminEditSlugControl() {
   const pathname = usePathname();
@@ -31,11 +23,19 @@ export default function AdminEditSlugControl() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [postStatus, setPostStatus] = useState<'draft' | 'published'>('draft');
   const [originalSlug, setOriginalSlug] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<SlugStatus>('idle');
   const [message, setMessage] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const slugSuggestions = useMemo(
+    () => buildSeoSlugSuggestions(title, { category, subcategory }),
+    [category, subcategory, title]
+  );
 
   useEffect(() => {
     if (!postId) return;
@@ -43,6 +43,7 @@ export default function AdminEditSlugControl() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('openSlug') === '1') {
       setOpen(true);
+      setShowSuggestions(true);
     }
   }, [pathname, postId]);
 
@@ -60,7 +61,7 @@ export default function AdminEditSlugControl() {
 
       const { data, error } = await supabase
         .from('posts')
-        .select('id, title, slug, status')
+        .select('id, title, slug, status, category, subcategory')
         .eq('id', postId)
         .single();
 
@@ -73,6 +74,8 @@ export default function AdminEditSlugControl() {
       }
 
       setTitle(data.title || '');
+      setCategory(data.category || null);
+      setSubcategory(data.subcategory || null);
       setPostStatus(data.status === 'published' ? 'published' : 'draft');
       setOriginalSlug(data.slug || '');
       setSlug(data.slug || '');
@@ -90,7 +93,7 @@ export default function AdminEditSlugControl() {
   if (!postId) return null;
 
   const checkAvailability = async (value = slug) => {
-    const normalized = normalizeSlug(value);
+    const normalized = normalizeSeoSlug(value);
     setSlug(normalized);
 
     if (!normalized) {
@@ -126,8 +129,14 @@ export default function AdminEditSlugControl() {
     return true;
   };
 
+  const chooseSuggestion = (suggestion: string) => {
+    setSlug(suggestion);
+    setStatus('idle');
+    setMessage('추천 Slug를 선택했습니다. 저장 전 중복 확인을 권장합니다.');
+  };
+
   const handleSave = async () => {
-    const normalized = normalizeSlug(slug);
+    const normalized = normalizeSeoSlug(slug);
     setSlug(normalized);
 
     if (!normalized) {
@@ -193,7 +202,7 @@ export default function AdminEditSlugControl() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-[80] max-h-[78vh] overflow-y-auto rounded-2xl border border-blue-800 bg-slate-950/98 p-4 text-slate-100 shadow-2xl backdrop-blur sm:bottom-6 sm:left-6 sm:right-auto sm:w-[430px]">
+    <div className="fixed bottom-4 left-4 right-4 z-[80] max-h-[82vh] overflow-y-auto rounded-2xl border border-blue-800 bg-slate-950/98 p-4 text-slate-100 shadow-2xl backdrop-blur sm:bottom-6 sm:left-6 sm:right-auto sm:w-[460px]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-400">SEO URL</p>
@@ -235,27 +244,23 @@ export default function AdminEditSlugControl() {
               autoCorrect="off"
               spellCheck={false}
               onChange={(event) => {
-                setSlug(normalizeSlug(event.target.value));
+                setSlug(normalizeSeoSlug(event.target.value));
                 setStatus('idle');
                 setMessage('');
               }}
               className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-bold text-white outline-none"
-              placeholder="예: futures-margin"
+              placeholder="예: japan-rate-nasdaq"
             />
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setSlug(normalizeSlug(title));
-                setStatus('idle');
-                setMessage('');
-              }}
-              disabled={!title.trim()}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-[11px] font-bold text-slate-300 hover:border-slate-500 disabled:opacity-40"
+              onClick={() => setShowSuggestions((current) => !current)}
+              disabled={!title.trim() || slugSuggestions.length === 0}
+              className="rounded-lg border border-violet-700 bg-violet-950/30 px-3 py-2 text-[11px] font-black text-violet-200 hover:border-violet-500 disabled:opacity-40"
             >
-              ↻ 제목에서 생성
+              ✨ 짧은 SEO Slug 추천
             </button>
             <button
               type="button"
@@ -266,6 +271,31 @@ export default function AdminEditSlugControl() {
               {status === 'checking' ? '확인 중...' : '중복 확인'}
             </button>
           </div>
+
+          {showSuggestions && slugSuggestions.length > 0 && (
+            <div className="mt-3 rounded-xl border border-violet-800/60 bg-violet-950/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-black text-violet-200">제목 핵심어 기준 추천 3개</p>
+                <span className="text-[10px] font-bold text-slate-500">클릭하면 입력</span>
+              </div>
+              <div className="mt-2 grid gap-2">
+                {slugSuggestions.map((suggestion, index) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => chooseSuggestion(suggestion)}
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-xs font-bold transition-colors ${slug === suggestion ? 'border-violet-400 bg-violet-500/15 text-white' : 'border-slate-700 bg-slate-950/70 text-slate-200 hover:border-violet-600'}`}
+                  >
+                    <span className="min-w-0 break-all">{index + 1}. /blog/{suggestion}</span>
+                    {index === 0 && <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-black text-emerald-300">추천</span>}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-slate-500">
+                제목 전체를 복사하지 않고 핵심 검색어 2~4개 중심으로 줄인 후보입니다. 마음에 들지 않으면 직접 수정해도 됩니다.
+              </p>
+            </div>
+          )}
 
           <p className="mt-3 break-all text-[11px] leading-5 text-slate-500">
             변경 후 주소: <span className="font-bold text-slate-300">/blog/{slug || 'slug'}</span>

@@ -40,7 +40,7 @@ type Category = {
 
 type SortType = 'newest' | 'oldest' | 'views';
 type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published';
-type SeoFilter = 'all' | SeoAuditStatus;
+type SeoFilter = 'all' | SeoAuditStatus | 'slug';
 
 function getPostTimestamp(post: Post) {
   const dateValue = post.status === 'published'
@@ -190,6 +190,7 @@ export default function AdminManageSeoPage() {
       good: values.filter((item) => item.status === 'good').length,
       improve: values.filter((item) => item.status === 'improve').length,
       fix: values.filter((item) => item.status === 'fix').length,
+      slug: values.filter((item) => item.slugReview).length,
     };
   }, [seoAudits]);
 
@@ -202,12 +203,18 @@ export default function AdminManageSeoPage() {
 
       if (seoFilter !== 'all') {
         const audit = seoAudits[post.id];
-        if (!audit || audit.status !== seoFilter) return false;
+        if (!audit) return false;
+        if (seoFilter === 'slug') {
+          if (!audit.slugReview) return false;
+        } else if (audit.status !== seoFilter) {
+          return false;
+        }
       }
 
       if (!keyword) return true;
       const searchable = [
         post.title,
+        post.slug,
         post.description,
         post.category,
         categoryMap[post.category || ''],
@@ -287,14 +294,14 @@ export default function AdminManageSeoPage() {
             <div>
               <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-400">SEO HEALTH CHECK</p>
               <h2 className="mt-1 text-lg font-black text-white">검색 최적화 점검</h2>
-              <p className="mt-1 text-xs text-slate-500">규칙 기반 무료 진단입니다. 점수는 수정 우선순위를 위한 지표이며 구글 순위를 보장하는 점수가 아닙니다.</p>
+              <p className="mt-1 text-xs text-slate-500">규칙 기반 무료 진단입니다. SEO 주소까지 자동 점검하며, 실제 Slug 변경은 직접 확인 후에만 진행됩니다.</p>
             </div>
             <button type="button" onClick={() => void loadSeoAudits()} disabled={seoLoading} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-black text-slate-300 hover:border-blue-500 disabled:opacity-50">
               {seoLoading ? '⏳ SEO 검사 중...' : '↻ SEO 다시 검사'}
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button type="button" disabled={seoLoading} onClick={() => setSeoFilter(seoFilter === 'good' ? 'all' : 'good')} className={`rounded-xl border px-3 py-3 text-left ${seoFilter === 'good' ? 'border-emerald-400 bg-emerald-500/15' : 'border-slate-800 bg-slate-950/70'}`}>
               <p className="text-[11px] font-black text-emerald-300">🟢 SEO 양호</p><strong className="mt-1 block text-xl">{seoLoading ? '…' : seoCounts.good}</strong>
             </button>
@@ -303,6 +310,9 @@ export default function AdminManageSeoPage() {
             </button>
             <button type="button" disabled={seoLoading} onClick={() => setSeoFilter(seoFilter === 'fix' ? 'all' : 'fix')} className={`rounded-xl border px-3 py-3 text-left ${seoFilter === 'fix' ? 'border-red-400 bg-red-500/15' : 'border-slate-800 bg-slate-950/70'}`}>
               <p className="text-[11px] font-black text-red-300">🔴 수정 필요</p><strong className="mt-1 block text-xl">{seoLoading ? '…' : seoCounts.fix}</strong>
+            </button>
+            <button type="button" disabled={seoLoading} onClick={() => setSeoFilter(seoFilter === 'slug' ? 'all' : 'slug')} className={`rounded-xl border px-3 py-3 text-left ${seoFilter === 'slug' ? 'border-blue-400 bg-blue-500/15' : 'border-slate-800 bg-slate-950/70'}`}>
+              <p className="text-[11px] font-black text-blue-300">🔗 주소 검토</p><strong className="mt-1 block text-xl">{seoLoading ? '…' : seoCounts.slug}</strong>
             </button>
           </div>
           {seoError && <p className="mt-3 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-300">SEO 진단 오류: {seoError}</p>}
@@ -325,7 +335,7 @@ export default function AdminManageSeoPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2">🔎</span>
-              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="제목, 설명, 카테고리 검색" className="w-full rounded-xl border border-slate-800 bg-slate-950 py-3 pl-11 pr-4 text-white focus:border-blue-500 focus:outline-none" />
+              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="제목, slug, 설명, 카테고리 검색" className="w-full rounded-xl border border-slate-800 bg-slate-950 py-3 pl-11 pr-4 text-white focus:border-blue-500 focus:outline-none" />
             </div>
             <select value={sortType} onChange={(e) => setSortType(e.target.value as SortType)} className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-white focus:border-blue-500 focus:outline-none">
               <option value="newest">🆕 최신순</option><option value="oldest">🕐 오래된순</option><option value="views">🔥 조회수 높은순</option>
@@ -366,6 +376,11 @@ export default function AdminManageSeoPage() {
                         {!draft && !scheduled && <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs text-slate-400">👁 {(post.view_count || 0).toLocaleString('ko-KR')}</span>}
                         <span className="text-xs text-slate-500">📅 {formatDate(post)}</span>
                         <button type="button" onClick={() => setExpandedSeoId(expanded ? null : post.id)} className={`rounded-lg border px-2.5 py-1 text-xs font-black ${seo.className}`}>{seo.icon} {seo.text}{audit ? ` ${audit.score}점` : ''}</button>
+                        {audit?.slugReview && (
+                          <Link href={`/admin/edit/${post.id}?openSlug=1`} className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-black text-blue-300 hover:bg-blue-500/20">
+                            🔗 주소 검토 {audit.slugReviewCount > 1 ? audit.slugReviewCount : ''}
+                          </Link>
+                        )}
                         {scheduled && <span className="rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-xs font-bold text-violet-300">공개 예정: {formatScheduledDate(post.scheduled_at)}</span>}
                       </div>
 
@@ -376,6 +391,7 @@ export default function AdminManageSeoPage() {
 
                     <div className="flex shrink-0 flex-wrap gap-2">
                       {audit && audit.status !== 'good' && <button type="button" onClick={() => setExpandedSeoId(expanded ? null : post.id)} className={`rounded-lg border px-3 py-2 text-sm font-black ${seo.className}`}>{seo.icon} {seo.text} {actionableCount > 0 ? actionableCount : ''}</button>}
+                      {audit?.slugReview && <Link href={`/admin/edit/${post.id}?openSlug=1`} className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-black text-blue-300 hover:bg-blue-500/20">🔗 주소 수정</Link>}
                       {!draft && !scheduled && <Link href={`/blog/${post.slug}`} target="_blank" className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-bold hover:bg-slate-700">👁 보기</Link>}
                       <Link href={`/admin/edit/${post.id}`} className={`rounded-lg px-3 py-2 text-sm font-bold ${scheduled ? 'bg-violet-500/10 text-violet-400 hover:bg-violet-500/20' : draft ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'}`}>{scheduled ? '⏰ 예약 수정' : draft ? '✍️ 이어쓰기' : '✏️ 수정'}</Link>
                       <button type="button" onClick={() => void handleDelete(post)} disabled={deletingId === post.id} className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-50">{deletingId === post.id ? '삭제 중...' : '🗑 삭제'}</button>
@@ -398,6 +414,7 @@ export default function AdminManageSeoPage() {
                               <span className="rounded-full bg-slate-800 px-2.5 py-1">H2 {audit.h2Count}개</span>
                               <span className="rounded-full bg-slate-800 px-2.5 py-1">내부링크 {audit.internalLinkCount}개</span>
                               <span className="rounded-full bg-slate-800 px-2.5 py-1">이미지 {audit.imageCount}장</span>
+                              {audit.slugReview && <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-300">주소 검토 {audit.slugReviewCount}개</span>}
                             </div>
                           </div>
 
@@ -417,7 +434,7 @@ export default function AdminManageSeoPage() {
                           )}
 
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-[11px] text-slate-500">‘📍 위치 보기’를 누르면 수정 화면에서 문제 부분으로 자동 이동해 노란색으로 표시합니다. 수정 후 ‘SEO 다시 검사’를 누르면 즉시 재진단됩니다.</p>
+                            <p className="text-[11px] text-slate-500">본문 문제는 ‘📍 위치 보기’로 이동하고, 주소 문제는 ‘🔗 SEO 주소 수정’을 누르면 Slug 수정창이 바로 열립니다.</p>
                             <Link href={`/admin/edit/${post.id}`} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-500">✏️ 이 글 수정하기 →</Link>
                           </div>
                         </>

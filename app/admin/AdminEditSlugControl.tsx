@@ -38,6 +38,15 @@ export default function AdminEditSlugControl() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    if (!postId) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('openSlug') === '1') {
+      setOpen(true);
+    }
+  }, [pathname, postId]);
+
+  useEffect(() => {
     if (!postId) {
       setOpen(false);
       return;

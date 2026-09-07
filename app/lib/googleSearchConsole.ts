@@ -1,4 +1,4 @@
-// HOHAENG Search Console v4: current vs previous period comparison
+// HOHAENG Search Console v5: current vs previous period + Rank Predictor helpers
 import "server-only";
 
 import { createSign } from "node:crypto";
@@ -23,6 +23,16 @@ type SearchConsoleResponse = {
 
 type KeywordMetric = {
   query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+export type SearchConsoleKeywordSnapshot = KeywordMetric;
+
+export type SearchConsolePageMetric = {
+  page: string;
   clicks: number;
   impressions: number;
   ctr: number;
@@ -83,6 +93,20 @@ function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function makeDateWindow(days: number) {
+  const safeDays = Math.max(1, Math.min(480, Math.round(days)));
+  const endDate = new Date();
+  endDate.setUTCDate(endDate.getUTCDate() - 1);
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(startDate.getUTCDate() - safeDays + 1);
+  return { startDate, endDate };
+}
+
+function getSearchAnalyticsEndpoint() {
+  if (!siteUrl) throw new Error("SEARCH_CONSOLE_SITE_URL 환경변수가 없습니다.");
+  return `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+}
+
 async function queryKeywords(
   endpoint: string,
   accessToken: string,
@@ -136,7 +160,7 @@ export async function getSearchConsoleData(days: AnalyticsPeriod = 30) {
   previousStartDate.setUTCDate(previousStartDate.getUTCDate() - days + 1);
 
   const accessToken = await getAccessToken();
-  const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+  const endpoint = getSearchAnalyticsEndpoint();
   const [currentKeywords, previousKeywords] = await Promise.all([
     queryKeywords(endpoint, accessToken, startDate, endDate),
     queryKeywords(endpoint, accessToken, previousStartDate, previousEndDate),
@@ -160,5 +184,109 @@ export async function getSearchConsoleData(days: AnalyticsPeriod = 30) {
         isNew: !previous,
       };
     }),
+  };
+}
+
+export async function getSearchConsoleKeywordUniverse(
+  days = 90,
+  rowLimit = 5000,
+): Promise<SearchConsoleKeywordSnapshot[]> {
+  const accessToken = await getAccessToken();
+  const endpoint = getSearchAnalyticsEndpoint();
+  const { startDate, endDate } = makeDateWindow(days);
+  const safeRowLimit = Math.max(100, Math.min(25000, Math.round(rowLimit)));
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      startDate: formatDate(startDate),
+      endDate: formatDate(endDate),
+      dimensions: ["query"],
+      rowLimit: safeRowLimit,
+      dataState: "final",
+    }),
+    cache: "no-store",
+  });
+  const result = (await response.json()) as SearchConsoleResponse & {
+    error?: { message?: string };
+  };
+
+  if (!response.ok) {
+    throw new Error(
+      result.error?.message || "Search Console 키워드 데이터를 불러오지 못했습니다.",
+    );
+  }
+
+  return (result.rows ?? []).map((row) => ({
+    query: row.keys?.[0] || "(검색어 없음)",
+    clicks: row.clicks ?? 0,
+    impressions: row.impressions ?? 0,
+    ctr: row.ctr ?? 0,
+    position: row.position ?? 0,
+  }));
+}
+
+export async function getSearchConsolePageMetric(
+  pageUrl: string,
+  days = 28,
+): Promise<SearchConsolePageMetric | null> {
+  const normalizedPage = pageUrl.trim();
+  if (!normalizedPage) return null;
+
+  const accessToken = await getAccessToken();
+  const endpoint = getSearchAnalyticsEndpoint();
+  const { startDate, endDate } = makeDateWindow(days);
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      startDate: formatDate(startDate),
+      endDate: formatDate(endDate),
+      dimensions: ["page"],
+      dimensionFilterGroups: [
+        {
+          groupType: "and",
+          filters: [
+            {
+              dimension: "page",
+              operator: "equals",
+              expression: normalizedPage,
+            },
+          ],
+        },
+      ],
+      rowLimit: 10,
+      dataState: "final",
+    }),
+    cache: "no-store",
+  });
+
+  const result = (await response.json()) as SearchConsoleResponse & {
+    error?: { message?: string };
+  };
+
+  if (!response.ok) {
+    throw new Error(
+      result.error?.message || "Search Console 페이지 데이터를 불러오지 못했습니다.",
+    );
+  }
+
+  const row = result.rows?.[0];
+  if (!row) return null;
+
+  return {
+    page: row.keys?.[0] || normalizedPage,
+    clicks: row.clicks ?? 0,
+    impressions: row.impressions ?? 0,
+    ctr: row.ctr ?? 0,
+    position: row.position ?? 0,
   };
 }

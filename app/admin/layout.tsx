@@ -26,6 +26,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6 sm:flex-row">
         <Link
+          href="/admin/seo"
+          className="rounded-full border border-blue-700 bg-slate-950/95 px-4 py-2.5 text-xs font-black text-blue-300 shadow-xl backdrop-blur hover:border-blue-400 hover:text-blue-200"
+        >
+          📈 예상순위
+        </Link>
+        <Link
           href="/admin/internal-links"
           className="rounded-full border border-cyan-700 bg-slate-950/95 px-4 py-2.5 text-xs font-black text-cyan-300 shadow-xl backdrop-blur hover:border-cyan-400 hover:text-cyan-200"
         >

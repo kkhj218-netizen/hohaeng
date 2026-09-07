@@ -26,6 +26,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6 sm:flex-row">
         <Link
+          href="/admin/seo/daily"
+          className="rounded-full border border-orange-700 bg-slate-950/95 px-4 py-2.5 text-xs font-black text-orange-300 shadow-xl backdrop-blur hover:border-orange-400 hover:text-orange-200"
+        >
+          🔥 오늘 키워드
+        </Link>
+        <Link
           href="/admin/seo"
           className="rounded-full border border-blue-700 bg-slate-950/95 px-4 py-2.5 text-xs font-black text-blue-300 shadow-xl backdrop-blur hover:border-blue-400 hover:text-blue-200"
         >

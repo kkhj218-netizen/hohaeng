@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/disclosures",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/seo-rank-calibration",
+      "schedule": "15 20 * * *"
     }
   ]
 }
